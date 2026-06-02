@@ -14,6 +14,7 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
   const [jsonText, setJsonText] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [shareUrl, setShareUrl] = useState("");
   const [publishing, setPublishing] = useState(false);
   const exportedJson = useMemo(() => (setlist ? exportSetlist(setlist) : ""), [setlist]);
 
@@ -23,7 +24,7 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       setMessage(successMessage);
       setError("");
     } catch {
-      setError("클립보드 복사에 실패했습니다. 브라우저 권한을 확인해 주세요.");
+      setError("클립보드 복사에 실패했습니다. 아래 링크나 텍스트를 직접 선택해서 복사해 주세요.");
       setMessage("");
     }
   }
@@ -60,7 +61,16 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       setPublishing(true);
       const shareSlug = await publishSetlist(setlist);
       const url = `${window.location.origin}/share/${shareSlug}`;
-      await copyText(url, "Supabase 공유 링크를 만들고 복사했습니다.");
+      setShareUrl(url);
+
+      try {
+        await navigator.clipboard.writeText(url);
+        setMessage("Supabase 공유 링크를 만들고 복사했습니다.");
+        setError("");
+      } catch {
+        setMessage("Supabase 공유 링크를 만들었습니다. 아래 링크를 직접 복사해 주세요.");
+        setError("");
+      }
     } catch (shareError) {
       setError(shareError instanceof Error ? shareError.message : "Supabase 공유 링크 생성에 실패했습니다.");
       setMessage("");
@@ -107,6 +117,18 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
           <button type="button" onClick={downloadJson} className="btn-primary">
             JSON 내보내기
           </button>
+        </div>
+      ) : null}
+
+      {shareUrl ? (
+        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <p className="text-sm font-bold text-blue-900">Supabase 공유 링크</p>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <input value={shareUrl} readOnly className="field-input bg-white font-mono text-xs" onFocus={(event) => event.target.select()} />
+            <button type="button" onClick={() => copyText(shareUrl, "공유 링크를 복사했습니다.")} className="btn-secondary shrink-0">
+              다시 복사
+            </button>
+          </div>
         </div>
       ) : null}
 
