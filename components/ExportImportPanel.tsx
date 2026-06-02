@@ -42,17 +42,11 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
     setError("");
   }
 
-  async function copyShareLink() {
-    if (!setlist) return;
-    const url = `${window.location.origin}/setlists/${setlist.id}`;
-    await copyText(url, "공유 링크를 복사했습니다. 같은 브라우저에서는 이 링크로 다시 열 수 있습니다.");
-  }
-
-  async function createSupabaseShareLink() {
+  async function createShareLink() {
     if (!setlist) return;
 
     if (!isSupabaseConfigured()) {
-      setError("Supabase 환경변수가 없습니다. Vercel에 NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY를 설정해 주세요.");
+      setError("공유 서버 설정이 없습니다. Vercel 환경변수를 확인해 주세요.");
       setMessage("");
       return;
     }
@@ -62,21 +56,37 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       const shareSlug = await publishSetlist(setlist);
       const url = `${window.location.origin}/share/${shareSlug}`;
       setShareUrl(url);
-
-      try {
-        await navigator.clipboard.writeText(url);
-        setMessage("Supabase 공유 링크를 만들고 복사했습니다.");
-        setError("");
-      } catch {
-        setMessage("Supabase 공유 링크를 만들었습니다. 아래 링크를 직접 복사해 주세요.");
-        setError("");
-      }
+      setMessage("공유 링크를 만들었습니다.");
+      setError("");
     } catch (shareError) {
-      setError(shareError instanceof Error ? shareError.message : "Supabase 공유 링크 생성에 실패했습니다.");
+      setError(shareError instanceof Error ? shareError.message : "공유 링크 생성에 실패했습니다.");
       setMessage("");
     } finally {
       setPublishing(false);
     }
+  }
+
+  async function shareToKakaoTalk() {
+    if (!shareUrl || !setlist) return;
+
+    const shareData = {
+      title: setlist.title || "콘티연습실 공유 콘티",
+      text: `${setlist.title || "콘티"}를 공유합니다.`,
+      url: shareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        setMessage("공유 창을 열었습니다.");
+        setError("");
+        return;
+      } catch (shareError) {
+        if (shareError instanceof Error && shareError.name === "AbortError") return;
+      }
+    }
+
+    await copyText(shareUrl, "공유 링크를 복사했습니다. 카카오톡 대화방에 붙여넣어 주세요.");
   }
 
   function handleImport() {
@@ -96,37 +106,31 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
   return (
     <section className="card p-5">
       <div className="space-y-2">
-        <h2 className="section-title">공유와 백업</h2>
+        <h2 className="section-title">공유하기</h2>
         <p className="text-sm leading-6 text-slate-600">
-          같은 기기에서는 localStorage 링크로 다시 열 수 있고, 다른 팀원에게는 JSON 내보내기 또는 Supabase 공유
-          링크를 사용할 수 있습니다. Supabase 환경변수가 없으면 JSON 공유만 동작합니다.
+          팀원에게 보낼 수 있는 공유 링크를 만듭니다. 링크를 만든 뒤 복사하거나 모바일 공유 창에서 카카오톡으로
+          보낼 수 있습니다.
         </p>
       </div>
 
       {setlist ? (
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <button type="button" onClick={copyShareLink} className="btn-secondary">
-            공유 링크 복사
-          </button>
-          <button type="button" onClick={createSupabaseShareLink} disabled={publishing} className="btn-primary">
-            {publishing ? "링크 생성 중" : "Supabase 링크 만들기"}
-          </button>
-          <button type="button" onClick={() => copyText(exportedJson, "콘티 JSON을 복사했습니다.")} className="btn-secondary">
-            JSON 복사하기
-          </button>
-          <button type="button" onClick={downloadJson} className="btn-primary">
-            JSON 내보내기
+        <div className="mt-5">
+          <button type="button" onClick={createShareLink} disabled={publishing} className="btn-primary">
+            {publishing ? "링크 생성 중" : "공유하기"}
           </button>
         </div>
       ) : null}
 
       {shareUrl ? (
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
-          <p className="text-sm font-bold text-blue-900">Supabase 공유 링크</p>
+          <p className="text-sm font-bold text-blue-900">공유 링크</p>
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <input value={shareUrl} readOnly className="field-input bg-white font-mono text-xs" onFocus={(event) => event.target.select()} />
             <button type="button" onClick={() => copyText(shareUrl, "공유 링크를 복사했습니다.")} className="btn-secondary shrink-0">
-              다시 복사
+              링크 복사하기
+            </button>
+            <button type="button" onClick={shareToKakaoTalk} className="btn-primary shrink-0">
+              카카오톡 공유하기
             </button>
           </div>
         </div>
@@ -134,7 +138,15 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
 
       {setlist ? (
         <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <summary className="cursor-pointer text-sm font-bold text-slate-700">내보내기 JSON 미리보기</summary>
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">JSON 백업</summary>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <button type="button" onClick={() => copyText(exportedJson, "콘티 JSON을 복사했습니다.")} className="btn-secondary">
+              JSON 복사하기
+            </button>
+            <button type="button" onClick={downloadJson} className="btn-secondary">
+              JSON 내보내기
+            </button>
+          </div>
           <pre className="mt-3 max-h-80 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">
             {exportedJson}
           </pre>

@@ -18,7 +18,7 @@ export function isSupabaseConfigured() {
 
 export function getSupabaseClient() {
   if (!isSupabaseConfigured()) {
-    throw new Error("Supabase 환경변수가 설정되지 않았습니다.");
+    throw new Error("공유 서버 설정이 없습니다.");
   }
 
   if (!client) {
@@ -43,7 +43,7 @@ export async function publishSetlist(setlist: Setlist) {
     .single();
 
   if (error) {
-    throw new Error(error.message || "Supabase에 콘티를 저장하지 못했습니다.");
+    throw new Error(error.message || "공유 서버에 콘티를 저장하지 못했습니다.");
   }
 
   return data.share_slug as string;

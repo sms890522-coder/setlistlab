@@ -17,7 +17,7 @@ export default function SharedSetlistPage() {
   useEffect(() => {
     async function loadSharedSetlist() {
       if (!isSupabaseConfigured()) {
-        setError("Supabase 환경변수가 설정되지 않아 공유 콘티를 불러올 수 없습니다.");
+        setError("공유 서버 설정이 없어 공유 콘티를 불러올 수 없습니다.");
         setLoaded(true);
         return;
       }
