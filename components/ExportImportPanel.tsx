@@ -1,9 +1,9 @@
 "use client";
 
-import { exportSetlist, importSetlist, parseSetlistJson } from "@/lib/storage";
+import { importSetlist, parseSetlistJson } from "@/lib/storage";
 import { isSupabaseConfigured, publishSetlist } from "@/lib/supabase";
 import type { Setlist } from "@/lib/types";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type ExportImportPanelProps = {
   setlist?: Setlist;
@@ -16,7 +16,6 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
   const [error, setError] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [publishing, setPublishing] = useState(false);
-  const exportedJson = useMemo(() => (setlist ? exportSetlist(setlist) : ""), [setlist]);
 
   async function copyText(text: string, successMessage: string) {
     try {
@@ -27,19 +26,6 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       setError("클립보드 복사에 실패했습니다. 아래 링크나 텍스트를 직접 선택해서 복사해 주세요.");
       setMessage("");
     }
-  }
-
-  function downloadJson() {
-    if (!setlist) return;
-    const blob = new Blob([exportedJson], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${safeFileName(setlist.title || "setlist")}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setMessage("콘티 JSON 파일을 내보냈습니다.");
-    setError("");
   }
 
   async function createShareLink() {
@@ -103,6 +89,37 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
     }
   }
 
+  if (!setlist) {
+    return (
+      <section className="card p-5">
+        <div className="space-y-2">
+          <h2 className="section-title">JSON 가져오기</h2>
+          <p className="text-sm leading-6 text-slate-600">
+            받은 콘티 JSON 텍스트를 붙여넣으면 이 브라우저의 localStorage에 저장됩니다.
+          </p>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <label className="block space-y-1">
+            <span className="field-label">콘티 JSON</span>
+            <textarea
+              value={jsonText}
+              onChange={(event) => setJsonText(event.target.value)}
+              className="field-input min-h-44 resize-y font-mono text-xs"
+              placeholder="팀 카톡이나 백업 파일에서 받은 콘티 JSON을 붙여넣으세요."
+            />
+          </label>
+          <button type="button" onClick={handleImport} disabled={!jsonText.trim()} className="btn-primary">
+            가져와서 저장
+          </button>
+        </div>
+
+        {message ? <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
+        {error ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
+      </section>
+    );
+  }
+
   return (
     <section className="card p-5">
       <div className="space-y-2">
@@ -113,13 +130,11 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
         </p>
       </div>
 
-      {setlist ? (
-        <div className="mt-5">
-          <button type="button" onClick={createShareLink} disabled={publishing} className="btn-primary">
-            {publishing ? "링크 생성 중" : "공유하기"}
-          </button>
-        </div>
-      ) : null}
+      <div className="mt-5">
+        <button type="button" onClick={createShareLink} disabled={publishing} className="btn-primary">
+          {publishing ? "링크 생성 중" : "공유하기"}
+        </button>
+      </div>
 
       {shareUrl ? (
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
@@ -136,44 +151,8 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
         </div>
       ) : null}
 
-      {setlist ? (
-        <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <summary className="cursor-pointer text-sm font-bold text-slate-700">JSON 백업</summary>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <button type="button" onClick={() => copyText(exportedJson, "콘티 JSON을 복사했습니다.")} className="btn-secondary">
-              JSON 복사하기
-            </button>
-            <button type="button" onClick={downloadJson} className="btn-secondary">
-              JSON 내보내기
-            </button>
-          </div>
-          <pre className="mt-3 max-h-80 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">
-            {exportedJson}
-          </pre>
-        </details>
-      ) : null}
-
-      <div className="mt-6 space-y-3">
-        <label className="block space-y-1">
-          <span className="field-label">콘티 JSON 가져오기</span>
-          <textarea
-            value={jsonText}
-            onChange={(event) => setJsonText(event.target.value)}
-            className="field-input min-h-44 resize-y font-mono text-xs"
-            placeholder="팀 카톡이나 백업 파일에서 받은 콘티 JSON을 붙여넣으세요."
-          />
-        </label>
-        <button type="button" onClick={handleImport} disabled={!jsonText.trim()} className="btn-primary">
-          가져와서 저장
-        </button>
-      </div>
-
       {message ? <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
       {error ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
     </section>
   );
-}
-
-function safeFileName(value: string) {
-  return value.replace(/[\\/:*?"<>|]/g, "_").slice(0, 80) || "setlist";
 }

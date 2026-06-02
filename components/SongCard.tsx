@@ -31,6 +31,9 @@ export function SongCard({ href, index, song }: SongCardProps) {
               </span>
             ) : null}
           </div>
+          {song.description ? (
+            <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-700">{song.description}</p>
+          ) : null}
           <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
             {sectionSummary || "곡 구성이 아직 없습니다."}
           </p>

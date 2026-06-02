@@ -51,7 +51,7 @@ declare global {
   }
 }
 
-const SPEEDS = [0.25, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.25, 1.5];
+const SPEEDS = [0.25, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.25, 1.5, 2];
 const YOUTUBE_PLAYING = 1;
 
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
@@ -383,7 +383,33 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 sm:hidden">
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-bold text-slate-900">속도 조절</p>
+              <p className="rounded-full bg-blue-50 px-3 py-1 text-sm font-black text-blue-700">
+                {formatSpeedLabel(speed)}x
+              </p>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={speedToSliderValue(speed)}
+              onChange={(event) => changeSpeed(sliderValueToSpeed(Number(event.target.value)))}
+              className="mt-3 w-full accent-blue-600"
+              aria-label="재생속도 조절"
+            />
+            <div className="mt-2 grid grid-cols-3 text-xs font-bold text-slate-500">
+              <span>0.1x</span>
+              <span className="text-center">1x</span>
+              <span className="text-right">2x</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 hidden flex-wrap gap-2 sm:flex">
           {SPEEDS.map((rate) => (
             <button
               key={rate}
@@ -476,6 +502,23 @@ function getYouTubeErrorMessage(code: number) {
   if (code === 100) return "삭제되었거나 공개되지 않은 유튜브 영상입니다.";
   if (code === 101 || code === 150) return "이 영상은 외부 사이트 임베드를 허용하지 않습니다.";
   return "유튜브 영상을 재생할 수 없습니다. 다른 링크로 다시 시도해 주세요.";
+}
+
+function formatSpeedLabel(value: number) {
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function speedToSliderValue(value: number) {
+  if (value <= 1) {
+    return ((Math.max(0.1, value) - 0.1) / 0.9) * 50;
+  }
+
+  return 50 + ((Math.min(2, value) - 1) / 1) * 50;
+}
+
+function sliderValueToSpeed(value: number) {
+  const nextSpeed = value <= 50 ? 0.1 + (value / 50) * 0.9 : 1 + ((value - 50) / 50) * 1;
+  return Number(nextSpeed.toFixed(2));
 }
 
 function closeLatestOpenSection(sections: SongSection[], timestamp: number) {
