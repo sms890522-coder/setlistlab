@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { YouTubePlayer } from "@/components/YouTubePlayer";
+import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { getSetlist, saveSetlist } from "@/lib/storage";
 import type { Setlist, Song, SongSection } from "@/lib/types";
 import { formatSecondsToTime } from "@/lib/youtube";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function SongPracticePage() {
   const params = useParams<{ id: string; songId: string }>();
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [song, setSong] = useState<Song | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const playerRef = useRef<YouTubePlayerHandle>(null);
 
   useEffect(() => {
     const foundSetlist = getSetlist(params.id) ?? null;
@@ -81,7 +82,12 @@ export default function SongPracticePage() {
       ) : null}
 
       {song.youtubeVideoId ? (
-        <YouTubePlayer videoId={song.youtubeVideoId} sections={song.sections} onSectionsChange={handleSectionsChange} />
+        <YouTubePlayer
+          ref={playerRef}
+          videoId={song.youtubeVideoId}
+          sections={song.sections}
+          onSectionsChange={handleSectionsChange}
+        />
       ) : (
         <section className="card p-6 text-center">
           <h2 className="text-xl font-black text-slate-950">유튜브 링크가 필요합니다</h2>
@@ -96,13 +102,18 @@ export default function SongPracticePage() {
 
       <section className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
         <div className="card p-5">
-          <h2 className="font-bold text-slate-950">곡 구성</h2>
+          <h2 className="font-bold text-slate-950">곡 구성 및 구간이동</h2>
           {song.sections.length === 0 ? (
             <p className="mt-2 text-sm text-slate-500">아직 곡 구성 구간이 없습니다.</p>
           ) : (
             <div className="mt-4 space-y-3">
               {song.sections.map((section) => (
-                <div key={section.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => playerRef.current?.seekToSection(section)}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                >
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <p className="font-bold text-slate-950">{section.name}</p>
                     <p className="text-sm font-semibold text-blue-700">
@@ -110,7 +121,7 @@ export default function SongPracticePage() {
                     </p>
                   </div>
                   {section.memo ? <p className="mt-2 text-sm leading-6 text-slate-600">{section.memo}</p> : null}
-                </div>
+                </button>
               ))}
             </div>
           )}

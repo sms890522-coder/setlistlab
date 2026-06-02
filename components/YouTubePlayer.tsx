@@ -4,12 +4,16 @@ import { createId } from "@/lib/id";
 import { COMMON_SECTION_NAMES } from "@/lib/sections";
 import type { SongSection } from "@/lib/types";
 import { formatSecondsToTime } from "@/lib/youtube";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 type YouTubePlayerProps = {
   videoId: string;
   sections: SongSection[];
   onSectionsChange?: (sections: SongSection[]) => void;
+};
+
+export type YouTubePlayerHandle = {
+  seekToSection: (section: SongSection) => void;
 };
 
 type YTPlayer = {
@@ -50,7 +54,10 @@ declare global {
 const SPEEDS = [0.25, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.25, 1.5];
 const YOUTUBE_PLAYING = 1;
 
-export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePlayerProps) {
+export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
+  { videoId, sections, onSectionsChange },
+  ref,
+) {
   const hostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
@@ -72,6 +79,17 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
   useEffect(() => {
     speedRef.current = speed;
   }, [speed]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      seekToSection(section: SongSection) {
+        setSelectedSectionId(section.id);
+        seekTo(section.startTime ?? 0);
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -398,39 +416,9 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
         </div>
       </div>
 
-      <div className="card p-4">
-        <h3 className="font-bold text-slate-950">구간 이동</h3>
-        {sections.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">곡 구성 구간을 추가하면 여기에서 바로 이동할 수 있습니다.</p>
-        ) : (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {sections.map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => {
-                  setSelectedSectionId(section.id);
-                  seekTo(section.startTime ?? 0);
-                }}
-                className={
-                  section.id === selectedSectionId
-                    ? "rounded-xl border border-blue-200 bg-blue-50 p-3 text-left"
-                    : "rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
-                }
-              >
-                <span className="block font-bold text-slate-950">{section.name || "구간"}</span>
-                <span className="mt-1 block text-sm text-slate-500">
-                  {formatSecondsToTime(section.startTime)} - {formatSecondsToTime(section.endTime)}
-                </span>
-                {section.memo ? <span className="mt-2 block text-xs text-violet-700">{section.memo}</span> : null}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
-}
+});
 
 function isReadyPlayer(player: YTPlayer | null): player is YTPlayer {
   return Boolean(
