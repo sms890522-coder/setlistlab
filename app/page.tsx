@@ -1,6 +1,34 @@
+"use client";
+
 import Link from "next/link";
+import { getSharedSetlistCount } from "@/lib/supabase";
+import { useEffect, useState } from "react";
 
 export default function HomePage() {
+  const [sharedCount, setSharedCount] = useState(0);
+  const [countLoaded, setCountLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getSharedSetlistCount()
+      .then((count) => {
+        if (cancelled) return;
+        setSharedCount(count);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSharedCount(0);
+      })
+      .finally(() => {
+        if (!cancelled) setCountLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="page-shell">
       <section className="grid min-h-[calc(100vh-8rem)] items-center gap-8 py-8 lg:grid-cols-[1.04fr_0.96fr]">
@@ -26,6 +54,13 @@ export default function HomePage() {
             <Link href="/setlists" className="btn-secondary">
               샘플 콘티 보기
             </Link>
+          </div>
+          <div className="w-fit rounded-2xl border border-blue-100 bg-white/85 px-5 py-4 shadow-sm">
+            <p className="text-sm font-bold text-slate-500">현재까지 공유된 콘티</p>
+            <p className="mt-1 text-3xl font-black text-blue-700">
+              {countLoaded ? sharedCount.toLocaleString("ko-KR") : "-"}
+              <span className="ml-1 text-base font-bold text-slate-500">개</span>
+            </p>
           </div>
         </div>
 

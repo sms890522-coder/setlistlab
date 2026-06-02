@@ -64,6 +64,21 @@ export async function getSharedSetlist(shareSlug: string) {
   return data;
 }
 
+export async function getSharedSetlistCount() {
+  if (!isSupabaseConfigured()) return 0;
+
+  const supabase = getSupabaseClient();
+  const { count, error } = await supabase
+    .from("shared_setlists")
+    .select("id", { count: "exact", head: true });
+
+  if (error) {
+    throw new Error(error.message || "공유 콘티 개수를 불러오지 못했습니다.");
+  }
+
+  return count ?? 0;
+}
+
 function createShareSlug() {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
     const bytes = new Uint8Array(9);

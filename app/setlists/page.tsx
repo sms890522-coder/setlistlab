@@ -32,9 +32,6 @@ export default function SetlistsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/import" className="btn-secondary">
-            JSON 가져오기
-          </Link>
           <Link href="/setlists/new" className="btn-primary">
             새 콘티 만들기
           </Link>
@@ -48,15 +45,12 @@ export default function SetlistsPage() {
           <div>
             <h2 className="text-xl font-black text-slate-950">아직 콘티가 없습니다</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              이번 주 예배 콘티를 만들거나 JSON으로 받은 콘티를 가져와 보세요.
+              이번 주 예배 콘티를 만들어 팀원들과 공유해 보세요.
             </p>
           </div>
           <div className="flex flex-col justify-center gap-2 sm:flex-row">
             <Link href="/setlists/new" className="btn-primary">
               새 콘티 만들기
-            </Link>
-            <Link href="/import" className="btn-secondary">
-              JSON 가져오기
             </Link>
           </div>
         </div>
