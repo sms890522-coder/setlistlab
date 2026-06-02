@@ -1,6 +1,14 @@
 import { createId } from "./id";
 import type { Setlist, Song } from "./types";
 
+export const SAMPLE_SETLIST_ID = "sample-2026-06-07";
+
+export const SAMPLE_YOUTUBE_URLS: Record<string, string> = {
+  "나는 예배자입니다": "https://youtu.be/w9QvvOj1dn4?si=ll5IZJiqVp-rgjtk",
+  "주님은 산 같아서": "https://youtu.be/WC8LKCbumyE?si=GKNqpFuMGMmCSvQu",
+  "예수 열방의 소망": "https://youtu.be/QOI-kywg2yA?si=yGkd8Fp8HF1zI7zw",
+};
+
 function makeSections(names: Array<[string, number, number, string]>) {
   return names.map(([name, startTime, endTime, memo]) => ({
     id: createId("section"),
@@ -22,7 +30,7 @@ export function createSampleSetlist(): Setlist {
   const now = new Date().toISOString();
 
   return {
-    id: "sample-2026-06-07",
+    id: SAMPLE_SETLIST_ID,
     title: "2026년 6월 7일 주일예배 콘티",
     worshipDate: "2026-06-07",
     serviceName: "주일 2부예배",
@@ -34,7 +42,7 @@ export function createSampleSetlist(): Setlist {
       makeSong({
         title: "나는 예배자입니다",
         description: "담백한 고백으로 예배의 문을 여는 곡입니다.",
-        youtubeUrl: "https://www.youtube.com/watch?v=PLACEHOLDER_01",
+        youtubeUrl: SAMPLE_YOUTUBE_URLS["나는 예배자입니다"],
         originalKey: "F",
         practiceKey: "F",
         bpm: 68,
@@ -58,7 +66,7 @@ export function createSampleSetlist(): Setlist {
       makeSong({
         title: "주님은 산 같아서",
         description: "신뢰의 고백으로 자연스럽게 분위기를 올립니다.",
-        youtubeUrl: "https://youtu.be/PLACEHOLDER_02",
+        youtubeUrl: SAMPLE_YOUTUBE_URLS["주님은 산 같아서"],
         originalKey: "A",
         practiceKey: "A",
         bpm: 72,
@@ -80,7 +88,7 @@ export function createSampleSetlist(): Setlist {
       makeSong({
         title: "예수 열방의 소망",
         description: "선포와 결단으로 이어지는 밝은 템포의 곡입니다.",
-        youtubeUrl: "https://www.youtube.com/embed/PLACEHOLDER_03",
+        youtubeUrl: SAMPLE_YOUTUBE_URLS["예수 열방의 소망"],
         originalKey: "G",
         practiceKey: "G",
         bpm: 120,

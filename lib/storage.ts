@@ -1,6 +1,6 @@
 "use client";
 
-import { createSampleSetlist } from "./sampleData";
+import { createSampleSetlist, SAMPLE_SETLIST_ID, SAMPLE_YOUTUBE_URLS } from "./sampleData";
 import type { PartNote, Setlist, Song, SongSection } from "./types";
 import { extractYouTubeVideoId } from "./youtube";
 
@@ -43,7 +43,12 @@ export function getSetlists() {
     return [sample];
   }
 
-  return setlists.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const { changed, setlists: upgradedSetlists } = upgradeSampleYoutubeLinks(setlists);
+  if (changed) {
+    writeStoredSetlists(upgradedSetlists);
+  }
+
+  return upgradedSetlists.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export function getSetlist(id: string) {
@@ -189,4 +194,32 @@ function optionalString(value: unknown) {
 
 function optionalNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function upgradeSampleYoutubeLinks(setlists: Setlist[]) {
+  let changed = false;
+  const upgradedSetlists = setlists.map((setlist) => {
+    if (setlist.id !== SAMPLE_SETLIST_ID) return setlist;
+
+    const songs = setlist.songs.map((song) => {
+      const sampleUrl = SAMPLE_YOUTUBE_URLS[song.title];
+      if (!sampleUrl || hasCustomYoutubeUrl(song.youtubeUrl)) return song;
+
+      changed = true;
+      return {
+        ...song,
+        youtubeUrl: sampleUrl,
+        youtubeVideoId: extractYouTubeVideoId(sampleUrl),
+      };
+    });
+
+    return { ...setlist, songs };
+  });
+
+  return { changed, setlists: upgradedSetlists };
+}
+
+function hasCustomYoutubeUrl(url?: string) {
+  if (!url) return false;
+  return !url.toLowerCase().includes("placeholder");
 }
