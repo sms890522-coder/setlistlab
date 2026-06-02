@@ -57,6 +57,13 @@ export default function SongPracticePage() {
     );
   }
 
+  const currentSongIndex = setlist.songs.findIndex((item) => item.id === song.id);
+  const previousSong = currentSongIndex > 0 ? setlist.songs[currentSongIndex - 1] : undefined;
+  const nextSong =
+    currentSongIndex >= 0 && currentSongIndex < setlist.songs.length - 1
+      ? setlist.songs[currentSongIndex + 1]
+      : undefined;
+
   return (
     <div className="page-shell space-y-6 pb-20">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -160,6 +167,40 @@ export default function SongPracticePage() {
           </section>
         </div>
       </section>
+
+      <nav aria-label="곡 이동" className="card grid grid-cols-3 gap-2 p-3">
+        {previousSong ? (
+          <Link
+            href={`/setlists/${setlist.id}/songs/${previousSong.id}`}
+            className="btn-secondary min-h-12 px-2 text-center"
+            title={previousSong.title}
+          >
+            이전곡
+          </Link>
+        ) : (
+          <button type="button" disabled className="btn-secondary min-h-12 px-2 text-center">
+            이전곡
+          </button>
+        )}
+
+        <Link href={`/setlists/${setlist.id}`} className="btn-primary min-h-12 px-2 text-center">
+          곡 목록
+        </Link>
+
+        {nextSong ? (
+          <Link
+            href={`/setlists/${setlist.id}/songs/${nextSong.id}`}
+            className="btn-secondary min-h-12 px-2 text-center"
+            title={nextSong.title}
+          >
+            다음곡
+          </Link>
+        ) : (
+          <button type="button" disabled className="btn-secondary min-h-12 px-2 text-center">
+            다음곡
+          </button>
+        )}
+      </nav>
     </div>
   );
 }
