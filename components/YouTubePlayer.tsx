@@ -237,31 +237,6 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
     setSectionMessage(`${name} 구간을 ${formatSecondsToTime(timestamp)}에 추가했습니다.`);
   }
 
-  function updateSelectedSectionTime(kind: "startTime" | "endTime") {
-    if (!onSectionsChange || !selectedSection) return;
-
-    const timestamp = getPlayerTime();
-    if (
-      kind === "endTime" &&
-      typeof selectedSection.startTime === "number" &&
-      timestamp < selectedSection.startTime
-    ) {
-      setSectionMessage("종료 시간은 시작 시간 이후로 찍어 주세요.");
-      return;
-    }
-
-    const nextSections = sortSectionsByStartTime(
-      sections.map((section) => (section.id === selectedSection.id ? { ...section, [kind]: timestamp } : section)),
-    );
-
-    onSectionsChange(nextSections);
-    setSectionMessage(
-      `${selectedSection.name || "선택 구간"} ${kind === "startTime" ? "시작" : "종료"} 시간을 ${formatSecondsToTime(
-        timestamp,
-      )}로 저장했습니다.`,
-    );
-  }
-
   function deleteSelectedSection() {
     if (!onSectionsChange || !selectedSection) return;
     if (!window.confirm(`${selectedSection.name || "선택 구간"} 구간을 삭제할까요?`)) return;
@@ -270,6 +245,15 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
     onSectionsChange(nextSections);
     setSelectedSectionId(nextSections[0]?.id ?? "");
     setSectionMessage("선택한 구간을 삭제했습니다.");
+  }
+
+  function deleteAllSections() {
+    if (!onSectionsChange || sections.length === 0) return;
+    if (!window.confirm("곡 구성 전체를 삭제할까요?")) return;
+
+    onSectionsChange([]);
+    setSelectedSectionId("");
+    setSectionMessage("곡 구성 전체를 삭제했습니다.");
   }
 
   return (
@@ -282,23 +266,7 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
               <p className="field-help">현재 위치 {formatSecondsToTime(currentTime)}</p>
             </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => updateSelectedSectionTime("startTime")}
-                disabled={!selectedSection}
-                className="btn-secondary min-h-10 px-3"
-              >
-                시작 다시 찍기
-              </button>
-              <button
-                type="button"
-                onClick={() => updateSelectedSectionTime("endTime")}
-                disabled={!selectedSection}
-                className="btn-secondary min-h-10 px-3"
-              >
-                종료 찍기
-              </button>
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={deleteSelectedSection}
@@ -306,6 +274,14 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
                 className="btn-danger min-h-10 px-3"
               >
                 선택 삭제
+              </button>
+              <button
+                type="button"
+                onClick={deleteAllSections}
+                disabled={sections.length === 0}
+                className="btn-danger min-h-10 px-3"
+              >
+                전체 삭제
               </button>
             </div>
 
@@ -330,7 +306,7 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
 
             <div className="mt-4 hidden lg:block">
               <div className="flex items-center justify-between gap-3">
-                <h4 className="text-sm font-bold text-slate-950">입력 미리보기</h4>
+                <h4 className="text-sm font-bold text-slate-950">송폼</h4>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
                   {sections.length}개
                 </span>
@@ -348,7 +324,7 @@ export function YouTubePlayer({ videoId, sections, onSectionsChange }: YouTubePl
 
             <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:hidden">
               <summary className="cursor-pointer text-sm font-bold text-slate-700">
-                입력 미리보기 {sections.length}개
+                송폼 {sections.length}개
               </summary>
               {sections.length === 0 ? (
                 <p className="mt-2 text-sm text-slate-500">아직 찍은 구간이 없습니다.</p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { exportSetlist, importSetlist, parseSetlistJson } from "@/lib/storage";
+import { isSupabaseConfigured, publishSetlist } from "@/lib/supabase";
 import type { Setlist } from "@/lib/types";
 import { useMemo, useState } from "react";
 
@@ -13,6 +14,7 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
   const [jsonText, setJsonText] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [publishing, setPublishing] = useState(false);
   const exportedJson = useMemo(() => (setlist ? exportSetlist(setlist) : ""), [setlist]);
 
   async function copyText(text: string, successMessage: string) {
@@ -45,6 +47,28 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
     await copyText(url, "공유 링크를 복사했습니다. 같은 브라우저에서는 이 링크로 다시 열 수 있습니다.");
   }
 
+  async function createSupabaseShareLink() {
+    if (!setlist) return;
+
+    if (!isSupabaseConfigured()) {
+      setError("Supabase 환경변수가 없습니다. Vercel에 NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY를 설정해 주세요.");
+      setMessage("");
+      return;
+    }
+
+    try {
+      setPublishing(true);
+      const shareSlug = await publishSetlist(setlist);
+      const url = `${window.location.origin}/share/${shareSlug}`;
+      await copyText(url, "Supabase 공유 링크를 만들고 복사했습니다.");
+    } catch (shareError) {
+      setError(shareError instanceof Error ? shareError.message : "Supabase 공유 링크 생성에 실패했습니다.");
+      setMessage("");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   function handleImport() {
     try {
       const parsed = parseSetlistJson(jsonText);
@@ -64,16 +88,18 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       <div className="space-y-2">
         <h2 className="section-title">공유와 백업</h2>
         <p className="text-sm leading-6 text-slate-600">
-          현재 MVP는 로그인/서버 저장 없이 동작합니다. 같은 기기에서는 링크로 다시 열 수 있고, 다른 팀원에게는 JSON
-          내보내기 파일 또는 텍스트를 공유할 수 있습니다. 추후 서버 저장 기능을 추가하면 링크 하나로 공유할 수
-          있습니다.
+          같은 기기에서는 localStorage 링크로 다시 열 수 있고, 다른 팀원에게는 JSON 내보내기 또는 Supabase 공유
+          링크를 사용할 수 있습니다. Supabase 환경변수가 없으면 JSON 공유만 동작합니다.
         </p>
       </div>
 
       {setlist ? (
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <button type="button" onClick={copyShareLink} className="btn-secondary">
             공유 링크 복사
+          </button>
+          <button type="button" onClick={createSupabaseShareLink} disabled={publishing} className="btn-primary">
+            {publishing ? "링크 생성 중" : "Supabase 링크 만들기"}
           </button>
           <button type="button" onClick={() => copyText(exportedJson, "콘티 JSON을 복사했습니다.")} className="btn-secondary">
             JSON 복사하기
