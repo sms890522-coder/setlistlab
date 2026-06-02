@@ -37,9 +37,12 @@ export default function HomePage() {
             찬양팀 콘티 연습실
           </div>
           <div className="space-y-5">
-            <h1 className="text-4xl font-black leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
-              콘티연습실
-            </h1>
+            <div className="flex items-center gap-3">
+              <img src="/conti-logo.svg" alt="" className="size-14 rounded-2xl shadow-sm sm:size-16" aria-hidden="true" />
+              <h1 className="text-4xl font-black leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
+                콘티연습실
+              </h1>
+            </div>
             <p className="max-w-2xl text-2xl font-bold leading-snug text-slate-800 sm:text-3xl">
               찬양팀을 위한 유튜브 구간반복 콘티 공유 도구
             </p>
