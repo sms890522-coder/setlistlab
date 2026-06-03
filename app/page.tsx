@@ -38,7 +38,14 @@ export default function HomePage() {
           </div>
           <div className="space-y-5">
             <div className="flex items-center gap-3">
-              <img src="/conti-logo.svg" alt="" className="size-14 rounded-2xl shadow-sm sm:size-16" aria-hidden="true" />
+              <img
+                src="/conti-logo.jpg"
+                alt=""
+                width="64"
+                height="64"
+                className="size-14 rounded-2xl shadow-sm sm:size-16"
+                aria-hidden="true"
+              />
               <h1 className="text-4xl font-black leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
                 콘티연습실
               </h1>
