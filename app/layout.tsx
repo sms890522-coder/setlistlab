@@ -44,6 +44,17 @@ export default function RootLayout({
           </nav>
         </header>
         <main>{children}</main>
+        <footer className="px-4 pb-8 text-center text-xs text-slate-400 sm:px-6 lg:px-8">
+          made by{" "}
+          <a
+            href="https://missionlab.work/"
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-slate-500 transition hover:text-blue-600"
+          >
+            미션랩
+          </a>
+        </footer>
       </body>
     </html>
   );
