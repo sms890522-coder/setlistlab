@@ -11,16 +11,30 @@ export default function SetlistsPage() {
   const router = useRouter();
   const [setlists, setSetlists] = useState<Setlist[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Setlist | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     setSetlists(getSetlists());
     setLoaded(true);
   }, []);
 
-  function handleDelete(id: string) {
-    if (!window.confirm("이 콘티를 삭제할까요? 삭제한 콘티는 되돌릴 수 없습니다.")) return;
-    deleteSetlist(id);
-    setSetlists(getSetlists());
+  function handleDeleteRequest(id: string) {
+    setDeleteTarget(setlists.find((setlist) => setlist.id === id) ?? null);
+    setDeleteError("");
+  }
+
+  function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+
+    try {
+      deleteSetlist(deleteTarget.id);
+      setSetlists((current) => current.filter((setlist) => setlist.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setDeleteError("");
+    } catch {
+      setDeleteError("콘티를 삭제하지 못했습니다. 브라우저 저장소 설정을 확인해 주세요.");
+    }
   }
 
   function handleDuplicate(id: string) {
@@ -64,10 +78,50 @@ export default function SetlistsPage() {
       ) : (
         <div className="grid gap-4">
           {setlists.map((setlist) => (
-            <SetlistCard key={setlist.id} setlist={setlist} onDelete={handleDelete} onDuplicate={handleDuplicate} />
+            <SetlistCard
+              key={setlist.id}
+              setlist={setlist}
+              onDelete={handleDeleteRequest}
+              onDuplicate={handleDuplicate}
+            />
           ))}
         </div>
       )}
+
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 backdrop-blur-sm sm:items-center"
+          role="presentation"
+          onClick={() => setDeleteTarget(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-setlist-title"
+            className="card w-full max-w-md p-5 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm font-bold text-rose-600">콘티 삭제</p>
+            <h2 id="delete-setlist-title" className="mt-2 text-xl font-black text-slate-950">
+              {deleteTarget.title || "제목 없는 콘티"}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              이 콘티를 삭제할까요? 삭제한 콘티는 되돌릴 수 없습니다.
+            </p>
+            {deleteError ? (
+              <p className="mt-3 rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{deleteError}</p>
+            ) : null}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="btn-secondary">
+                취소
+              </button>
+              <button type="button" onClick={handleDeleteConfirm} className="btn-danger">
+                삭제하기
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
