@@ -13,76 +13,145 @@ type TeamAssignmentsEditorProps = {
 
 export function TeamAssignmentsEditor({ assignments, onChange }: TeamAssignmentsEditorProps) {
   const [deleteTarget, setDeleteTarget] = useState<TeamAssignment | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<TeamAssignment>(() => createBlankTeamAssignment());
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const sortedAssignments = sortTeamAssignments(assignments);
 
-  function updateAssignment(id: string, patch: Partial<TeamAssignment>) {
-    onChange(assignments.map((assignment) => (assignment.id === id ? { ...assignment, ...patch } : assignment)));
+  function resetForm() {
+    setEditingId(null);
+    setDraft(createBlankTeamAssignment());
+    setError("");
+  }
+
+  function selectAssignment(assignment: TeamAssignment) {
+    setEditingId(assignment.id);
+    setDraft({ ...assignment, part: assignment.part || DEFAULT_TEAM_PARTS[0] });
+    setMessage("");
+    setError("");
+  }
+
+  function saveAssignment() {
+    const name = draft.name.trim();
+    if (!name) {
+      setError("팀원 이름을 입력해 주세요.");
+      return;
+    }
+
+    const nextAssignment = {
+      ...draft,
+      name,
+      part: draft.part || DEFAULT_TEAM_PARTS[0],
+      note: draft.note?.trim() || "",
+    };
+
+    if (editingId) {
+      onChange(assignments.map((assignment) => (assignment.id === editingId ? nextAssignment : assignment)));
+      setMessage(`${nextAssignment.part}: ${nextAssignment.name} 배정을 수정했습니다.`);
+    } else {
+      onChange([...assignments, nextAssignment]);
+      setMessage(`${nextAssignment.part}: ${nextAssignment.name} 배정을 추가했습니다.`);
+    }
+
+    resetForm();
   }
 
   return (
     <section className="card p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="section-title">팀원 파트 배정</h2>
-          <p className="field-help">이번 예배의 팀원과 담당 파트를 정리하세요.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onChange([...assignments, createBlankTeamAssignment()])}
-          className="btn-primary min-h-10 px-3"
-        >
-          팀원 추가
-        </button>
+      <div>
+        <h2 className="section-title">팀원 파트 배정</h2>
+        <p className="field-help">한 명씩 추가하고, 아래 배정 버튼을 눌러 수정하세요.</p>
       </div>
 
-      <datalist id="team-part-options">
-        {DEFAULT_TEAM_PARTS.map((part) => (
-          <option key={part} value={part} />
-        ))}
-      </datalist>
+      <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-black text-blue-800">{editingId ? "팀원 배정 수정" : "팀원 추가"}</p>
+          {editingId ? (
+            <button type="button" onClick={resetForm} className="text-xs font-bold text-blue-700 hover:text-blue-900">
+              추가 모드로
+            </button>
+          ) : null}
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_0.8fr_1.4fr_auto]">
+          <label className="space-y-1">
+            <span className="field-label">이름</span>
+            <input
+              value={draft.name}
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              className="field-input"
+              placeholder="김OO"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="field-label">파트</span>
+            <select
+              value={draft.part}
+              onChange={(event) => setDraft((current) => ({ ...current, part: event.target.value }))}
+              className="field-input"
+            >
+              {draft.part && !DEFAULT_TEAM_PARTS.includes(draft.part as (typeof DEFAULT_TEAM_PARTS)[number]) ? (
+                <option value={draft.part}>{draft.part} · 기존 입력값</option>
+              ) : null}
+              {DEFAULT_TEAM_PARTS.map((part) => (
+                <option key={part} value={part}>
+                  {part}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="field-label">메모</span>
+            <input
+              value={draft.note ?? ""}
+              onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+              className="field-input"
+              placeholder="필요한 메모"
+            />
+          </label>
+          <div className="flex items-end gap-2">
+            <button type="button" onClick={saveAssignment} className="btn-primary min-h-10 px-4">
+              {editingId ? "수정 저장" : "추가"}
+            </button>
+            {editingId ? (
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(assignments.find((assignment) => assignment.id === editingId) ?? draft)}
+                className="btn-danger min-h-10 px-3"
+              >
+                삭제
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {error ? <p className="mt-3 text-sm font-semibold text-rose-700">{error}</p> : null}
+        {message ? <p className="mt-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
+      </div>
 
       {sortedAssignments.length === 0 ? (
-        <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+        <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
           아직 배정된 팀원이 없습니다.
         </div>
       ) : (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 flex flex-wrap gap-2">
           {sortedAssignments.map((assignment) => (
-            <div key={assignment.id} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr_0.8fr_1.4fr_auto]">
-              <label className="space-y-1">
-                <span className="field-label">이름</span>
-                <input
-                  value={assignment.name}
-                  onChange={(event) => updateAssignment(assignment.id, { name: event.target.value })}
-                  className="field-input"
-                  placeholder="김OO"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="field-label">파트</span>
-                <input
-                  value={assignment.part}
-                  onChange={(event) => updateAssignment(assignment.id, { part: event.target.value })}
-                  className="field-input"
-                  placeholder="싱어"
-                  list="team-part-options"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="field-label">메모</span>
-                <input
-                  value={assignment.note ?? ""}
-                  onChange={(event) => updateAssignment(assignment.id, { note: event.target.value })}
-                  className="field-input"
-                  placeholder="필요한 메모"
-                />
-              </label>
-              <div className="flex items-end">
-                <button type="button" onClick={() => setDeleteTarget(assignment)} className="btn-danger min-h-10 px-3">
-                  삭제
-                </button>
-              </div>
-            </div>
+            <button
+              key={assignment.id}
+              type="button"
+              onClick={() => selectAssignment(assignment)}
+              title={assignment.note || `${assignment.part} 배정 수정`}
+              className={`rounded-lg border px-3 py-2 text-left text-sm font-bold transition ${
+                editingId === assignment.id
+                  ? "border-blue-500 bg-blue-600 text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+              }`}
+            >
+              <span className={editingId === assignment.id ? "text-blue-100" : "text-blue-700"}>{assignment.part}</span>
+              <span className="mx-1 text-current">:</span>
+              <span>{assignment.name || "이름 미정"}</span>
+            </button>
           ))}
         </div>
       )}
@@ -114,6 +183,10 @@ export function TeamAssignmentsEditor({ assignments, onChange }: TeamAssignments
                     type="button"
                     onClick={() => {
                       onChange(assignments.filter((assignment) => assignment.id !== deleteTarget.id));
+                      if (editingId === deleteTarget.id) {
+                        resetForm();
+                      }
+                      setMessage(`${deleteTarget.part}: ${deleteTarget.name || "이름 미정"} 배정을 삭제했습니다.`);
                       setDeleteTarget(null);
                     }}
                     className="btn-danger"
