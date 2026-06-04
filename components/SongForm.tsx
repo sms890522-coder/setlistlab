@@ -2,7 +2,8 @@
 
 import { PartNotesEditor } from "@/components/PartNotesEditor";
 import { SectionEditor } from "@/components/SectionEditor";
-import type { Song } from "@/lib/types";
+import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
+import type { SavedSong, Song } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
 
 type SongFormProps = {
@@ -12,7 +13,7 @@ type SongFormProps = {
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  onSaveToLibrary: () => void;
+  onLibrarySaved?: (savedSong: SavedSong, overwritten: boolean) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
 };
@@ -24,7 +25,7 @@ export function SongForm({
   onDelete,
   onMoveUp,
   onMoveDown,
-  onSaveToLibrary,
+  onLibrarySaved,
   canMoveUp,
   canMoveDown,
 }: SongFormProps) {
@@ -150,9 +151,7 @@ export function SongForm({
           <button type="button" onClick={onMoveDown} disabled={!canMoveDown} className="btn-secondary min-h-10 px-3">
             아래로
           </button>
-          <button type="button" onClick={onSaveToLibrary} className="btn-secondary min-h-10 px-3">
-            보관함에 저장
-          </button>
+          <SongLibrarySaveButton song={song} onSaved={onLibrarySaved} />
           <button
             type="button"
             onClick={() => {

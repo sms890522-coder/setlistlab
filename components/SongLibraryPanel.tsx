@@ -2,6 +2,7 @@
 
 import type { SavedSong } from "@/lib/types";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 type SongLibraryPanelProps = {
   songs: SavedSong[];
@@ -11,6 +12,7 @@ type SongLibraryPanelProps = {
 
 export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelProps) {
   const [query, setQuery] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<SavedSong | null>(null);
   const filteredSongs = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko-KR");
     if (!normalizedQuery) return songs;
@@ -58,11 +60,7 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm(`${item.song.title || "이 곡"}을 보관함에서 삭제할까요?`)) {
-                      onDelete(item.id);
-                    }
-                  }}
+                  onClick={() => setDeleteTarget(item)}
                   className="btn-danger min-h-10 px-3"
                 >
                   삭제
@@ -72,6 +70,48 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
           ))}
         </div>
       )}
+
+      {deleteTarget && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 backdrop-blur-sm sm:items-center"
+              role="presentation"
+              onClick={() => setDeleteTarget(null)}
+            >
+              <section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={`delete-saved-song-${deleteTarget.id}`}
+                className="card w-full max-w-md p-5 shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-sm font-bold text-rose-600">보관함에서 삭제</p>
+                <h3 id={`delete-saved-song-${deleteTarget.id}`} className="mt-2 text-xl font-black text-slate-950">
+                  {deleteTarget.song.title || "제목 없는 곡"}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  이 곡을 보관함에서 삭제할까요? 콘티에 이미 추가된 곡에는 영향을 주지 않습니다.
+                </p>
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setDeleteTarget(null)} className="btn-secondary">
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDelete(deleteTarget.id);
+                      setDeleteTarget(null);
+                    }}
+                    className="btn-danger"
+                  >
+                    삭제하기
+                  </button>
+                </div>
+              </section>
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }

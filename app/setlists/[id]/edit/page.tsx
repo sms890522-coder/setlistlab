@@ -4,7 +4,7 @@ import Link from "next/link";
 import { SongLibraryPanel } from "@/components/SongLibraryPanel";
 import { SongForm } from "@/components/SongForm";
 import { cloneSong, createBlankSong } from "@/lib/factories";
-import { deleteSongFromLibrary, getSetlist, getSongLibrary, saveSetlist, saveSongToLibrary } from "@/lib/storage";
+import { deleteSongFromLibrary, getSetlist, getSongLibrary, saveSetlist } from "@/lib/storage";
 import type { SavedSong, Setlist, Song } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -53,10 +53,13 @@ export default function SetlistEditPage() {
     persist({ ...setlist, songs });
   }
 
-  function saveToLibrary(song: Song) {
-    const saved = saveSongToLibrary(song);
+  function handleLibrarySaved(saved: SavedSong, overwritten: boolean) {
     setLibrary(getSongLibrary());
-    setLibraryMessage(`${saved.song.title || "곡"}을 보관함에 저장했습니다.`);
+    setLibraryMessage(
+      overwritten
+        ? `${saved.song.title || "곡"}의 보관함 정보를 덮어썼습니다.`
+        : `${saved.song.title || "곡"}을 보관함에 저장했습니다.`,
+    );
   }
 
   function addFromLibrary(savedSong: SavedSong) {
@@ -210,7 +213,7 @@ export default function SetlistEditPage() {
                 onDelete={() => persist({ ...setlist, songs: setlist.songs.filter((item) => item.id !== song.id) })}
                 onMoveUp={() => moveSong(index, -1)}
                 onMoveDown={() => moveSong(index, 1)}
-                onSaveToLibrary={() => saveToLibrary(song)}
+                onLibrarySaved={handleLibrarySaved}
                 canMoveUp={index > 0}
                 canMoveDown={index < setlist.songs.length - 1}
               />

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { getPracticeCompletion, getSetlist, saveSetlist, setPracticeCompletion } from "@/lib/storage";
 import type { Setlist, Song, SongSection } from "@/lib/types";
@@ -96,6 +97,7 @@ export default function SongPracticePage() {
           <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
             콘티 수정
           </Link>
+          <SongLibrarySaveButton song={song} />
         </div>
       </section>
 

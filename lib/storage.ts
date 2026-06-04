@@ -103,17 +103,23 @@ export function getSongLibrary() {
   }
 }
 
-export function saveSongToLibrary(song: Song) {
+export function getSavedSongByTitle(title: string) {
+  const normalizedTitle = normalizeSongTitle(title);
+  return getSongLibrary().find((item) => normalizeSongTitle(item.song.title) === normalizedTitle);
+}
+
+export function saveSongToLibrary(song: Song, overwrite = false) {
   if (!canUseStorage()) {
     throw new Error("브라우저 저장소를 사용할 수 없습니다.");
   }
 
   const library = getSongLibrary();
   const normalizedSong = normalizeSong(song);
-  const existing = library.find(
-    (item) =>
-      item.song.title.trim().toLocaleLowerCase("ko-KR") === normalizedSong.title.trim().toLocaleLowerCase("ko-KR"),
-  );
+  const existing = library.find((item) => normalizeSongTitle(item.song.title) === normalizeSongTitle(normalizedSong.title));
+  if (existing && !overwrite) {
+    throw new Error("같은 제목의 곡이 이미 보관함에 있습니다.");
+  }
+
   const now = new Date().toISOString();
   const savedSong: SavedSong = {
     id: existing?.id ?? createId("saved-song"),
@@ -317,6 +323,10 @@ function optionalString(value: unknown) {
 
 function optionalNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeSongTitle(title: string) {
+  return title.trim().toLocaleLowerCase("ko-KR");
 }
 
 function upgradeSampleYoutubeLinks(setlists: Setlist[]) {
