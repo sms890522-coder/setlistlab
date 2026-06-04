@@ -12,6 +12,7 @@ type SongFormProps = {
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onSaveToLibrary: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
 };
@@ -23,6 +24,7 @@ export function SongForm({
   onDelete,
   onMoveUp,
   onMoveDown,
+  onSaveToLibrary,
   canMoveUp,
   canMoveDown,
 }: SongFormProps) {
@@ -71,6 +73,15 @@ export function SongForm({
               onChange={(event) => updateSong({ description: event.target.value })}
               className="field-input min-h-24 resize-y"
               placeholder="곡 분위기, 인도 흐름, 참고할 점을 적어주세요."
+            />
+          </label>
+          <label className="space-y-1 lg:col-span-2">
+            <span className="field-label">곡 뒤 멘트/기도 메모</span>
+            <textarea
+              value={song.transitionNote ?? ""}
+              onChange={(event) => updateSong({ transitionNote: event.target.value })}
+              className="field-input min-h-24 resize-y"
+              placeholder="다음 곡으로 넘어가기 전 리더 멘트나 기도 내용을 적어주세요."
             />
           </label>
         </div>
@@ -138,6 +149,9 @@ export function SongForm({
           </button>
           <button type="button" onClick={onMoveDown} disabled={!canMoveDown} className="btn-secondary min-h-10 px-3">
             아래로
+          </button>
+          <button type="button" onClick={onSaveToLibrary} className="btn-secondary min-h-10 px-3">
+            보관함에 저장
           </button>
           <button
             type="button"

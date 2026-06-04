@@ -1,6 +1,7 @@
 "use client";
 
 import { importSetlist, parseSetlistJson } from "@/lib/storage";
+import { formatSetlistSummary } from "@/lib/setlistSummary";
 import { isSupabaseConfigured, publishSetlist } from "@/lib/supabase";
 import type { Setlist } from "@/lib/types";
 import { useState } from "react";
@@ -130,9 +131,16 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
         </p>
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5 flex flex-wrap gap-2">
         <button type="button" onClick={createShareLink} disabled={publishing} className="btn-primary">
           {publishing ? "링크 생성 중" : "공유하기"}
+        </button>
+        <button
+          type="button"
+          onClick={() => copyText(formatSetlistSummary(setlist), "카톡용 콘티 요약을 복사했습니다.")}
+          className="btn-secondary"
+        >
+          카톡용 요약 복사
         </button>
       </div>
 

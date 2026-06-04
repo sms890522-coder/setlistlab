@@ -1,11 +1,15 @@
 "use client";
 
 import { createSampleSetlist, SAMPLE_SETLIST_ID, SAMPLE_YOUTUBE_URLS } from "./sampleData";
-import type { PartNote, Setlist, Song, SongSection } from "./types";
+import { cloneSetlist } from "./factories";
+import { createId } from "./id";
+import type { PartNote, SavedSong, Setlist, Song, SongSection } from "./types";
 import { extractYouTubeVideoId } from "./youtube";
 
 const STORAGE_KEY = "conti-practice-room:setlists";
 const INITIALIZED_KEY = "conti-practice-room:initialized";
+const SONG_LIBRARY_KEY = "conti-practice-room:song-library";
+const PRACTICE_COMPLETION_KEY = "conti-practice-room:practice-completion";
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -74,6 +78,110 @@ export function deleteSetlist(id: string) {
   writeStoredSetlists(setlists);
 }
 
+export function duplicateSetlist(id: string) {
+  const source = getSetlist(id);
+  if (!source) {
+    throw new Error("복제할 콘티를 찾을 수 없습니다.");
+  }
+
+  return saveSetlist(cloneSetlist(source));
+}
+
+export function getSongLibrary() {
+  if (!canUseStorage()) return [];
+
+  const raw = window.localStorage.getItem(SONG_LIBRARY_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.map(normalizeSavedSong).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSongToLibrary(song: Song) {
+  if (!canUseStorage()) {
+    throw new Error("브라우저 저장소를 사용할 수 없습니다.");
+  }
+
+  const library = getSongLibrary();
+  const normalizedSong = normalizeSong(song);
+  const existing = library.find(
+    (item) =>
+      item.song.title.trim().toLocaleLowerCase("ko-KR") === normalizedSong.title.trim().toLocaleLowerCase("ko-KR"),
+  );
+  const now = new Date().toISOString();
+  const savedSong: SavedSong = {
+    id: existing?.id ?? createId("saved-song"),
+    song: { ...normalizedSong, id: existing?.song.id ?? createId("library-song") },
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+  const nextLibrary = existing
+    ? library.map((item) => (item.id === existing.id ? savedSong : item))
+    : [savedSong, ...library];
+
+  window.localStorage.setItem(SONG_LIBRARY_KEY, JSON.stringify(nextLibrary));
+  return savedSong;
+}
+
+export function deleteSongFromLibrary(id: string) {
+  if (!canUseStorage()) return;
+  const nextLibrary = getSongLibrary().filter((item) => item.id !== id);
+  window.localStorage.setItem(SONG_LIBRARY_KEY, JSON.stringify(nextLibrary));
+}
+
+export function getPracticeCompletions(setlistId: string) {
+  if (!canUseStorage()) return {};
+
+  try {
+    const raw = window.localStorage.getItem(PRACTICE_COMPLETION_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!isRecord(parsed)) return {};
+
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([key, value]) => key.startsWith(`${setlistId}:`) && value === true)
+        .map(([key]) => [key.slice(setlistId.length + 1), true]),
+    ) as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+export function getPracticeCompletion(setlistId: string, songId: string) {
+  return Boolean(getPracticeCompletions(setlistId)[songId]);
+}
+
+export function setPracticeCompletion(setlistId: string, songId: string, completed: boolean) {
+  if (!canUseStorage()) return;
+
+  let completions: Record<string, boolean> = {};
+  try {
+    const raw = window.localStorage.getItem(PRACTICE_COMPLETION_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (isRecord(parsed)) {
+      completions = Object.fromEntries(
+        Object.entries(parsed).filter(([, value]) => typeof value === "boolean"),
+      ) as Record<string, boolean>;
+    }
+  } catch {
+    completions = {};
+  }
+
+  const key = `${setlistId}:${songId}`;
+  if (completed) {
+    completions[key] = true;
+  } else {
+    delete completions[key];
+  }
+  window.localStorage.setItem(PRACTICE_COMPLETION_KEY, JSON.stringify(completions));
+}
+
 export function importSetlist(setlist: unknown) {
   const normalized = normalizeSetlist(setlist);
   saveSetlist(normalized);
@@ -136,6 +244,7 @@ function normalizeSong(value: unknown): Song {
     id: value.id,
     title: value.title,
     description: optionalString(value.description),
+    transitionNote: optionalString(value.transitionNote),
     youtubeUrl,
     youtubeVideoId: optionalString(value.youtubeVideoId) ?? extractYouTubeVideoId(youtubeUrl),
     originalKey: optionalString(value.originalKey),
@@ -151,6 +260,20 @@ function normalizeSong(value: unknown): Song {
           url: typeof link.url === "string" ? link.url : "",
         }))
       : [],
+  };
+}
+
+function normalizeSavedSong(value: unknown): SavedSong {
+  if (!isRecord(value) || typeof value.id !== "string") {
+    throw new Error("곡 보관함 데이터 형식이 올바르지 않습니다.");
+  }
+
+  const now = new Date().toISOString();
+  return {
+    id: value.id,
+    song: normalizeSong(value.song),
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now,
   };
 }
 

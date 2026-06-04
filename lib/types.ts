@@ -14,6 +14,7 @@ export type Song = {
   id: string;
   title: string;
   description?: string;
+  transitionNote?: string;
   youtubeUrl?: string;
   youtubeVideoId?: string;
   originalKey?: string;
@@ -23,6 +24,13 @@ export type Song = {
   highlights: string[];
   partNotes: PartNote[];
   links?: SongLink[];
+};
+
+export type SavedSong = {
+  id: string;
+  song: Song;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type SongSection = {

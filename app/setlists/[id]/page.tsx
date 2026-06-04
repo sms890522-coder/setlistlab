@@ -3,21 +3,33 @@
 import Link from "next/link";
 import { ExportImportPanel } from "@/components/ExportImportPanel";
 import { SongCard } from "@/components/SongCard";
-import { getSetlist } from "@/lib/storage";
+import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
 import type { Setlist } from "@/lib/types";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 export default function SetlistDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [completedSongs, setCompletedSongs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setSetlist(getSetlist(params.id) ?? null);
+    setCompletedSongs(getPracticeCompletions(params.id));
     setLoaded(true);
   }, [params.id]);
+
+  function toggleCompletion(songId: string, completed: boolean) {
+    setPracticeCompletion(params.id, songId, completed);
+    setCompletedSongs((current) => ({ ...current, [songId]: completed }));
+  }
+
+  function handleDuplicate() {
+    const duplicated = duplicateSetlist(params.id);
+    router.push(`/setlists/${duplicated.id}/edit`);
+  }
 
   if (!loaded) {
     return (
@@ -48,6 +60,8 @@ export default function SetlistDetailPage() {
     );
   }
 
+  const completedCount = setlist.songs.filter((song) => completedSongs[song.id]).length;
+
   return (
     <div className="page-shell space-y-6">
       <section className="card overflow-hidden">
@@ -66,6 +80,9 @@ export default function SetlistDetailPage() {
               <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
                 수정
               </Link>
+              <button type="button" onClick={handleDuplicate} className="btn-secondary">
+                복제
+              </button>
               <button type="button" onClick={() => router.refresh()} className="btn-secondary">
                 새로고침
               </button>
@@ -84,9 +101,14 @@ export default function SetlistDetailPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="section-title">곡 목록</h2>
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
-            {setlist.songs.length}곡
-          </span>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700">
+              연습 완료 {completedCount}/{setlist.songs.length}
+            </span>
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
+              {setlist.songs.length}곡
+            </span>
+          </div>
         </div>
         {setlist.songs.length === 0 ? (
           <div className="card p-8 text-center">
@@ -99,7 +121,21 @@ export default function SetlistDetailPage() {
         ) : (
           <div className="grid gap-4">
             {setlist.songs.map((song, index) => (
-              <SongCard key={song.id} song={song} index={index} href={`/setlists/${setlist.id}/songs/${song.id}`} />
+              <Fragment key={song.id}>
+                <SongCard
+                  song={song}
+                  index={index}
+                  href={`/setlists/${setlist.id}/songs/${song.id}`}
+                  completed={Boolean(completedSongs[song.id])}
+                  onCompletionChange={(completed) => toggleCompletion(song.id, completed)}
+                />
+                {song.transitionNote ? (
+                  <div className="mx-3 rounded-lg border border-violet-100 bg-violet-50 px-4 py-3 text-sm leading-6 text-violet-800">
+                    <p className="text-xs font-black text-violet-600">곡 뒤 멘트/기도</p>
+                    <p className="mt-1 whitespace-pre-line">{song.transitionNote}</p>
+                  </div>
+                ) : null}
+              </Fragment>
             ))}
           </div>
         )}

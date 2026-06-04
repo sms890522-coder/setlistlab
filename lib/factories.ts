@@ -22,6 +22,7 @@ export function createBlankSong(): Song {
     id: createId("song"),
     title: "새 찬양곡",
     description: "",
+    transitionNote: "",
     youtubeUrl: "",
     youtubeVideoId: undefined,
     originalKey: "",
@@ -31,6 +32,29 @@ export function createBlankSong(): Song {
     highlights: [],
     partNotes: [],
     links: [],
+  };
+}
+
+export function cloneSong(song: Song): Song {
+  return {
+    ...song,
+    id: createId("song"),
+    sections: song.sections.map((section) => ({ ...section, id: createId("section") })),
+    partNotes: song.partNotes.map((partNote) => ({ ...partNote, id: createId("part") })),
+    links: song.links?.map((link) => ({ ...link, id: createId("link") })) ?? [],
+  };
+}
+
+export function cloneSetlist(setlist: Setlist): Setlist {
+  const now = new Date().toISOString();
+
+  return {
+    ...setlist,
+    id: createId("setlist"),
+    title: `${setlist.title || "제목 없는 콘티"} 복사본`,
+    songs: setlist.songs.map(cloneSong),
+    createdAt: now,
+    updatedAt: now,
   };
 }
 

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { SongLibraryPanel } from "@/components/SongLibraryPanel";
 import { SongForm } from "@/components/SongForm";
-import { createBlankSong } from "@/lib/factories";
-import { getSetlist, saveSetlist } from "@/lib/storage";
-import type { Setlist, Song } from "@/lib/types";
+import { cloneSong, createBlankSong } from "@/lib/factories";
+import { deleteSongFromLibrary, getSetlist, getSongLibrary, saveSetlist, saveSongToLibrary } from "@/lib/storage";
+import type { SavedSong, Setlist, Song } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -13,9 +14,13 @@ export default function SetlistEditPage() {
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState("");
+  const [library, setLibrary] = useState<SavedSong[]>([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryMessage, setLibraryMessage] = useState("");
 
   useEffect(() => {
     setSetlist(getSetlist(params.id) ?? null);
+    setLibrary(getSongLibrary());
     setLoaded(true);
   }, [params.id]);
 
@@ -46,6 +51,24 @@ export default function SetlistEditPage() {
     const [song] = songs.splice(index, 1);
     songs.splice(nextIndex, 0, song);
     persist({ ...setlist, songs });
+  }
+
+  function saveToLibrary(song: Song) {
+    const saved = saveSongToLibrary(song);
+    setLibrary(getSongLibrary());
+    setLibraryMessage(`${saved.song.title || "곡"}을 보관함에 저장했습니다.`);
+  }
+
+  function addFromLibrary(savedSong: SavedSong) {
+    if (!setlist) return;
+    persist({ ...setlist, songs: [...setlist.songs, cloneSong(savedSong.song)] });
+    setLibraryMessage(`${savedSong.song.title || "곡"}을 콘티에 추가했습니다.`);
+  }
+
+  function deleteFromLibrary(id: string) {
+    deleteSongFromLibrary(id);
+    setLibrary(getSongLibrary());
+    setLibraryMessage("곡을 보관함에서 삭제했습니다.");
   }
 
   if (!loaded) {
@@ -143,14 +166,24 @@ export default function SetlistEditPage() {
             <h2 className="section-title">곡 목록</h2>
             <p className="field-help">곡을 추가하고 순서를 조정하세요.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => persist({ ...setlist, songs: [...setlist.songs, createBlankSong()] })}
-            className="btn-primary"
-          >
-            곡 추가
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setLibraryOpen((value) => !value)} className="btn-secondary">
+              {libraryOpen ? "곡 보관함 닫기" : "보관함에서 불러오기"}
+            </button>
+            <button
+              type="button"
+              onClick={() => persist({ ...setlist, songs: [...setlist.songs, createBlankSong()] })}
+              className="btn-primary"
+            >
+              새 곡 추가
+            </button>
+          </div>
         </div>
+
+        {libraryOpen ? <SongLibraryPanel songs={library} onAdd={addFromLibrary} onDelete={deleteFromLibrary} /> : null}
+        {libraryMessage ? (
+          <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{libraryMessage}</p>
+        ) : null}
 
         {setlist.songs.length === 0 ? (
           <div className="card p-8 text-center">
@@ -177,6 +210,7 @@ export default function SetlistEditPage() {
                 onDelete={() => persist({ ...setlist, songs: setlist.songs.filter((item) => item.id !== song.id) })}
                 onMoveUp={() => moveSong(index, -1)}
                 onMoveDown={() => moveSong(index, 1)}
+                onSaveToLibrary={() => saveToLibrary(song)}
                 canMoveUp={index > 0}
                 canMoveDown={index < setlist.songs.length - 1}
               />

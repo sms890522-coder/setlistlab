@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
-import { getSetlist, saveSetlist } from "@/lib/storage";
+import { getPracticeCompletion, getSetlist, saveSetlist, setPracticeCompletion } from "@/lib/storage";
 import type { Setlist, Song, SongSection } from "@/lib/types";
 import { formatSecondsToTime } from "@/lib/youtube";
 import { useParams } from "next/navigation";
@@ -13,12 +13,14 @@ export default function SongPracticePage() {
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [song, setSong] = useState<Song | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [practiceCompleted, setPracticeCompletedState] = useState(false);
   const playerRef = useRef<YouTubePlayerHandle>(null);
 
   useEffect(() => {
     const foundSetlist = getSetlist(params.id) ?? null;
     setSetlist(foundSetlist);
     setSong(foundSetlist?.songs.find((item) => item.id === params.songId) ?? null);
+    setPracticeCompletedState(getPracticeCompletion(params.id, params.songId));
     setLoaded(true);
   }, [params.id, params.songId]);
 
@@ -34,6 +36,11 @@ export default function SongPracticePage() {
 
     setSetlist(savedSetlist);
     setSong(savedSong);
+  }
+
+  function togglePracticeCompleted(completed: boolean) {
+    setPracticeCompletion(params.id, params.songId, completed);
+    setPracticeCompletedState(completed);
   }
 
   if (!loaded) {
@@ -76,9 +83,20 @@ export default function SongPracticePage() {
             연습키 {song.practiceKey || "-"} · 원키 {song.originalKey || "-"} · BPM {song.bpm ?? "-"}
           </p>
         </div>
-        <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
-          콘티 수정
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
+            <input
+              type="checkbox"
+              checked={practiceCompleted}
+              onChange={(event) => togglePracticeCompleted(event.target.checked)}
+              className="size-4 accent-emerald-600"
+            />
+            연습 완료
+          </label>
+          <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
+            콘티 수정
+          </Link>
+        </div>
       </section>
 
       {song.description ? (
@@ -167,6 +185,13 @@ export default function SongPracticePage() {
           </section>
         </div>
       </section>
+
+      {song.transitionNote ? (
+        <section className="rounded-lg border border-violet-100 bg-violet-50 p-5">
+          <h2 className="font-bold text-violet-900">곡 뒤 멘트/기도</h2>
+          <p className="mt-2 whitespace-pre-line text-sm leading-7 text-violet-800">{song.transitionNote}</p>
+        </section>
+      ) : null}
 
       <nav aria-label="곡 이동" className="card grid grid-cols-3 gap-2 p-3">
         {previousSong ? (

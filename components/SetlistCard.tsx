@@ -4,9 +4,10 @@ import type { Setlist } from "@/lib/types";
 type SetlistCardProps = {
   setlist: Setlist;
   onDelete?: (id: string) => void;
+  onDuplicate?: (id: string) => void;
 };
 
-export function SetlistCard({ setlist, onDelete }: SetlistCardProps) {
+export function SetlistCard({ setlist, onDelete, onDuplicate }: SetlistCardProps) {
   const songCount = setlist.songs.length;
 
   return (
@@ -36,6 +37,11 @@ export function SetlistCard({ setlist, onDelete }: SetlistCardProps) {
           <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary min-h-10 px-3">
             수정
           </Link>
+          {onDuplicate ? (
+            <button type="button" onClick={() => onDuplicate(setlist.id)} className="btn-secondary min-h-10 px-3">
+              복제
+            </button>
+          ) : null}
           {onDelete ? (
             <button type="button" onClick={() => onDelete(setlist.id)} className="btn-danger min-h-10 px-3">
               삭제

@@ -42,6 +42,7 @@ export function createSampleSetlist(): Setlist {
       makeSong({
         title: "나는 예배자입니다",
         description: "담백한 고백으로 예배의 문을 여는 곡입니다.",
+        transitionNote: "우리의 마음을 예배자로 세워 달라고 짧게 기도합니다.",
         youtubeUrl: SAMPLE_YOUTUBE_URLS["나는 예배자입니다"],
         originalKey: "F",
         practiceKey: "F",
@@ -66,6 +67,7 @@ export function createSampleSetlist(): Setlist {
       makeSong({
         title: "주님은 산 같아서",
         description: "신뢰의 고백으로 자연스럽게 분위기를 올립니다.",
+        transitionNote: "주님을 신뢰하는 고백으로 다음 곡을 소개합니다.",
         youtubeUrl: SAMPLE_YOUTUBE_URLS["주님은 산 같아서"],
         originalKey: "A",
         practiceKey: "A",

@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { SetlistCard } from "@/components/SetlistCard";
-import { deleteSetlist, getSetlists } from "@/lib/storage";
+import { deleteSetlist, duplicateSetlist, getSetlists } from "@/lib/storage";
 import type { Setlist } from "@/lib/types";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function SetlistsPage() {
+  const router = useRouter();
   const [setlists, setSetlists] = useState<Setlist[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -19,6 +21,11 @@ export default function SetlistsPage() {
     if (!window.confirm("이 콘티를 삭제할까요? 삭제한 콘티는 되돌릴 수 없습니다.")) return;
     deleteSetlist(id);
     setSetlists(getSetlists());
+  }
+
+  function handleDuplicate(id: string) {
+    const duplicated = duplicateSetlist(id);
+    router.push(`/setlists/${duplicated.id}/edit`);
   }
 
   return (
@@ -57,7 +64,7 @@ export default function SetlistsPage() {
       ) : (
         <div className="grid gap-4">
           {setlists.map((setlist) => (
-            <SetlistCard key={setlist.id} setlist={setlist} onDelete={handleDelete} />
+            <SetlistCard key={setlist.id} setlist={setlist} onDelete={handleDelete} onDuplicate={handleDuplicate} />
           ))}
         </div>
       )}

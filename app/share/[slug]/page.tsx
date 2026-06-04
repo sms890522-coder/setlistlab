@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { getSharedSetlist, isSupabaseConfigured } from "@/lib/supabase";
-import { importSetlist, parseSetlistJson } from "@/lib/storage";
+import { getPracticeCompletions, importSetlist, parseSetlistJson, setPracticeCompletion } from "@/lib/storage";
 import type { Setlist } from "@/lib/types";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,6 +13,7 @@ export default function SharedSetlistPage() {
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [completedSongs, setCompletedSongs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     async function loadSharedSetlist() {
@@ -24,7 +25,9 @@ export default function SharedSetlistPage() {
 
       try {
         const row = await getSharedSetlist(params.slug);
-        setSetlist(parseSetlistJson(JSON.stringify(row.setlist)));
+        const sharedSetlist = parseSetlistJson(JSON.stringify(row.setlist));
+        setSetlist(sharedSetlist);
+        setCompletedSongs(getPracticeCompletions(sharedSetlist.id));
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "공유 콘티를 불러오지 못했습니다.");
       } finally {
@@ -40,6 +43,14 @@ export default function SharedSetlistPage() {
     const imported = importSetlist(setlist);
     router.push(`/setlists/${imported.id}`);
   }
+
+  function toggleCompletion(songId: string, completed: boolean) {
+    if (!setlist) return;
+    setPracticeCompletion(setlist.id, songId, completed);
+    setCompletedSongs((current) => ({ ...current, [songId]: completed }));
+  }
+
+  const completedCount = setlist?.songs.filter((song) => completedSongs[song.id]).length ?? 0;
 
   return (
     <div className="page-shell space-y-6">
@@ -84,28 +95,52 @@ export default function SharedSetlistPage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="section-title">곡 목록</h2>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
-                {setlist.songs.length}곡
-              </span>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700">
+                  연습 완료 {completedCount}/{setlist.songs.length}
+                </span>
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
+                  {setlist.songs.length}곡
+                </span>
+              </div>
             </div>
             <div className="grid gap-4">
               {setlist.songs.map((song, index) => (
-                <article key={song.id} className="card p-5">
-                  <div className="flex items-start gap-4">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-lg font-black text-slate-950">{song.title || "제목 없는 곡"}</h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        연습키 {song.practiceKey || "-"} · BPM {song.bpm ?? "-"}
-                      </p>
-                      <p className="mt-3 text-sm leading-6 text-slate-600">
-                        {song.sections.map((section) => section.name).join(" - ") || "곡 구성이 없습니다."}
-                      </p>
+                <div key={song.id} className="space-y-3">
+                  <article className="card p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                      <div className="flex min-w-0 flex-1 items-start gap-4">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-lg font-black text-slate-950">{song.title || "제목 없는 곡"}</h3>
+                          <p className="mt-1 text-sm text-slate-500">
+                            연습키 {song.practiceKey || "-"} · BPM {song.bpm ?? "-"}
+                          </p>
+                          <p className="mt-3 text-sm leading-6 text-slate-600">
+                            {song.sections.map((section) => section.name).join(" - ") || "곡 구성이 없습니다."}
+                          </p>
+                        </div>
+                      </div>
+                      <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(completedSongs[song.id])}
+                          onChange={(event) => toggleCompletion(song.id, event.target.checked)}
+                          className="size-4 accent-emerald-600"
+                        />
+                        연습 완료
+                      </label>
                     </div>
-                  </div>
-                </article>
+                  </article>
+                  {song.transitionNote ? (
+                    <div className="mx-3 rounded-lg border border-violet-100 bg-violet-50 px-4 py-3 text-sm leading-6 text-violet-800">
+                      <p className="text-xs font-black text-violet-600">곡 뒤 멘트/기도</p>
+                      <p className="mt-1 whitespace-pre-line">{song.transitionNote}</p>
+                    </div>
+                  ) : null}
+                </div>
               ))}
             </div>
           </section>
