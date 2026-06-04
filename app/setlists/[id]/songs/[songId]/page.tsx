@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { getPracticeCompletion, getSetlist, saveSetlist, setPracticeCompletion } from "@/lib/storage";
@@ -187,6 +188,34 @@ export default function SongPracticePage() {
           </section>
         </div>
       </section>
+
+      {song.chordMemo || (song.sheetLinks?.length ?? 0) > 0 ? (
+        <section className="card p-5">
+          <h2 className="font-bold text-slate-950">코드 메모/악보 링크</h2>
+          {song.chordMemo ? (
+            <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-700">{song.chordMemo}</p>
+          ) : null}
+          {(song.sheetLinks?.length ?? 0) > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {song.sheetLinks
+                ?.filter((link) => /^https?:\/\//i.test(link.url))
+                .map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary min-h-10 px-3"
+                  >
+                    {link.label || "참고 링크"}
+                  </a>
+                ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      <CapoTransposeHelper song={song} editable={false} />
 
       {song.transitionNote ? (
         <section className="rounded-lg border border-violet-100 bg-violet-50 p-5">

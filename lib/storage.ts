@@ -3,7 +3,7 @@
 import { createSampleSetlist, SAMPLE_SETLIST_ID, SAMPLE_YOUTUBE_URLS } from "./sampleData";
 import { cloneSetlist } from "./factories";
 import { createId } from "./id";
-import type { PartNote, SavedSong, Setlist, Song, SongSection } from "./types";
+import type { PartNote, SavedSong, Setlist, Song, SongLink, SongSection, TeamAssignment } from "./types";
 import { extractYouTubeVideoId } from "./youtube";
 
 const STORAGE_KEY = "conti-practice-room:setlists";
@@ -231,6 +231,9 @@ function normalizeSetlist(value: unknown): Setlist {
     description: optionalString(value.description),
     globalNotes: optionalString(value.globalNotes),
     songs: Array.isArray(value.songs) ? value.songs.map(normalizeSong) : [],
+    teamAssignments: Array.isArray(value.teamAssignments)
+      ? value.teamAssignments.filter(isRecord).map(normalizeTeamAssignment)
+      : [],
     createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now,
   };
@@ -259,13 +262,13 @@ function normalizeSong(value: unknown): Song {
     sections: Array.isArray(value.sections) ? value.sections.map(normalizeSection) : [],
     highlights: Array.isArray(value.highlights) ? value.highlights.filter(isString) : [],
     partNotes: Array.isArray(value.partNotes) ? value.partNotes.map(normalizePartNote) : [],
-    links: Array.isArray(value.links)
-      ? value.links.filter(isRecord).map((link) => ({
-          id: typeof link.id === "string" ? link.id : "",
-          label: typeof link.label === "string" ? link.label : "",
-          url: typeof link.url === "string" ? link.url : "",
-        }))
-      : [],
+    links: Array.isArray(value.links) ? value.links.filter(isRecord).map(normalizeSongLink) : [],
+    capo: optionalNumber(value.capo),
+    chordForm: optionalString(value.chordForm),
+    transposeMemo: optionalString(value.transposeMemo),
+    chordMemo: optionalString(value.chordMemo),
+    chordProgression: optionalString(value.chordProgression),
+    sheetLinks: Array.isArray(value.sheetLinks) ? value.sheetLinks.filter(isRecord).map(normalizeSongLink) : [],
   };
 }
 
@@ -306,6 +309,31 @@ function normalizePartNote(value: unknown): PartNote {
     id: typeof value.id === "string" ? value.id : "",
     part: typeof value.part === "string" ? value.part : "",
     note: typeof value.note === "string" ? value.note : "",
+  };
+}
+
+function normalizeSongLink(value: unknown): SongLink {
+  if (!isRecord(value)) {
+    throw new Error("곡 링크 데이터 형식이 올바르지 않습니다.");
+  }
+
+  return {
+    id: typeof value.id === "string" ? value.id : createId("link"),
+    label: typeof value.label === "string" ? value.label : "",
+    url: typeof value.url === "string" ? value.url : "",
+  };
+}
+
+function normalizeTeamAssignment(value: unknown): TeamAssignment {
+  if (!isRecord(value)) {
+    throw new Error("팀원 파트 배정 데이터 형식이 올바르지 않습니다.");
+  }
+
+  return {
+    id: typeof value.id === "string" ? value.id : createId("assignment"),
+    name: typeof value.name === "string" ? value.name : "",
+    part: typeof value.part === "string" ? value.part : "",
+    note: optionalString(value.note),
   };
 }
 

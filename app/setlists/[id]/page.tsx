@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ExportImportPanel } from "@/components/ExportImportPanel";
 import { SongCard } from "@/components/SongCard";
+import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
 import type { Setlist } from "@/lib/types";
 import { useParams, useRouter } from "next/navigation";
@@ -97,6 +98,8 @@ export default function SetlistDetailPage() {
           </div>
         ) : null}
       </section>
+
+      <TeamAssignmentsView assignments={setlist.teamAssignments} />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">

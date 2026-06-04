@@ -27,6 +27,11 @@ export function SongCard({ href, index, song, completed = false, onCompletionCha
                 <p className="mt-1 text-sm text-slate-500">
                   연습키 {song.practiceKey || "-"} · BPM {song.bpm ?? "-"}
                 </p>
+                {song.chordForm || typeof song.capo === "number" ? (
+                  <p className="mt-1 text-xs font-semibold text-blue-700">
+                    {song.chordForm ? `${song.chordForm}폼` : "코드폼 미정"} · 카포 {song.capo ?? "-"}
+                  </p>
+                ) : null}
               </div>
               {song.youtubeVideoId ? (
                 <span className="w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
 import { getSharedSetlist, isSupabaseConfigured } from "@/lib/supabase";
 import { getPracticeCompletions, importSetlist, parseSetlistJson, setPracticeCompletion } from "@/lib/storage";
 import type { Setlist } from "@/lib/types";
@@ -92,6 +93,8 @@ export default function SharedSetlistPage() {
             ) : null}
           </section>
 
+          <TeamAssignmentsView assignments={setlist.teamAssignments} />
+
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="section-title">곡 목록</h2>
@@ -121,6 +124,31 @@ export default function SharedSetlistPage() {
                           <p className="mt-3 text-sm leading-6 text-slate-600">
                             {song.sections.map((section) => section.name).join(" - ") || "곡 구성이 없습니다."}
                           </p>
+                          {song.chordForm || typeof song.capo === "number" ? (
+                            <p className="mt-2 text-xs font-bold text-blue-700">
+                              {song.chordForm ? `${song.chordForm}폼` : "코드폼 미정"} · 카포 {song.capo ?? "-"}
+                            </p>
+                          ) : null}
+                          {song.chordMemo ? (
+                            <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">{song.chordMemo}</p>
+                          ) : null}
+                          {(song.sheetLinks?.length ?? 0) > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {song.sheetLinks
+                                ?.filter((link) => /^https?:\/\//i.test(link.url))
+                                .map((link) => (
+                                  <a
+                                    key={link.id}
+                                    href={link.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn-secondary min-h-9 px-3"
+                                  >
+                                    {link.label || "참고 링크"}
+                                  </a>
+                                ))}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">

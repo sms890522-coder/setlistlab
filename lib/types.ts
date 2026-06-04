@@ -6,6 +6,7 @@ export type Setlist = {
   description?: string;
   globalNotes?: string;
   songs: Song[];
+  teamAssignments: TeamAssignment[];
   createdAt: string;
   updatedAt: string;
 };
@@ -24,6 +25,12 @@ export type Song = {
   highlights: string[];
   partNotes: PartNote[];
   links?: SongLink[];
+  capo?: number;
+  chordForm?: string;
+  transposeMemo?: string;
+  chordMemo?: string;
+  chordProgression?: string;
+  sheetLinks?: SongLink[];
 };
 
 export type SavedSong = {
@@ -53,4 +60,31 @@ export type SongLink = {
   url: string;
 };
 
+export type TeamAssignment = {
+  id: string;
+  name: string;
+  part: string;
+  note?: string;
+};
+
+export type CapoSuggestion = {
+  chordForm: string;
+  capo: number;
+  actualKey: string;
+  label: string;
+};
+
 export const DEFAULT_PARTS = ["보컬", "일렉", "어쿠스틱", "건반", "베이스", "드럼", "기타"] as const;
+export const DEFAULT_TEAM_PARTS = [
+  "인도자",
+  "싱어",
+  "일렉",
+  "어쿠스틱",
+  "건반",
+  "베이스",
+  "드럼",
+  "음향",
+  "자막",
+  "방송",
+  "기타",
+] as const;

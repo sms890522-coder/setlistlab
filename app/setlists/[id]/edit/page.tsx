@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { SongLibraryPanel } from "@/components/SongLibraryPanel";
 import { SongForm } from "@/components/SongForm";
+import { TeamAssignmentsEditor } from "@/components/TeamAssignmentsEditor";
 import { cloneSong, createBlankSong } from "@/lib/factories";
 import { deleteSongFromLibrary, getSetlist, getSongLibrary, saveSetlist } from "@/lib/storage";
 import type { SavedSong, Setlist, Song } from "@/lib/types";
@@ -14,6 +15,7 @@ export default function SetlistEditPage() {
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [library, setLibrary] = useState<SavedSong[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
@@ -25,9 +27,14 @@ export default function SetlistEditPage() {
   }, [params.id]);
 
   function persist(next: Setlist) {
-    const saved = saveSetlist(next);
-    setSetlist(saved);
-    setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    try {
+      const saved = saveSetlist(next);
+      setSetlist(saved);
+      setSaveError("");
+      setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    } catch {
+      setSaveError("자동 저장에 실패했습니다. 브라우저 저장 공간과 권한을 확인해 주세요.");
+    }
   }
 
   function updateSetlist(patch: Partial<Setlist>) {
@@ -99,7 +106,9 @@ export default function SetlistEditPage() {
     <div className="page-shell space-y-6 pb-20">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-blue-700">자동 저장 {savedAt ? `· ${savedAt}` : "대기 중"}</p>
+          <p className={`text-sm font-bold ${saveError ? "text-rose-700" : "text-blue-700"}`}>
+            {saveError || `자동 저장 ${savedAt ? `· ${savedAt}` : "대기 중"}`}
+          </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">콘티 수정</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">입력한 내용은 localStorage에 자동 저장됩니다.</p>
         </div>
@@ -162,6 +171,11 @@ export default function SetlistEditPage() {
           </label>
         </div>
       </section>
+
+      <TeamAssignmentsEditor
+        assignments={setlist.teamAssignments}
+        onChange={(teamAssignments) => updateSetlist({ teamAssignments })}
+      />
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

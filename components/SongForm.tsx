@@ -2,6 +2,8 @@
 
 import { PartNotesEditor } from "@/components/PartNotesEditor";
 import { SectionEditor } from "@/components/SectionEditor";
+import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
+import { ChordMemoEditor } from "@/components/ChordMemoEditor";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import type { SavedSong, Song } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
@@ -87,26 +89,8 @@ export function SongForm({
           </label>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="space-y-1">
-            <span className="field-label">원키</span>
-            <input
-              value={song.originalKey ?? ""}
-              onChange={(event) => updateSong({ originalKey: event.target.value })}
-              className="field-input"
-              placeholder="F"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="field-label">연습키</span>
-            <input
-              value={song.practiceKey ?? ""}
-              onChange={(event) => updateSong({ practiceKey: event.target.value })}
-              className="field-input"
-              placeholder="F"
-            />
-          </label>
-          <label className="space-y-1">
+        <div className="max-w-xs">
+          <label className="block space-y-1">
             <span className="field-label">BPM</span>
             <input
               value={song.bpm ?? ""}
@@ -141,6 +125,8 @@ export function SongForm({
           <span className="field-help">한 줄에 하나씩 입력하면 보기 화면에서 요약됩니다.</span>
         </label>
 
+        <CapoTransposeHelper song={song} onChange={updateSong} />
+        <ChordMemoEditor song={song} onChange={updateSong} />
         <SectionEditor sections={song.sections} onChange={(sections) => updateSong({ sections })} />
         <PartNotesEditor partNotes={song.partNotes} onChange={(partNotes) => updateSong({ partNotes })} />
 
