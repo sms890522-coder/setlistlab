@@ -78,6 +78,9 @@ export default function SetlistDetailPage() {
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link href={`/setlists/${setlist.id}/play`} className="btn-primary">
+                콘티 연속재생 시작
+              </Link>
               <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
                 수정
               </Link>
