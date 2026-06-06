@@ -159,28 +159,6 @@ export function SetlistContinuousPlayer({
         <div className="rounded-lg border border-slate-200 bg-slate-950">
           <div className="youtube-frame-host aspect-video w-full overflow-hidden rounded-lg" ref={player.hostRef} />
         </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={goToPrevious}
-            disabled={currentPlayableIndex === 0}
-            className="btn-secondary min-h-14 px-2 text-base"
-          >
-            이전 곡
-          </button>
-          <button type="button" onClick={player.togglePlayback} disabled={!player.ready} className="btn-primary min-h-14 px-2 text-base">
-            {player.playing ? "일시정지" : "재생"}
-          </button>
-          <button
-            type="button"
-            onClick={() => goToNext(false)}
-            disabled={currentPlayableIndex >= playableSongs.length - 1}
-            className="btn-secondary min-h-14 px-2 text-base"
-          >
-            다음 곡
-          </button>
-        </div>
       </section>
 
       <section className="card overflow-hidden">
@@ -286,14 +264,14 @@ export function SetlistContinuousPlayer({
 
       <PlaylistQueue setlist={setlist} currentSongId={currentSong.id} onJump={jumpToQueueSong} />
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/80 bg-white/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_35px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden">
-        <div className="mx-auto max-w-3xl">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/60 bg-white/75 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_35px_rgba(15,23,42,0.10)] backdrop-blur-md">
+        <div className="mx-auto max-w-4xl">
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={goToPrevious}
               disabled={currentPlayableIndex === 0}
-              className="btn-secondary min-h-12 px-2 text-sm"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-slate-300/60 bg-white/55 px-2 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-white/75 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-45"
             >
               이전 곡
             </button>
@@ -301,7 +279,7 @@ export function SetlistContinuousPlayer({
               type="button"
               onClick={player.togglePlayback}
               disabled={!player.ready}
-              className="btn-primary min-h-12 px-2 text-sm"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-blue-300/50 bg-blue-600/80 px-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700/90 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-45"
             >
               {player.playing ? "일시정지" : "재생"}
             </button>
@@ -309,7 +287,7 @@ export function SetlistContinuousPlayer({
               type="button"
               onClick={() => goToNext(false)}
               disabled={currentPlayableIndex >= playableSongs.length - 1}
-              className="btn-secondary min-h-12 px-2 text-sm"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-slate-300/60 bg-white/55 px-2 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-white/75 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-45"
             >
               다음 곡
             </button>
