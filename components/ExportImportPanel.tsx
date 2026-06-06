@@ -17,6 +17,7 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
   const [error, setError] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const sharePlayUrl = shareUrl ? `${shareUrl}/play` : "";
 
   async function copyText(text: string, successMessage: string) {
     try {
@@ -58,8 +59,8 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
 
     const shareData = {
       title: setlist.title || "콘티연습실 공유 콘티",
-      text: `${setlist.title || "콘티"}를 공유합니다.`,
-      url: shareUrl,
+      text: `${setlist.title || "콘티"} 연속재생 링크를 공유합니다.`,
+      url: sharePlayUrl || shareUrl,
     };
 
     if (navigator.share) {
@@ -73,7 +74,13 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       }
     }
 
-    await copyText(shareUrl, "공유 링크를 복사했습니다. 카카오톡 대화방에 붙여넣어 주세요.");
+    await copyText(sharePlayUrl || shareUrl, "연속재생 링크를 복사했습니다. 카카오톡 대화방에 붙여넣어 주세요.");
+  }
+
+  function getSummaryPlayUrl() {
+    if (sharePlayUrl) return sharePlayUrl;
+    if (!setlist || typeof window === "undefined") return "";
+    return `${window.location.origin}/setlists/${setlist.id}/play`;
   }
 
   function handleImport() {
@@ -137,7 +144,9 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
         </button>
         <button
           type="button"
-          onClick={() => copyText(formatSetlistSummary(setlist), "카톡용 콘티 요약을 복사했습니다.")}
+          onClick={() =>
+            copyText(formatSetlistSummary(setlist, { playUrl: getSummaryPlayUrl() }), "카톡용 콘티 요약을 복사했습니다.")
+          }
           className="btn-secondary"
         >
           카톡용 요약 복사
@@ -155,6 +164,24 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
             <button type="button" onClick={shareToKakaoTalk} className="btn-primary shrink-0">
               카카오톡 공유하기
             </button>
+          </div>
+          <div className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
+            <p className="text-xs font-black text-blue-700">연속재생 링크</p>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input
+                value={sharePlayUrl}
+                readOnly
+                className="field-input bg-white font-mono text-xs"
+                onFocus={(event) => event.target.select()}
+              />
+              <button
+                type="button"
+                onClick={() => copyText(sharePlayUrl, "연속재생 링크를 복사했습니다.")}
+                className="btn-secondary shrink-0"
+              >
+                연속재생 링크 복사
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

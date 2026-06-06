@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { PreviousSetlistImportPanel } from "@/components/PreviousSetlistImportPanel";
 import { SongLibraryPanel } from "@/components/SongLibraryPanel";
 import { SongForm } from "@/components/SongForm";
 import { TeamAssignmentsEditor } from "@/components/TeamAssignmentsEditor";
 import { cloneSong, createBlankSong } from "@/lib/factories";
-import { deleteSongFromLibrary, getSetlist, getSongLibrary, saveSetlist } from "@/lib/storage";
-import type { SavedSong, Setlist, Song } from "@/lib/types";
+import { deleteSongFromLibrary, getSetlists, getSongLibrary, saveSetlist } from "@/lib/storage";
+import type { SavedSong, Setlist, Song, TeamAssignment } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -19,9 +20,12 @@ export default function SetlistEditPage() {
   const [library, setLibrary] = useState<SavedSong[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
+  const [previousSetlists, setPreviousSetlists] = useState<Setlist[]>([]);
 
   useEffect(() => {
-    setSetlist(getSetlist(params.id) ?? null);
+    const allSetlists = getSetlists();
+    setSetlist(allSetlists.find((item) => item.id === params.id) ?? null);
+    setPreviousSetlists(allSetlists.filter((item) => item.id !== params.id));
     setLibrary(getSongLibrary());
     setLoaded(true);
   }, [params.id]);
@@ -79,6 +83,18 @@ export default function SetlistEditPage() {
     deleteSongFromLibrary(id);
     setLibrary(getSongLibrary());
     setLibraryMessage("곡을 보관함에서 삭제했습니다.");
+  }
+
+  function importSongsFromPrevious(songs: Song[]) {
+    if (!setlist || songs.length === 0) return;
+    persist({ ...setlist, songs: [...setlist.songs, ...songs] });
+    setLibraryMessage(`${songs.length}곡을 현재 콘티에 추가했습니다.`);
+  }
+
+  function importTeamAssignmentsFromPrevious(teamAssignments: TeamAssignment[]) {
+    if (!setlist) return;
+    persist({ ...setlist, teamAssignments });
+    setLibraryMessage("팀원 파트 배정을 불러왔습니다.");
   }
 
   if (!loaded) {
@@ -175,6 +191,12 @@ export default function SetlistEditPage() {
       <TeamAssignmentsEditor
         assignments={setlist.teamAssignments}
         onChange={(teamAssignments) => updateSetlist({ teamAssignments })}
+      />
+
+      <PreviousSetlistImportPanel
+        setlists={previousSetlists}
+        onImportSongs={importSongsFromPrevious}
+        onImportTeamAssignments={importTeamAssignmentsFromPrevious}
       />
 
       <section className="space-y-4">

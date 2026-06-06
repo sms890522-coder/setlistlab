@@ -10,6 +10,7 @@ const STORAGE_KEY = "conti-practice-room:setlists";
 const INITIALIZED_KEY = "conti-practice-room:initialized";
 const SONG_LIBRARY_KEY = "conti-practice-room:song-library";
 const PRACTICE_COMPLETION_KEY = "conti-practice-room:practice-completion";
+const PRACTICE_POSITION_KEY = "conti-practice-room:practice-position";
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -186,6 +187,48 @@ export function setPracticeCompletion(setlistId: string, songId: string, complet
     delete completions[key];
   }
   window.localStorage.setItem(PRACTICE_COMPLETION_KEY, JSON.stringify(completions));
+}
+
+export function getPracticePosition(setlistId: string, songId: string) {
+  if (!canUseStorage()) return 0;
+
+  try {
+    const raw = window.localStorage.getItem(PRACTICE_POSITION_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!isRecord(parsed)) return 0;
+
+    const value = parsed[`${setlistId}:${songId}`];
+    return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setPracticePosition(setlistId: string, songId: string, seconds: number) {
+  if (!canUseStorage()) return;
+
+  let positions: Record<string, number> = {};
+  try {
+    const raw = window.localStorage.getItem(PRACTICE_POSITION_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (isRecord(parsed)) {
+      positions = Object.fromEntries(
+        Object.entries(parsed).filter(([, value]) => typeof value === "number" && Number.isFinite(value)),
+      ) as Record<string, number>;
+    }
+  } catch {
+    positions = {};
+  }
+
+  const key = `${setlistId}:${songId}`;
+  const normalizedSeconds = Math.max(0, Math.round(seconds));
+  if (normalizedSeconds < 3) {
+    delete positions[key];
+  } else {
+    positions[key] = normalizedSeconds;
+  }
+
+  window.localStorage.setItem(PRACTICE_POSITION_KEY, JSON.stringify(positions));
 }
 
 export function importSetlist(setlist: unknown) {

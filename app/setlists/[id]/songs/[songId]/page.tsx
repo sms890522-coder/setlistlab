@@ -4,7 +4,14 @@ import Link from "next/link";
 import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
-import { getPracticeCompletion, getSetlist, saveSetlist, setPracticeCompletion } from "@/lib/storage";
+import {
+  getPracticeCompletion,
+  getPracticePosition,
+  getSetlist,
+  saveSetlist,
+  setPracticeCompletion,
+  setPracticePosition,
+} from "@/lib/storage";
 import type { Setlist, Song, SongSection } from "@/lib/types";
 import { formatSecondsToTime } from "@/lib/youtube";
 import { useParams } from "next/navigation";
@@ -16,13 +23,18 @@ export default function SongPracticePage() {
   const [song, setSong] = useState<Song | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [practiceCompleted, setPracticeCompletedState] = useState(false);
+  const [initialPosition, setInitialPosition] = useState(0);
   const playerRef = useRef<YouTubePlayerHandle>(null);
+  const lastSavedPositionRef = useRef(0);
 
   useEffect(() => {
     const foundSetlist = getSetlist(params.id) ?? null;
+    const savedPosition = getPracticePosition(params.id, params.songId);
     setSetlist(foundSetlist);
     setSong(foundSetlist?.songs.find((item) => item.id === params.songId) ?? null);
     setPracticeCompletedState(getPracticeCompletion(params.id, params.songId));
+    setInitialPosition(savedPosition);
+    lastSavedPositionRef.current = Math.round(savedPosition);
     setLoaded(true);
   }, [params.id, params.songId]);
 
@@ -43,6 +55,13 @@ export default function SongPracticePage() {
   function togglePracticeCompleted(completed: boolean) {
     setPracticeCompletion(params.id, params.songId, completed);
     setPracticeCompletedState(completed);
+  }
+
+  function handleTimeUpdate(seconds: number) {
+    if (Math.abs(seconds - lastSavedPositionRef.current) < 3) return;
+
+    setPracticePosition(params.id, params.songId, seconds);
+    lastSavedPositionRef.current = seconds;
   }
 
   if (!loaded) {
@@ -84,6 +103,11 @@ export default function SongPracticePage() {
           <p className="mt-2 text-sm text-slate-500">
             연습키 {song.practiceKey || "-"} · 원키 {song.originalKey || "-"} · BPM {song.bpm ?? "-"}
           </p>
+          {initialPosition >= 3 ? (
+            <p className="mt-2 w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+              이어보기 {formatSecondsToTime(initialPosition)}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
@@ -115,6 +139,8 @@ export default function SongPracticePage() {
           videoId={song.youtubeVideoId}
           sections={song.sections}
           onSectionsChange={handleSectionsChange}
+          initialTime={initialPosition}
+          onTimeUpdate={handleTimeUpdate}
         />
       ) : (
         <section className="card p-6 text-center">

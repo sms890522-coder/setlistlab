@@ -1,7 +1,11 @@
 import type { Setlist } from "./types";
 import { groupTeamAssignments } from "./teamAssignments";
 
-export function formatSetlistSummary(setlist: Setlist) {
+type SetlistSummaryOptions = {
+  playUrl?: string;
+};
+
+export function formatSetlistSummary(setlist: Setlist, options: SetlistSummaryOptions = {}) {
   const lines = [
     `[콘티연습실] ${setlist.title || "제목 없는 콘티"}`,
     `예배 날짜: ${setlist.worshipDate || "미정"}`,
@@ -29,6 +33,10 @@ export function formatSetlistSummary(setlist: Setlist) {
 
   if (setlist.globalNotes) {
     lines.push("", "[전체 강조사항]", setlist.globalNotes);
+  }
+
+  if (options.playUrl) {
+    lines.push("", "[연속재생]", options.playUrl);
   }
 
   return lines.join("\n");

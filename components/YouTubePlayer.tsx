@@ -4,20 +4,15 @@ import { createId } from "@/lib/id";
 import { COMMON_SECTION_NAMES } from "@/lib/sections";
 import type { SongSection } from "@/lib/types";
 import { formatSecondsToTime } from "@/lib/youtube";
-import {
-  YOUTUBE_PLAYING,
-  getYouTubeErrorMessage,
-  isReadyPlayer,
-  loadYouTubeApi,
-  safeDestroy,
-  type YTPlayer,
-} from "@/lib/youtubeIframe";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useYouTubeIframePlayer } from "@/hooks/useYouTubeIframePlayer";
+import { forwardRef, useImperativeHandle, useState } from "react";
 
 type YouTubePlayerProps = {
   videoId: string;
   sections: SongSection[];
   onSectionsChange?: (sections: SongSection[]) => void;
+  initialTime?: number;
+  onTimeUpdate?: (seconds: number) => void;
 };
 
 export type YouTubePlayerHandle = {
@@ -27,121 +22,20 @@ export type YouTubePlayerHandle = {
 const SPEEDS = [0.25, 0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.25, 1.5, 2];
 
 export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(function YouTubePlayer(
-  { videoId, sections, onSectionsChange },
+  { videoId, sections, onSectionsChange, initialTime = 0, onTimeUpdate },
   ref,
 ) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<YTPlayer | null>(null);
-  const pendingSeekRef = useRef<number | null>(null);
-  const speedRef = useRef(1);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState("");
-  const [speedNotice, setSpeedNotice] = useState("");
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [speed, setSpeed] = useState(1);
   const [selectedSectionId, setSelectedSectionId] = useState(sections[0]?.id ?? "");
   const [loopEnabled, setLoopEnabled] = useState(false);
   const [sectionMessage, setSectionMessage] = useState("");
 
   const selectedSection = sections.find((section) => section.id === selectedSectionId);
   const sectionSequence = sections.map((section) => section.name || "구간").join(" - ");
-
-  useEffect(() => {
-    speedRef.current = speed;
-  }, [speed]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      seekToSection(section: SongSection) {
-        setSelectedSectionId(section.id);
-        seekTo(section.startTime ?? 0);
-      },
-    }),
-    [],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setReady(false);
-    setError("");
-    setSpeedNotice("");
-    setPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    pendingSeekRef.current = null;
-
-    loadYouTubeApi()
-      .then((YT) => {
-        if (cancelled || !hostRef.current) return;
-
-        safeDestroy(playerRef.current);
-        hostRef.current.replaceChildren(document.createElement("div"));
-        const mountNode = hostRef.current.firstElementChild;
-        if (!(mountNode instanceof HTMLElement)) return;
-
-        playerRef.current = new YT.Player(mountNode, {
-          videoId,
-          playerVars: {
-            enablejsapi: 1,
-            origin: window.location.origin,
-            rel: 0,
-            modestbranding: 1,
-            playsinline: 1,
-          },
-          events: {
-            onReady: (event) => {
-              if (cancelled) return;
-              playerRef.current = event.target;
-              setReady(true);
-              setDuration(event.target.getDuration());
-              event.target.setPlaybackRate(speedRef.current);
-
-              if (typeof pendingSeekRef.current === "number") {
-                event.target.seekTo(pendingSeekRef.current, true);
-                setCurrentTime(pendingSeekRef.current);
-                pendingSeekRef.current = null;
-              }
-            },
-            onError: (event) => {
-              setError(getYouTubeErrorMessage(event.data));
-            },
-            onStateChange: (event) => {
-              setPlaying(event.data === YOUTUBE_PLAYING);
-            },
-            onPlaybackRateChange: (event) => {
-              setSpeed(event.data);
-              speedRef.current = event.data;
-              setSpeedNotice("");
-            },
-          },
-        });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError("유튜브 플레이어를 불러오지 못했습니다. 네트워크 또는 브라우저 설정을 확인해 주세요.");
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      safeDestroy(playerRef.current);
-      playerRef.current = null;
-      hostRef.current?.replaceChildren();
-    };
-  }, [videoId]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const player = playerRef.current;
-      if (!isReadyPlayer(player)) return;
-
-      const nextTime = player.getCurrentTime();
-      setCurrentTime(nextTime);
-      setDuration(player.getDuration());
-
+  const player = useYouTubeIframePlayer({
+    videoId,
+    initialTime,
+    onTimeUpdate,
+    onTick: (nextTime, ytPlayer) => {
       const loopTarget = sections.find((section) => section.id === selectedSectionId);
       if (
         loopEnabled &&
@@ -150,68 +44,26 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         typeof loopTarget.endTime === "number" &&
         nextTime >= loopTarget.endTime
       ) {
-        player.seekTo(loopTarget.startTime, true);
+        ytPlayer.seekTo(loopTarget.startTime, true);
       }
-    }, 500);
+    },
+  });
 
-    return () => window.clearInterval(timer);
-  }, [loopEnabled, sections, selectedSectionId]);
-
-  function seekTo(seconds: number) {
-    const nextTime = Math.max(0, seconds);
-    if (isReadyPlayer(playerRef.current)) {
-      playerRef.current.seekTo(nextTime, true);
-    } else {
-      pendingSeekRef.current = nextTime;
-    }
-    setCurrentTime(nextTime);
-  }
-
-  function seekRelative(delta: number) {
-    const baseTime = isReadyPlayer(playerRef.current) ? playerRef.current.getCurrentTime() : currentTime;
-    seekTo(baseTime + delta);
-  }
-
-  function getPlayerTime() {
-    const playerTime = isReadyPlayer(playerRef.current) ? playerRef.current.getCurrentTime() : currentTime;
-    return Math.max(0, Math.round(playerTime));
-  }
-
-  function changeSpeed(nextSpeed: number) {
-    if (isReadyPlayer(playerRef.current)) {
-      playerRef.current.setPlaybackRate(nextSpeed);
-      window.setTimeout(() => {
-        const appliedSpeed = playerRef.current?.getPlaybackRate();
-        if (typeof appliedSpeed === "number") {
-          setSpeed(appliedSpeed);
-          speedRef.current = appliedSpeed;
-          setSpeedNotice(
-            appliedSpeed === nextSpeed ? "" : `이 영상은 ${nextSpeed}x 대신 ${appliedSpeed}x 배속으로 재생됩니다.`,
-          );
-        }
-      }, 250);
-    }
-    setSpeed(nextSpeed);
-    setSpeedNotice("");
-  }
-
-  function togglePlayback() {
-    const player = playerRef.current;
-    if (!isReadyPlayer(player)) return;
-
-    if (player.getPlayerState() === YOUTUBE_PLAYING) {
-      player.pauseVideo();
-      setPlaying(false);
-    } else {
-      player.playVideo();
-      setPlaying(true);
-    }
-  }
+  useImperativeHandle(
+    ref,
+    () => ({
+      seekToSection(section: SongSection) {
+        setSelectedSectionId(section.id);
+        player.seekTo(section.startTime ?? 0);
+      },
+    }),
+    [player],
+  );
 
   function addSectionAtCurrentTime(name: string) {
     if (!onSectionsChange) return;
 
-    const timestamp = getPlayerTime();
+    const timestamp = player.getCurrentTime();
     const newSection: SongSection = {
       id: createId("section"),
       name,
@@ -253,7 +105,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           <div className="card order-1 p-4 lg:order-2">
             <div>
               <h3 className="font-bold text-slate-950">실시간 구간 입력</h3>
-              <p className="field-help">현재 위치 {formatSecondsToTime(currentTime)}</p>
+              <p className="field-help">현재 위치 {formatSecondsToTime(player.currentTime)}</p>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -328,7 +180,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         ) : null}
 
         <div className="order-2 rounded-lg border border-slate-200 bg-slate-950 lg:order-1">
-          <div className="youtube-frame-host aspect-video w-full overflow-hidden rounded-lg" ref={hostRef} />
+          <div className="youtube-frame-host aspect-video w-full overflow-hidden rounded-lg" ref={player.hostRef} />
         </div>
       </div>
 
@@ -337,19 +189,19 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           <div>
             <h3 className="font-bold text-slate-950">재생속도</h3>
             <p className="mt-1 text-sm font-bold text-slate-700">
-              현재 {formatSecondsToTime(currentTime)} / {duration ? formatSecondsToTime(duration) : "--:--"}
+              현재 {formatSecondsToTime(player.currentTime)} / {player.duration ? formatSecondsToTime(player.duration) : "--:--"}
             </p>
-            <p className="field-help">{ready ? "YouTube IFrame API로 재생 중입니다." : "플레이어를 불러오는 중입니다."}</p>
-            {error ? <p className="mt-1 text-xs font-semibold text-rose-600">{error}</p> : null}
+            <p className="field-help">{player.ready ? "YouTube IFrame API로 재생 중입니다." : "플레이어를 불러오는 중입니다."}</p>
+            {player.error ? <p className="mt-1 text-xs font-semibold text-rose-600">{player.error}</p> : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={togglePlayback} disabled={!ready} className="btn-primary min-h-10 px-3">
-              {playing ? "일시정지" : "재생"}
+            <button type="button" onClick={player.togglePlayback} disabled={!player.ready} className="btn-primary min-h-10 px-3">
+              {player.playing ? "일시정지" : "재생"}
             </button>
-            <button type="button" onClick={() => seekRelative(-5)} className="btn-secondary min-h-10 px-3">
+            <button type="button" onClick={() => player.seekRelative(-5)} className="btn-secondary min-h-10 px-3">
               5초 뒤로
             </button>
-            <button type="button" onClick={() => seekRelative(5)} className="btn-secondary min-h-10 px-3">
+            <button type="button" onClick={() => player.seekRelative(5)} className="btn-secondary min-h-10 px-3">
               5초 앞으로
             </button>
           </div>
@@ -360,7 +212,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-bold text-slate-900">속도 조절</p>
               <p className="rounded-full bg-blue-50 px-3 py-1 text-sm font-black text-blue-700">
-                {formatSpeedLabel(speed)}x
+                {formatSpeedLabel(player.speed)}x
               </p>
             </div>
             <input
@@ -368,8 +220,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
               min="0"
               max="100"
               step="1"
-              value={speedToSliderValue(speed)}
-              onChange={(event) => changeSpeed(sliderValueToSpeed(Number(event.target.value)))}
+              value={speedToSliderValue(player.speed)}
+              onChange={(event) => player.changeSpeed(sliderValueToSpeed(Number(event.target.value)))}
               className="mt-3 w-full accent-blue-600"
               aria-label="재생속도 조절"
             />
@@ -386,14 +238,14 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
             <button
               key={rate}
               type="button"
-              onClick={() => changeSpeed(rate)}
-              className={rate === speed ? "btn-primary min-h-10 px-3" : "btn-secondary min-h-10 px-3"}
+              onClick={() => player.changeSpeed(rate)}
+              className={rate === player.speed ? "btn-primary min-h-10 px-3" : "btn-secondary min-h-10 px-3"}
             >
               {rate}x
             </button>
           ))}
         </div>
-        {speedNotice ? <p className="mt-2 text-xs font-semibold text-amber-700">{speedNotice}</p> : null}
+        {player.speedNotice ? <p className="mt-2 text-xs font-semibold text-amber-700">{player.speedNotice}</p> : null}
 
         <div className="mt-4 flex flex-col gap-3 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>

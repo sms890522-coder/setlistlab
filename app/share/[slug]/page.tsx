@@ -77,6 +77,9 @@ export default function SharedSetlistPage() {
                 <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-700">{setlist.description}</p>
               ) : null}
               <div className="mt-5 flex flex-wrap gap-2">
+                <Link href={`/share/${params.slug}/play`} className="btn-primary">
+                  연속재생 시작
+                </Link>
                 <button type="button" onClick={saveToThisBrowser} className="btn-primary">
                   이 기기에 저장하고 열기
                 </button>

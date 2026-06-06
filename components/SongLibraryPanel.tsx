@@ -10,14 +10,52 @@ type SongLibraryPanelProps = {
   onDelete: (id: string) => void;
 };
 
+type SortMode = "recent" | "title" | "key";
+
 export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelProps) {
   const [query, setQuery] = useState("");
+  const [keyFilter, setKeyFilter] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [deleteTarget, setDeleteTarget] = useState<SavedSong | null>(null);
+  const availableKeys = useMemo(
+    () =>
+      Array.from(
+        new Set(songs.map((item) => item.song.practiceKey || item.song.originalKey).filter((key): key is string => Boolean(key))),
+      ).sort((a, b) => a.localeCompare(b, "ko-KR")),
+    [songs],
+  );
   const filteredSongs = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko-KR");
-    if (!normalizedQuery) return songs;
-    return songs.filter((item) => item.song.title.toLocaleLowerCase("ko-KR").includes(normalizedQuery));
-  }, [query, songs]);
+    const matchedSongs = songs.filter((item) => {
+      const songKey = item.song.practiceKey || item.song.originalKey || "";
+      const searchable = [
+        item.song.title,
+        item.song.description,
+        item.song.practiceKey,
+        item.song.originalKey,
+        String(item.song.bpm ?? ""),
+        item.song.highlights.join(" "),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("ko-KR");
+
+      return (!normalizedQuery || searchable.includes(normalizedQuery)) && (!keyFilter || songKey === keyFilter);
+    });
+
+    return [...matchedSongs].sort((a, b) => {
+      if (sortMode === "title") {
+        return (a.song.title || "").localeCompare(b.song.title || "", "ko-KR");
+      }
+      if (sortMode === "key") {
+        return (a.song.practiceKey || a.song.originalKey || "").localeCompare(
+          b.song.practiceKey || b.song.originalKey || "",
+          "ko-KR",
+        );
+      }
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
+  }, [keyFilter, query, songs, sortMode]);
 
   return (
     <section className="card p-5">
@@ -35,6 +73,39 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
             placeholder="곡 제목 검색"
           />
         </label>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <label className="space-y-1">
+          <span className="field-label">키 필터</span>
+          <select value={keyFilter} onChange={(event) => setKeyFilter(event.target.value)} className="field-input">
+            <option value="">전체 키</option>
+            {availableKeys.map((key) => (
+              <option key={key} value={key}>
+                {key}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="field-label">정렬</span>
+          <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} className="field-input">
+            <option value="recent">최근 저장순</option>
+            <option value="title">제목순</option>
+            <option value="key">키순</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setQuery("");
+            setKeyFilter("");
+            setSortMode("recent");
+          }}
+          className="btn-secondary min-h-11 px-3"
+        >
+          초기화
+        </button>
       </div>
 
       {songs.length === 0 ? (
