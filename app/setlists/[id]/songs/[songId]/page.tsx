@@ -4,6 +4,8 @@ import Link from "next/link";
 import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
+import { getCurrentUser } from "@/lib/auth";
+import { getCloudSetlist, saveCloudSetlist } from "@/lib/db/setlists";
 import {
   getPracticeCompletion,
   getPracticePosition,
@@ -12,6 +14,7 @@ import {
   setPracticeCompletion,
   setPracticePosition,
 } from "@/lib/storage";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist, Song, SongSection } from "@/lib/types";
 import { formatSecondsToTime } from "@/lib/youtube";
 import { useParams } from "next/navigation";
@@ -24,28 +27,61 @@ export default function SongPracticePage() {
   const [loaded, setLoaded] = useState(false);
   const [practiceCompleted, setPracticeCompletedState] = useState(false);
   const [initialPosition, setInitialPosition] = useState(0);
+  const [storageMode, setStorageMode] = useState<"local" | "cloud">("local");
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const lastSavedPositionRef = useRef(0);
 
   useEffect(() => {
-    const foundSetlist = getSetlist(params.id) ?? null;
-    const savedPosition = getPracticePosition(params.id, params.songId);
-    setSetlist(foundSetlist);
-    setSong(foundSetlist?.songs.find((item) => item.id === params.songId) ?? null);
-    setPracticeCompletedState(getPracticeCompletion(params.id, params.songId));
-    setInitialPosition(savedPosition);
-    lastSavedPositionRef.current = Math.round(savedPosition);
-    setLoaded(true);
+    async function loadSong() {
+      let foundSetlist: Setlist | null = null;
+
+      if (isSupabaseConfigured()) {
+        const user = await getCurrentUser();
+        if (user) {
+          foundSetlist = await getCloudSetlist(params.id);
+          if (foundSetlist) setStorageMode("cloud");
+        }
+      }
+
+      if (!foundSetlist) {
+        foundSetlist = getSetlist(params.id) ?? null;
+        setStorageMode("local");
+      }
+
+      const savedPosition = getPracticePosition(params.id, params.songId);
+      setSetlist(foundSetlist);
+      setSong(foundSetlist?.songs.find((item) => item.id === params.songId) ?? null);
+      setPracticeCompletedState(getPracticeCompletion(params.id, params.songId));
+      setInitialPosition(savedPosition);
+      lastSavedPositionRef.current = Math.round(savedPosition);
+      setLoaded(true);
+    }
+
+    loadSong().catch(() => {
+      const foundSetlist = getSetlist(params.id) ?? null;
+      const savedPosition = getPracticePosition(params.id, params.songId);
+      setSetlist(foundSetlist);
+      setSong(foundSetlist?.songs.find((item) => item.id === params.songId) ?? null);
+      setPracticeCompletedState(getPracticeCompletion(params.id, params.songId));
+      setInitialPosition(savedPosition);
+      lastSavedPositionRef.current = Math.round(savedPosition);
+      setStorageMode("local");
+      setLoaded(true);
+    });
   }, [params.id, params.songId]);
 
-  function handleSectionsChange(nextSections: SongSection[]) {
+  async function handleSectionsChange(nextSections: SongSection[]) {
     if (!setlist || !song) return;
 
     const nextSong = { ...song, sections: nextSections };
-    const savedSetlist = saveSetlist({
+    const nextSetlist = {
       ...setlist,
       songs: setlist.songs.map((item) => (item.id === song.id ? nextSong : item)),
-    });
+    };
+    const savedSetlist =
+      storageMode === "cloud"
+        ? await saveCloudSetlist(nextSetlist).catch(() => nextSetlist)
+        : saveSetlist(nextSetlist);
     const savedSong = savedSetlist.songs.find((item) => item.id === song.id) ?? nextSong;
 
     setSetlist(savedSetlist);

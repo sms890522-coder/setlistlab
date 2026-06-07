@@ -1,7 +1,11 @@
 "use client";
 
 import { createBlankSetlist } from "@/lib/factories";
+import { getCurrentUser } from "@/lib/auth";
+import { getMyProfile } from "@/lib/db/profiles";
+import { createCloudSetlist } from "@/lib/db/setlists";
 import { saveSetlist } from "@/lib/storage";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -9,8 +13,36 @@ export default function NewSetlistPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const setlist = saveSetlist(createBlankSetlist());
-    router.replace(`/setlists/${setlist.id}/edit`);
+    async function createSetlist() {
+      const blankSetlist = createBlankSetlist();
+
+      if (!isSupabaseConfigured()) {
+        const setlist = saveSetlist(blankSetlist);
+        router.replace(`/setlists/${setlist.id}/edit`);
+        return;
+      }
+
+      const user = await getCurrentUser();
+      if (!user) {
+        const setlist = saveSetlist(blankSetlist);
+        router.replace(`/setlists/${setlist.id}/edit`);
+        return;
+      }
+
+      const profile = await getMyProfile();
+      if (!profile) {
+        router.replace("/onboarding?redirect=/setlists/new");
+        return;
+      }
+
+      const setlist = await createCloudSetlist(blankSetlist);
+      router.replace(`/setlists/${setlist.id}/edit`);
+    }
+
+    createSetlist().catch(() => {
+      const setlist = saveSetlist(createBlankSetlist());
+      router.replace(`/setlists/${setlist.id}/edit`);
+    });
   }, [router]);
 
   return (

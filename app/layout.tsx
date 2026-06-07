@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { AuthNav } from "@/components/AuthNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -36,26 +37,7 @@ export default function RootLayout({
               />
               콘티연습실
             </Link>
-            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/75 p-1 shadow-sm">
-              <Link
-                href="/setlists"
-                className="rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3"
-              >
-                콘티
-              </Link>
-              <Link
-                href="/setlists"
-                className="rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3"
-              >
-                곡 연습
-              </Link>
-              <Link
-                href="/tools/tuner"
-                className="rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3"
-              >
-                튜너
-              </Link>
-            </div>
+            <AuthNav />
           </nav>
         </header>
         <main>{children}</main>

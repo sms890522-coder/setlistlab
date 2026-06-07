@@ -2,44 +2,119 @@
 
 import Link from "next/link";
 import { SetlistCard } from "@/components/SetlistCard";
-import { deleteSetlist, duplicateSetlist, getSetlists } from "@/lib/storage";
+import { getCurrentUser } from "@/lib/auth";
+import { getMyProfile } from "@/lib/db/profiles";
+import {
+  deleteCloudSetlist,
+  duplicateCloudSetlist,
+  getCloudSetlists,
+  importLocalSetlistsToCloud,
+} from "@/lib/db/setlists";
+import { clearSetlists, deleteSetlist, duplicateSetlist, getSetlists, getStoredSetlists } from "@/lib/storage";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+type StorageMode = "local" | "cloud";
+
 export default function SetlistsPage() {
   const router = useRouter();
   const [setlists, setSetlists] = useState<Setlist[]>([]);
+  const [localSetlists, setLocalSetlists] = useState<Setlist[]>([]);
+  const [storageMode, setStorageMode] = useState<StorageMode>("local");
   const [loaded, setLoaded] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Setlist | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    setSetlists(getSetlists());
-    setLoaded(true);
-  }, []);
+    async function loadSetlists() {
+      const storedSetlists = getStoredSetlists();
+      setLocalSetlists(storedSetlists);
+
+      if (!isSupabaseConfigured()) {
+        const browserSetlists = getSetlists();
+        setSetlists(browserSetlists);
+        setStorageMode("local");
+        setLoaded(true);
+        return;
+      }
+
+      const user = await getCurrentUser();
+      if (!user) {
+        const browserSetlists = getSetlists();
+        setSetlists(browserSetlists);
+        setStorageMode("local");
+        setLoaded(true);
+        return;
+      }
+
+      const profile = await getMyProfile();
+      if (!profile) {
+        router.replace("/onboarding?redirect=/setlists");
+        return;
+      }
+
+      setSetlists(await getCloudSetlists());
+      setStorageMode("cloud");
+      setLoaded(true);
+    }
+
+    loadSetlists().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "콘티 목록을 불러오지 못했습니다.");
+      setSetlists(getSetlists());
+      setStorageMode("local");
+      setLoaded(true);
+    });
+  }, [router]);
 
   function handleDeleteRequest(id: string) {
     setDeleteTarget(setlists.find((setlist) => setlist.id === id) ?? null);
     setDeleteError("");
   }
 
-  function handleDeleteConfirm() {
+  async function handleDeleteConfirm() {
     if (!deleteTarget) return;
 
     try {
-      deleteSetlist(deleteTarget.id);
+      if (storageMode === "cloud") {
+        await deleteCloudSetlist(deleteTarget.id);
+      } else {
+        deleteSetlist(deleteTarget.id);
+      }
       setSetlists((current) => current.filter((setlist) => setlist.id !== deleteTarget.id));
       setDeleteTarget(null);
       setDeleteError("");
-    } catch {
-      setDeleteError("콘티를 삭제하지 못했습니다. 브라우저 저장소 설정을 확인해 주세요.");
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "콘티를 삭제하지 못했습니다.");
     }
   }
 
-  function handleDuplicate(id: string) {
-    const duplicated = duplicateSetlist(id);
+  async function handleDuplicate(id: string) {
+    const duplicated = storageMode === "cloud" ? await duplicateCloudSetlist(id) : duplicateSetlist(id);
     router.push(`/setlists/${duplicated.id}/edit`);
+  }
+
+  async function handleImportLocalSetlists() {
+    if (localSetlists.length === 0) return;
+
+    try {
+      setImporting(true);
+      const imported = await importLocalSetlistsToCloud(localSetlists);
+      setSetlists(await getCloudSetlists());
+      setMessage(`${imported.length}개의 임시 콘티를 계정 저장소로 가져왔습니다.`);
+      if (window.confirm("가져온 뒤 이 브라우저의 임시 콘티를 비울까요?")) {
+        clearSetlists();
+        setLocalSetlists([]);
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "임시 콘티를 가져오지 못했습니다.");
+    } finally {
+      setImporting(false);
+    }
   }
 
   return (
@@ -49,7 +124,9 @@ export default function SetlistsPage() {
           <p className="text-sm font-bold text-blue-700">Setlists</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">콘티 목록</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            localStorage에 저장된 콘티를 다시 열고 수정할 수 있습니다.
+            {storageMode === "cloud"
+              ? "계정에 저장된 콘티를 다시 열고 수정할 수 있습니다."
+              : "로그인 전에는 이 브라우저의 localStorage에 임시 저장됩니다."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -58,6 +135,27 @@ export default function SetlistsPage() {
           </Link>
         </div>
       </section>
+
+      {storageMode === "local" ? (
+        <section className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+          로그인하면 콘티와 곡 보관함을 Supabase에 저장해서 다른 기기에서도 사용할 수 있습니다.{" "}
+          <Link href="/login?redirect=/setlists" className="font-black underline underline-offset-4">
+            로그인하기
+          </Link>
+        </section>
+      ) : localSetlists.length > 0 ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+          현재 브라우저에 임시 저장된 콘티가 있습니다. 계정 저장소로 가져오면 다른 기기에서도 이어서 볼 수 있습니다.
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={handleImportLocalSetlists} disabled={importing} className="btn-primary min-h-10 px-3">
+              {importing ? "가져오는 중" : `임시 콘티 ${localSetlists.length}개 가져오기`}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {message ? <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
+      {loadError ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{loadError}</p> : null}
 
       {!loaded ? (
         <div className="card p-8 text-sm text-slate-500">콘티를 불러오는 중입니다.</div>

@@ -56,6 +56,15 @@ export function getSetlists() {
   return upgradedSetlists.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+export function getStoredSetlists() {
+  if (!canUseStorage()) return [];
+  const { changed, setlists } = upgradeSampleYoutubeLinks(readStoredSetlists());
+  if (changed) {
+    writeStoredSetlists(setlists);
+  }
+  return setlists.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export function getSetlist(id: string) {
   return getSetlists().find((setlist) => setlist.id === id);
 }
@@ -77,6 +86,10 @@ export function saveSetlist(setlist: Setlist) {
 export function deleteSetlist(id: string) {
   const setlists = readStoredSetlists().filter((setlist) => setlist.id !== id);
   writeStoredSetlists(setlists);
+}
+
+export function clearSetlists() {
+  writeStoredSetlists([]);
 }
 
 export function duplicateSetlist(id: string) {

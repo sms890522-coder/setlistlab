@@ -4,10 +4,15 @@ import Link from "next/link";
 import { ExportImportPanel } from "@/components/ExportImportPanel";
 import { SongCard } from "@/components/SongCard";
 import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
+import { getCurrentUser } from "@/lib/auth";
+import { duplicateCloudSetlist, getCloudSetlist } from "@/lib/db/setlists";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
+
+type StorageMode = "local" | "cloud";
 
 export default function SetlistDetailPage() {
   const params = useParams<{ id: string }>();
@@ -15,11 +20,38 @@ export default function SetlistDetailPage() {
   const [setlist, setSetlist] = useState<Setlist | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [completedSongs, setCompletedSongs] = useState<Record<string, boolean>>({});
+  const [storageMode, setStorageMode] = useState<StorageMode>("local");
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    setSetlist(getSetlist(params.id) ?? null);
-    setCompletedSongs(getPracticeCompletions(params.id));
-    setLoaded(true);
+    async function loadSetlist() {
+      if (isSupabaseConfigured()) {
+        const user = await getCurrentUser();
+        if (user) {
+          const cloudSetlist = await getCloudSetlist(params.id);
+          if (cloudSetlist) {
+            setSetlist(cloudSetlist);
+            setStorageMode("cloud");
+            setCompletedSongs(getPracticeCompletions(params.id));
+            setLoaded(true);
+            return;
+          }
+        }
+      }
+
+      setSetlist(getSetlist(params.id) ?? null);
+      setStorageMode("local");
+      setCompletedSongs(getPracticeCompletions(params.id));
+      setLoaded(true);
+    }
+
+    loadSetlist().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "콘티를 불러오지 못했습니다.");
+      setSetlist(getSetlist(params.id) ?? null);
+      setStorageMode("local");
+      setCompletedSongs(getPracticeCompletions(params.id));
+      setLoaded(true);
+    });
   }, [params.id]);
 
   function toggleCompletion(songId: string, completed: boolean) {
@@ -27,8 +59,8 @@ export default function SetlistDetailPage() {
     setCompletedSongs((current) => ({ ...current, [songId]: completed }));
   }
 
-  function handleDuplicate() {
-    const duplicated = duplicateSetlist(params.id);
+  async function handleDuplicate() {
+    const duplicated = storageMode === "cloud" ? await duplicateCloudSetlist(params.id) : duplicateSetlist(params.id);
     router.push(`/setlists/${duplicated.id}/edit`);
   }
 
@@ -101,6 +133,13 @@ export default function SetlistDetailPage() {
           </div>
         ) : null}
       </section>
+
+      {loadError ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{loadError}</p> : null}
+      {storageMode === "local" ? (
+        <section className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+          이 콘티는 현재 브라우저에 임시 저장되어 있습니다. 로그인하면 새 콘티부터 계정 저장소에 저장됩니다.
+        </section>
+      ) : null}
 
       <TeamAssignmentsView assignments={setlist.teamAssignments} />
 

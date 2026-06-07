@@ -1,6 +1,9 @@
 "use client";
 
+import { getCurrentUser } from "@/lib/auth";
+import { getCloudSavedSongByTitle, saveCloudSongToLibrary } from "@/lib/db/savedSongs";
 import { getSavedSongByTitle, saveSongToLibrary } from "@/lib/storage";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { SavedSong, Song } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -14,6 +17,7 @@ export function SongLibrarySaveButton({ song, onSaved }: SongLibrarySaveButtonPr
   const [overwriteTarget, setOverwriteTarget] = useState<SavedSong | null>(null);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState("");
+  const [cloudMode, setCloudMode] = useState(false);
 
   useEffect(() => {
     setOverwriteTarget(null);
@@ -21,9 +25,23 @@ export function SongLibrarySaveButton({ song, onSaved }: SongLibrarySaveButtonPr
     setError("");
   }, [song]);
 
-  function persist(overwrite: boolean) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMode() {
+      const user = isSupabaseConfigured() ? await getCurrentUser() : null;
+      if (!cancelled) setCloudMode(Boolean(user));
+    }
+
+    loadMode();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function persist(overwrite: boolean) {
     try {
-      const savedSong = saveSongToLibrary(song, overwrite);
+      const savedSong = cloudMode ? await saveCloudSongToLibrary(song, overwrite) : saveSongToLibrary(song, overwrite);
       setOverwriteTarget(null);
       setStatus("saved");
       setError("");
@@ -34,16 +52,21 @@ export function SongLibrarySaveButton({ song, onSaved }: SongLibrarySaveButtonPr
     }
   }
 
-  function handleSaveRequest() {
-    const existing = getSavedSongByTitle(song.title);
-    if (existing) {
-      setOverwriteTarget(existing);
-      setStatus("idle");
-      setError("");
-      return;
-    }
+  async function handleSaveRequest() {
+    try {
+      const existing = cloudMode ? await getCloudSavedSongByTitle(song.title) : getSavedSongByTitle(song.title);
+      if (existing) {
+        setOverwriteTarget(existing);
+        setStatus("idle");
+        setError("");
+        return;
+      }
 
-    persist(false);
+      await persist(false);
+    } catch (saveError) {
+      setStatus("error");
+      setError(saveError instanceof Error ? saveError.message : "곡을 보관함에 저장하지 못했습니다.");
+    }
   }
 
   return (

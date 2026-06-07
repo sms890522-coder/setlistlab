@@ -2,6 +2,8 @@
 
 import { importSetlist, parseSetlistJson } from "@/lib/storage";
 import { formatSetlistSummary } from "@/lib/setlistSummary";
+import { getCurrentUser } from "@/lib/auth";
+import { setCloudSetlistPublic } from "@/lib/db/setlists";
 import { isSupabaseConfigured, publishSetlist } from "@/lib/supabase";
 import type { Setlist } from "@/lib/types";
 import { useState } from "react";
@@ -41,6 +43,19 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
 
     try {
       setPublishing(true);
+      const user = await getCurrentUser();
+      if (user && isUuid(setlist.id)) {
+        const sharedSetlist = await setCloudSetlistPublic(setlist.id, true);
+        if (!sharedSetlist.shareSlug) {
+          throw new Error("공유 링크 정보를 만들지 못했습니다.");
+        }
+        const url = `${window.location.origin}/s/${sharedSetlist.shareSlug}`;
+        setShareUrl(url);
+        setMessage("공유 링크를 만들었습니다.");
+        setError("");
+        return;
+      }
+
       const shareSlug = await publishSetlist(setlist);
       const url = `${window.location.origin}/share/${shareSlug}`;
       setShareUrl(url);
@@ -190,4 +205,8 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       {error ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
     </section>
   );
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

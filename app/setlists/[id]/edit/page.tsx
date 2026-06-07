@@ -5,11 +5,19 @@ import { PreviousSetlistImportPanel } from "@/components/PreviousSetlistImportPa
 import { SongLibraryPanel } from "@/components/SongLibraryPanel";
 import { SongForm } from "@/components/SongForm";
 import { TeamAssignmentsEditor } from "@/components/TeamAssignmentsEditor";
+import { getCurrentUser } from "@/lib/auth";
+import { getMyProfile } from "@/lib/db/profiles";
+import { getCloudSetlist, getCloudSetlists, saveCloudSetlist } from "@/lib/db/setlists";
+import { deleteCloudSongFromLibrary, getCloudSongLibrary } from "@/lib/db/savedSongs";
+import { getTeamMembers, teamMemberToAssignment, type TeamMember } from "@/lib/db/teamMembers";
 import { cloneSong, createBlankSong } from "@/lib/factories";
 import { deleteSongFromLibrary, getSetlists, getSongLibrary, saveSetlist } from "@/lib/storage";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { SavedSong, Setlist, Song, TeamAssignment } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+
+type StorageMode = "local" | "cloud";
 
 export default function SetlistEditPage() {
   const params = useParams<{ id: string }>();
@@ -21,18 +29,77 @@ export default function SetlistEditPage() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
   const [previousSetlists, setPreviousSetlists] = useState<Setlist[]>([]);
+  const [storageMode, setStorageMode] = useState<StorageMode>("local");
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
-    const allSetlists = getSetlists();
-    setSetlist(allSetlists.find((item) => item.id === params.id) ?? null);
-    setPreviousSetlists(allSetlists.filter((item) => item.id !== params.id));
-    setLibrary(getSongLibrary());
-    setLoaded(true);
+    async function loadSetlist() {
+      const localSetlists = getSetlists();
+
+      if (isSupabaseConfigured()) {
+        const user = await getCurrentUser();
+        if (user) {
+          const profile = await getMyProfile();
+          if (!profile) {
+            window.location.href = `/onboarding?redirect=${encodeURIComponent(`/setlists/${params.id}/edit`)}`;
+            return;
+          }
+
+          const cloudSetlist = await getCloudSetlist(params.id);
+          if (cloudSetlist) {
+            const [cloudSetlists, cloudLibrary, savedTeamMembers] = await Promise.all([
+              getCloudSetlists(),
+              getCloudSongLibrary(),
+              getTeamMembers(),
+            ]);
+            setSetlist(cloudSetlist);
+            setPreviousSetlists(cloudSetlists.filter((item) => item.id !== params.id));
+            setLibrary(cloudLibrary);
+            setTeamMembers(savedTeamMembers);
+            setStorageMode("cloud");
+            setLoaded(true);
+            return;
+          }
+        }
+      }
+
+      setSetlist(localSetlists.find((item) => item.id === params.id) ?? null);
+      setPreviousSetlists(localSetlists.filter((item) => item.id !== params.id));
+      setLibrary(getSongLibrary());
+      setStorageMode("local");
+      setLoaded(true);
+    }
+
+    loadSetlist().catch((loadError) => {
+      const allSetlists = getSetlists();
+      setSetlist(allSetlists.find((item) => item.id === params.id) ?? null);
+      setPreviousSetlists(allSetlists.filter((item) => item.id !== params.id));
+      setLibrary(getSongLibrary());
+      setStorageMode("local");
+      setSaveError(loadError instanceof Error ? loadError.message : "콘티를 불러오지 못했습니다.");
+      setLoaded(true);
+    });
   }, [params.id]);
 
   function persist(next: Setlist) {
+    const optimistic = { ...next, updatedAt: new Date().toISOString() };
+    setSetlist(optimistic);
+
     try {
-      const saved = saveSetlist(next);
+      if (storageMode === "cloud") {
+        saveCloudSetlist(optimistic)
+          .then((saved) => {
+            setSetlist(saved);
+            setSaveError("");
+            setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+          })
+          .catch((error) => {
+            setSaveError(error instanceof Error ? error.message : "계정 저장소 자동 저장에 실패했습니다.");
+          });
+        return;
+      }
+
+      const saved = saveSetlist(optimistic);
       setSetlist(saved);
       setSaveError("");
       setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
@@ -64,8 +131,8 @@ export default function SetlistEditPage() {
     persist({ ...setlist, songs });
   }
 
-  function handleLibrarySaved(saved: SavedSong, overwritten: boolean) {
-    setLibrary(getSongLibrary());
+  async function handleLibrarySaved(saved: SavedSong, overwritten: boolean) {
+    setLibrary(storageMode === "cloud" ? await getCloudSongLibrary() : getSongLibrary());
     setLibraryMessage(
       overwritten
         ? `${saved.song.title || "곡"}의 보관함 정보를 덮어썼습니다.`
@@ -79,10 +146,20 @@ export default function SetlistEditPage() {
     setLibraryMessage(`${savedSong.song.title || "곡"}을 콘티에 추가했습니다.`);
   }
 
-  function deleteFromLibrary(id: string) {
-    deleteSongFromLibrary(id);
-    setLibrary(getSongLibrary());
-    setLibraryMessage("곡을 보관함에서 삭제했습니다.");
+  async function deleteFromLibrary(id: string) {
+    try {
+      if (storageMode === "cloud") {
+        await deleteCloudSongFromLibrary(id);
+        setLibrary(await getCloudSongLibrary());
+      } else {
+        deleteSongFromLibrary(id);
+        setLibrary(getSongLibrary());
+      }
+      setLibraryMessage("곡을 보관함에서 삭제했습니다.");
+    } catch (deleteError) {
+      setLibraryMessage("");
+      setSaveError(deleteError instanceof Error ? deleteError.message : "곡을 삭제하지 못했습니다.");
+    }
   }
 
   function importSongsFromPrevious(songs: Song[]) {
@@ -95,6 +172,20 @@ export default function SetlistEditPage() {
     if (!setlist) return;
     persist({ ...setlist, teamAssignments });
     setLibraryMessage("팀원 파트 배정을 불러왔습니다.");
+  }
+
+  function addTeamMemberToSetlist(member: TeamMember) {
+    if (!setlist) return;
+    const assignment = teamMemberToAssignment(member);
+    const exists = setlist.teamAssignments.some(
+      (item) => item.id === assignment.id || (item.name === assignment.name && item.part === assignment.part),
+    );
+    if (exists) {
+      setLibraryMessage(`${assignment.part}: ${assignment.name}은 이미 이번 주 팀원에 있습니다.`);
+      return;
+    }
+    persist({ ...setlist, teamAssignments: [...setlist.teamAssignments, assignment] });
+    setLibraryMessage(`${assignment.part}: ${assignment.name}을 이번 주 팀원에 추가했습니다.`);
   }
 
   if (!loaded) {
@@ -126,7 +217,9 @@ export default function SetlistEditPage() {
             {saveError || `자동 저장 ${savedAt ? `· ${savedAt}` : "대기 중"}`}
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">콘티 수정</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">입력한 내용은 localStorage에 자동 저장됩니다.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            입력한 내용은 {storageMode === "cloud" ? "Supabase 계정 저장소" : "localStorage"}에 자동 저장됩니다.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={`/setlists/${setlist.id}`} className="btn-primary">
@@ -192,6 +285,25 @@ export default function SetlistEditPage() {
         assignments={setlist.teamAssignments}
         onChange={(teamAssignments) => updateSetlist({ teamAssignments })}
       />
+
+      {storageMode === "cloud" && teamMembers.length > 0 ? (
+        <section className="card p-5">
+          <h2 className="section-title">저장된 팀원 불러오기</h2>
+          <p className="field-help">팀원 관리에 저장된 사람을 이번 주 콘티 파트 배정에 추가합니다.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {teamMembers.map((member) => (
+              <button
+                key={member.id}
+                type="button"
+                onClick={() => addTeamMemberToSetlist(member)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+              >
+                <span className="text-blue-700">{member.role}</span>: {member.name}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <PreviousSetlistImportPanel
         setlists={previousSetlists}

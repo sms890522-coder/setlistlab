@@ -1,6 +1,6 @@
 "use client";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "./supabase/client";
 import type { Setlist } from "./types";
 
 type SharedSetlistRow = {
@@ -10,22 +10,10 @@ type SharedSetlistRow = {
   created_at: string;
 };
 
-let client: SupabaseClient | null = null;
-
-export function isSupabaseConfigured() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
+export { isSupabaseConfigured };
 
 export function getSupabaseClient() {
-  if (!isSupabaseConfigured()) {
-    throw new Error("공유 서버 설정이 없습니다.");
-  }
-
-  if (!client) {
-    client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-  }
-
-  return client;
+  return getSupabaseBrowserClient();
 }
 
 export async function publishSetlist(setlist: Setlist) {
@@ -68,7 +56,7 @@ export async function getSharedSetlistCount() {
   if (!isSupabaseConfigured()) return 0;
 
   const supabase = getSupabaseClient();
-  const { count, error } = await supabase
+  const { count: legacyCount, error } = await supabase
     .from("shared_setlists")
     .select("id", { count: "exact", head: true });
 
@@ -76,7 +64,12 @@ export async function getSharedSetlistCount() {
     throw new Error(error.message || "공유 콘티 개수를 불러오지 못했습니다.");
   }
 
-  return count ?? 0;
+  const { count: publicSetlistCount } = await supabase
+    .from("setlists")
+    .select("id", { count: "exact", head: true })
+    .eq("is_public", true);
+
+  return (legacyCount ?? 0) + (publicSetlistCount ?? 0);
 }
 
 function createShareSlug() {
