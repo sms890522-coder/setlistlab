@@ -36,9 +36,24 @@ export default function RootLayout({
               />
               콘티연습실
             </Link>
-            <div className="flex items-center gap-2">
-              <Link href="/setlists" className="btn-secondary min-h-10 px-3">
-                콘티 목록
+            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white/75 p-1 shadow-sm">
+              <Link
+                href="/setlists"
+                className="rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3"
+              >
+                콘티
+              </Link>
+              <Link
+                href="/setlists"
+                className="rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3"
+              >
+                곡 연습
+              </Link>
+              <Link
+                href="/tools/tuner"
+                className="rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3"
+              >
+                튜너
               </Link>
             </div>
           </nav>

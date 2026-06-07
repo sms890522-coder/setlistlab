@@ -64,6 +64,9 @@ export default function HomePage() {
             <Link href="/setlists" className="btn-secondary">
               샘플 콘티 보기
             </Link>
+            <Link href="/tools/tuner" className="btn-secondary">
+              튜너 열기
+            </Link>
           </div>
           <div className="w-fit rounded-2xl border border-blue-100 bg-white/85 px-5 py-4 shadow-sm">
             <p className="text-sm font-bold text-slate-500">현재까지 공유된 콘티</p>
