@@ -85,6 +85,8 @@ export default function SetlistPdfPage() {
 function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
   const teamGroups = useMemo(() => groupTeamAssignments(setlist.teamAssignments), [setlist.teamAssignments]);
   const [coverExcluded, setCoverExcluded] = useState<Record<string, boolean>>({});
+  const [printMessage, setPrintMessage] = useState("");
+  const [printError, setPrintError] = useState("");
   const coverItems = [
     { key: "title", exists: true },
     { key: "service", exists: true },
@@ -98,6 +100,49 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
     setCoverExcluded((current) => ({ ...current, [key]: excluded }));
   }
 
+  useEffect(() => {
+    function handleBeforePrint() {
+      setPrintError("");
+      setPrintMessage("인쇄창이 열렸습니다. 저장하려면 인쇄창에서 PDF 저장을 선택해 주세요.");
+    }
+
+    function handleAfterPrint() {
+      setPrintMessage("인쇄창을 닫았습니다.");
+    }
+
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+
+    return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, []);
+
+  function handlePrint() {
+    setPrintError("");
+
+    if (typeof window.print !== "function") {
+      setPrintMessage("");
+      setPrintError("이 브라우저에서는 인쇄창을 바로 열 수 없습니다. 브라우저 메뉴의 인쇄 기능을 사용해 주세요.");
+      return;
+    }
+
+    setPrintMessage("인쇄창을 여는 중입니다. 창이 열리지 않으면 브라우저 메뉴에서 인쇄를 선택해 주세요.");
+
+    try {
+      window.focus();
+      window.print();
+    } catch (printError) {
+      setPrintMessage("");
+      setPrintError(
+        printError instanceof Error
+          ? `인쇄창을 열지 못했습니다. ${printError.message}`
+          : "인쇄창을 열지 못했습니다. 브라우저 메뉴의 인쇄 기능을 사용해 주세요.",
+      );
+    }
+  }
+
   return (
     <div className="pdf-preview-shell">
       <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -106,7 +151,7 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
           <h1 className="mt-1 text-2xl font-black text-slate-950">{setlist.title || "제목 없는 콘티"}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => window.print()} className="btn-primary">
+          <button type="button" onClick={handlePrint} className="btn-primary">
             PDF로 저장/인쇄
           </button>
           <Link href={`/setlists/${setlist.id}`} className="btn-secondary">
@@ -114,6 +159,16 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
           </Link>
         </div>
       </div>
+      {printMessage ? (
+        <p className="no-print mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-6 text-blue-800">
+          {printMessage}
+        </p>
+      ) : null}
+      {printError ? (
+        <p className="no-print mb-4 rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold leading-6 text-rose-700">
+          {printError}
+        </p>
+      ) : null}
 
       <article className="pdf-document">
         <section
