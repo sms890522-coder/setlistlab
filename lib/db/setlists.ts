@@ -229,7 +229,7 @@ function normalizeSongForCloud(song: Song): Song {
   const youtubeUrl = song.youtubeUrl ?? "";
   return {
     id: song.id || createId("song"),
-    title: song.title || "제목 없는 곡",
+    title: song.title ?? "",
     description: song.description ?? "",
     transitionNote: song.transitionNote ?? "",
     youtubeUrl,

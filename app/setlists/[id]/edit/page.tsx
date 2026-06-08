@@ -16,7 +16,7 @@ import { deleteSongFromLibrary, getSetlists, getSongLibrary, saveSetlist } from 
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { SavedSong, Setlist, Song, TeamAssignment } from "@/lib/types";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type StorageMode = "local" | "cloud";
 
@@ -32,6 +32,7 @@ export default function SetlistEditPage() {
   const [previousSetlists, setPreviousSetlists] = useState<Setlist[]>([]);
   const [storageMode, setStorageMode] = useState<StorageMode>("local");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const saveRequestIdRef = useRef(0);
 
   useEffect(() => {
     async function loadSetlist() {
@@ -88,13 +89,17 @@ export default function SetlistEditPage() {
 
     try {
       if (storageMode === "cloud") {
+        const saveRequestId = saveRequestIdRef.current + 1;
+        saveRequestIdRef.current = saveRequestId;
         saveCloudSetlist(optimistic)
           .then((saved) => {
+            if (saveRequestId !== saveRequestIdRef.current) return;
             setSetlist(saved);
             setSaveError("");
             setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
           })
           .catch((error) => {
+            if (saveRequestId !== saveRequestIdRef.current) return;
             setSaveError(error instanceof Error ? error.message : "계정 저장소 자동 저장에 실패했습니다.");
           });
         return;

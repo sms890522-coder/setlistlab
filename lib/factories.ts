@@ -21,7 +21,7 @@ export function createBlankSetlist(): Setlist {
 export function createBlankSong(): Song {
   return {
     id: createId("song"),
-    title: "새 찬양곡",
+    title: "",
     description: "",
     transitionNote: "",
     youtubeUrl: "",
