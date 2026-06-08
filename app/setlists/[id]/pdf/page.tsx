@@ -14,7 +14,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 const PRINT_HEADER_FOOTER_HELP =
-  "주소, 날짜, 페이지 번호가 보이면 인쇄창에서 머리글/바닥글 옵션을 꺼 주세요.";
+  "주소, 날짜, 페이지 번호는 브라우저 인쇄 옵션이라 앱에서 자동으로 끌 수 없습니다. 인쇄창에서 머리글/바닥글을 꺼 주세요.";
 
 type PdfImageMode = "fit" | "compress-y" | "next-page" | "split";
 

@@ -158,15 +158,15 @@ select {
   }
 
   .pdf-song-header {
-    @apply flex items-start gap-3;
+    @apply flex items-start gap-2;
   }
 
   .pdf-song-index {
-    @apply flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-black text-white;
+    @apply flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-black text-white;
   }
 
   .pdf-song-title {
-    @apply text-base font-black leading-tight text-slate-950;
+    @apply text-sm font-black leading-tight text-slate-950;
   }
 
   .pdf-song-meta {
@@ -381,8 +381,20 @@ select {
   }
 
   .pdf-song-title {
-    font-size: 11pt !important;
-    line-height: 1.25 !important;
+    font-size: 8.5pt !important;
+    line-height: 1.15 !important;
+  }
+
+  .pdf-song-index {
+    width: 4.8mm !important;
+    height: 4.8mm !important;
+    font-size: 6pt !important;
+  }
+
+  .pdf-song-meta {
+    margin-top: 0 !important;
+    font-size: 6.8pt !important;
+    line-height: 1.1 !important;
   }
 
   .pdf-body-text,
