@@ -11,8 +11,10 @@ import {
   getTeamChatChannelName,
   getTeamLabel,
   isTeamChatMessage,
+  isTeamChatReadReceipt,
   type TeamChatMessage,
   type TeamChatPresence,
+  type TeamChatReadReceipt,
 } from "@/lib/teamChat";
 import type { User } from "@supabase/supabase-js";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -30,9 +32,11 @@ export function TeamChatWidget() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [members, setMembers] = useState<TeamChatPresence[]>([]);
   const [messages, setMessages] = useState<TeamChatMessage[]>([]);
+  const [readReceipts, setReadReceipts] = useState<Record<string, string[]>>({});
   const [messageText, setMessageText] = useState("");
   const channelRef = useRef<TeamChatChannel | null>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
+  const sentReadReceiptKeysRef = useRef<Set<string>>(new Set());
 
   const teamLabel = profile ? getTeamLabel(profile) : "";
   const myRole = profile ? getProfileRole(profile) : "팀원";
@@ -138,6 +142,10 @@ export function TeamChatWidget() {
         if (!isTeamChatMessage(payload)) return;
         addMessage(payload);
       })
+      .on("broadcast", { event: "read" }, ({ payload }) => {
+        if (!isTeamChatReadReceipt(payload)) return;
+        addReadReceipt(payload);
+      })
       .on("presence", { event: "sync" }, () => {
         setMembers(readPresenceMembers(channel));
       })
@@ -176,6 +184,16 @@ export function TeamChatWidget() {
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, open]);
 
+  useEffect(() => {
+    if (!open || !user || !channelRef.current) return;
+
+    messages.forEach((message) => {
+      if (message.userId !== user.id) {
+        void sendReadReceipt(message);
+      }
+    });
+  }, [messages, open, user]);
+
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = messageText.trim();
@@ -211,6 +229,43 @@ export function TeamChatWidget() {
       if (current.some((item) => item.id === message.id)) return current;
       return [...current, message].slice(-80);
     });
+  }
+
+  function addReadReceipt(receipt: TeamChatReadReceipt) {
+    setReadReceipts((current) => {
+      const currentReaders = current[receipt.messageId] ?? [];
+      if (currentReaders.includes(receipt.userId)) return current;
+
+      return {
+        ...current,
+        [receipt.messageId]: [...currentReaders, receipt.userId],
+      };
+    });
+  }
+
+  async function sendReadReceipt(message: TeamChatMessage) {
+    if (!user || !channelRef.current || message.userId === user.id) return;
+
+    const readKey = `${message.id}:${user.id}`;
+    if (sentReadReceiptKeysRef.current.has(readKey)) return;
+
+    sentReadReceiptKeysRef.current.add(readKey);
+    const receipt: TeamChatReadReceipt = {
+      messageId: message.id,
+      userId: user.id,
+      readAt: new Date().toISOString(),
+    };
+
+    addReadReceipt(receipt);
+    await channelRef.current.send({
+      type: "broadcast",
+      event: "read",
+      payload: receipt,
+    });
+  }
+
+  function getReadCount(message: TeamChatMessage) {
+    return (readReceipts[message.id] ?? []).filter((readerId) => readerId !== message.userId).length;
   }
 
   return (
@@ -278,6 +333,7 @@ export function TeamChatWidget() {
                     <div className="space-y-3">
                       {messages.map((message) => {
                         const isMine = message.userId === user?.id;
+                        const readCount = getReadCount(message);
 
                         return (
                           <div key={message.id} className={isMine ? "flex justify-end" : "flex justify-start"}>
@@ -294,6 +350,7 @@ export function TeamChatWidget() {
                               <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6">{message.text}</p>
                               <p className={isMine ? "mt-1 text-right text-[11px] text-blue-100" : "mt-1 text-right text-[11px] text-slate-400"}>
                                 {formatChatTime(message.createdAt)}
+                                {isMine ? ` · 읽음 ${readCount}` : ""}
                               </p>
                             </div>
                           </div>

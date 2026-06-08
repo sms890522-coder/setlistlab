@@ -16,6 +16,12 @@ export type TeamChatPresence = {
   onlineAt: string;
 };
 
+export type TeamChatReadReceipt = {
+  messageId: string;
+  userId: string;
+  readAt: string;
+};
+
 export function getTeamChatChannelName(profile: Pick<Profile, "churchName" | "praiseTeamName">) {
   const teamKey = getTeamKey(profile);
   if (!teamKey) return "";
@@ -49,6 +55,13 @@ export function isTeamChatMessage(value: unknown): value is TeamChatMessage {
       typeof message.text === "string" &&
       message.text.trim(),
   );
+}
+
+export function isTeamChatReadReceipt(value: unknown): value is TeamChatReadReceipt {
+  if (!value || typeof value !== "object") return false;
+
+  const receipt = value as Partial<TeamChatReadReceipt>;
+  return Boolean(receipt.messageId && receipt.userId && receipt.readAt);
 }
 
 function getTeamKey(profile: Pick<Profile, "churchName" | "praiseTeamName">) {
