@@ -25,6 +25,7 @@ npm run dev
 - Supabase 기반 콘티, 곡 보관함, 팀원 관리
 - 공개 공유 링크 `/s/[shareSlug]`
 - 같은 교회/찬양팀 기준 연습중인 팀원 표시
+- 같은 교회/찬양팀 기준 접속중 팀 채팅
 - JSON 가져오기
 
 ## Supabase 설정

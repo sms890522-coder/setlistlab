@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { AuthNav } from "@/components/AuthNav";
+import { TeamChatWidget } from "@/components/TeamChatWidget";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -41,6 +42,7 @@ export default function RootLayout({
           </nav>
         </header>
         <main>{children}</main>
+        <TeamChatWidget />
         <footer className="px-4 pb-8 text-center text-xs text-slate-400 sm:px-6 lg:px-8">
           made by{" "}
           <a
