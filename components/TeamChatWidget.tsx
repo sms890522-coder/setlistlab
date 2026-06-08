@@ -269,7 +269,7 @@ export function TeamChatWidget() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 sm:bottom-6 sm:right-6">
+    <div className="team-chat-widget no-print fixed bottom-4 right-4 z-40 sm:bottom-6 sm:right-6">
       {open ? (
         <section className="mb-3 flex max-h-[calc(100dvh-6.5rem)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:max-h-[34rem]">
           <div className="shrink-0 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 p-4">

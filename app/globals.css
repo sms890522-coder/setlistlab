@@ -72,4 +72,208 @@ select {
     height: 100% !important;
     border: 0;
   }
+
+  body.pdf-preview-mode > header,
+  body.pdf-preview-mode > footer,
+  body.pdf-preview-mode .team-chat-widget {
+    display: none;
+  }
+
+  .pdf-preview-shell {
+    @apply mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8;
+  }
+
+  .pdf-document {
+    @apply rounded-lg border border-slate-200 bg-white shadow-soft;
+  }
+
+  .pdf-cover-page,
+  .pdf-song-page {
+    @apply bg-white p-6 sm:p-10;
+  }
+
+  .pdf-cover-page {
+    @apply flex min-h-[56rem] flex-col;
+  }
+
+  .pdf-song-page {
+    @apply border-t border-slate-200;
+  }
+
+  .pdf-eyebrow {
+    @apply text-sm font-black text-blue-700;
+  }
+
+  .pdf-title {
+    @apply mt-2 text-3xl font-black leading-tight text-slate-950 sm:text-4xl;
+  }
+
+  .pdf-info-line {
+    @apply rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600;
+  }
+
+  .pdf-info-line span {
+    @apply block text-xs font-black uppercase text-slate-400;
+  }
+
+  .pdf-info-line strong {
+    @apply mt-1 block text-base font-black text-slate-950;
+  }
+
+  .pdf-section-block {
+    @apply mt-6;
+  }
+
+  .pdf-section-title {
+    @apply text-sm font-black text-slate-950;
+  }
+
+  .pdf-body-text {
+    @apply mt-2 whitespace-pre-line text-sm leading-7 text-slate-700;
+  }
+
+  .pdf-team-line {
+    @apply rounded-lg bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-900;
+  }
+
+  .pdf-copyright {
+    @apply mt-auto pt-10 text-xs leading-5 text-slate-500;
+  }
+
+  .pdf-song-header {
+    @apply flex items-start gap-4;
+  }
+
+  .pdf-song-index {
+    @apply flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-lg font-black text-white;
+  }
+
+  .pdf-song-title {
+    @apply text-2xl font-black leading-tight text-slate-950;
+  }
+
+  .pdf-song-meta {
+    @apply mt-1 text-sm font-bold text-blue-700;
+  }
+
+  .pdf-song-form {
+    @apply mt-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold leading-7 text-blue-900;
+  }
+
+  .pdf-list {
+    @apply mt-3 list-disc space-y-1 pl-5 text-sm leading-7 text-slate-700;
+  }
+
+  .pdf-part-note {
+    @apply rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700;
+  }
+
+  .pdf-image-list {
+    @apply mt-3 space-y-4;
+  }
+
+  .pdf-image-frame {
+    @apply rounded-lg border border-slate-200 bg-white p-2;
+  }
+
+  .pdf-image {
+    @apply block h-auto w-full rounded-md;
+  }
+
+  .pdf-image-caption {
+    @apply mt-2 text-xs font-semibold text-slate-500;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: white !important;
+    color: #111827;
+  }
+
+  body.pdf-preview-mode > header,
+  body.pdf-preview-mode > footer,
+  .no-print {
+    display: none !important;
+  }
+
+  .pdf-preview-shell {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .pdf-document,
+  .pdf-cover-page,
+  .pdf-song-page {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .pdf-cover-page,
+  .pdf-song-page {
+    padding: 0 !important;
+  }
+
+  .pdf-cover-page {
+    min-height: calc(297mm - 24mm);
+  }
+
+  .pdf-cover-page-with-songs {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .pdf-song-page {
+    border-top: 0 !important;
+  }
+
+  .pdf-song-page:not(.pdf-song-page-last) {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .pdf-section-block,
+  .pdf-part-note,
+  .pdf-image-frame {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pdf-title {
+    font-size: 26pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .pdf-song-title {
+    font-size: 20pt !important;
+    line-height: 1.25 !important;
+  }
+
+  .pdf-body-text,
+  .pdf-list,
+  .pdf-part-note,
+  .pdf-team-line,
+  .pdf-song-form {
+    font-size: 10.5pt !important;
+    line-height: 1.65 !important;
+  }
+
+  .pdf-image-frame {
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .pdf-image {
+    max-width: 100% !important;
+    max-height: 235mm !important;
+    height: auto !important;
+    object-fit: contain;
+  }
 }

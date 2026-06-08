@@ -113,6 +113,9 @@ export default function SetlistDetailPage() {
               <Link href={`/setlists/${setlist.id}/play`} className="btn-primary">
                 콘티 연속재생 시작
               </Link>
+              <Link href={`/setlists/${setlist.id}/pdf`} className="btn-secondary">
+                PDF 만들기
+              </Link>
               <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
                 수정
               </Link>
