@@ -5,8 +5,10 @@ import { SectionEditor } from "@/components/SectionEditor";
 import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
 import { ChordMemoEditor } from "@/components/ChordMemoEditor";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
+import { YouTubePlayer } from "@/components/YouTubePlayer";
 import type { SavedSong, Song } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
+import { useState } from "react";
 
 type SongFormProps = {
   song: Song;
@@ -31,8 +33,27 @@ export function SongForm({
   canMoveUp,
   canMoveDown,
 }: SongFormProps) {
+  const [sectionBuilderOpen, setSectionBuilderOpen] = useState(false);
+  const [youtubeMessage, setYoutubeMessage] = useState("");
+
   function updateSong(patch: Partial<Song>) {
     onChange({ ...song, ...patch });
+  }
+
+  function confirmYoutubeLink() {
+    const youtubeUrl = song.youtubeUrl?.trim() ?? "";
+    const youtubeVideoId = extractYouTubeVideoId(youtubeUrl);
+
+    if (!youtubeVideoId) {
+      updateSong({ youtubeUrl, youtubeVideoId: undefined });
+      setSectionBuilderOpen(false);
+      setYoutubeMessage("유튜브 링크를 확인해 주세요. watch, youtu.be, embed, shorts 링크를 사용할 수 있습니다.");
+      return;
+    }
+
+    updateSong({ youtubeUrl, youtubeVideoId });
+    setSectionBuilderOpen(true);
+    setYoutubeMessage("유튜브 링크를 확인했습니다. 영상을 재생하면서 송폼 버튼을 눌러 구간을 찍어보세요.");
   }
 
   return (
@@ -57,18 +78,31 @@ export function SongForm({
               placeholder="나는 예배자입니다"
             />
           </label>
-          <label className="space-y-1">
+          <div className="space-y-1">
             <span className="field-label">유튜브 링크</span>
-            <input
-              value={song.youtubeUrl ?? ""}
-              onChange={(event) => {
-                const youtubeUrl = event.target.value;
-                updateSong({ youtubeUrl, youtubeVideoId: extractYouTubeVideoId(youtubeUrl) });
-              }}
-              className="field-input"
-              placeholder="https://www.youtube.com/watch?v=..."
-            />
-          </label>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                value={song.youtubeUrl ?? ""}
+                onChange={(event) => {
+                  const youtubeUrl = event.target.value;
+                  const youtubeVideoId = extractYouTubeVideoId(youtubeUrl);
+                  updateSong({ youtubeUrl, youtubeVideoId });
+                  setYoutubeMessage("");
+                  if (!youtubeVideoId) setSectionBuilderOpen(false);
+                }}
+                className="field-input"
+                placeholder="https://www.youtube.com/watch?v=..."
+              />
+              <button type="button" onClick={confirmYoutubeLink} className="btn-secondary min-h-11 px-4">
+                확인
+              </button>
+            </div>
+            {youtubeMessage ? (
+              <span className={song.youtubeVideoId ? "field-help text-blue-700" : "text-xs font-semibold text-rose-600"}>
+                {youtubeMessage}
+              </span>
+            ) : null}
+          </div>
           <label className="space-y-1 lg:col-span-2">
             <span className="field-label">곡 설명</span>
             <textarea
@@ -127,6 +161,37 @@ export function SongForm({
 
         <CapoTransposeHelper song={song} onChange={updateSong} />
         <ChordMemoEditor song={song} onChange={updateSong} />
+
+        {song.youtubeVideoId ? (
+          <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="font-bold text-slate-950">유튜브로 송폼 만들기</h4>
+                <p className="field-help">
+                  확인 버튼을 누르면 영상 재생 중 Intro, Verse, Chorus 버튼으로 구간을 바로 찍을 수 있습니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSectionBuilderOpen((value) => !value)}
+                className="btn-secondary min-h-10 px-3"
+              >
+                {sectionBuilderOpen ? "송폼 만들기 접기" : "송폼 만들기 열기"}
+              </button>
+            </div>
+
+            {sectionBuilderOpen ? (
+              <div className="mt-4">
+                <YouTubePlayer
+                  videoId={song.youtubeVideoId}
+                  sections={song.sections}
+                  onSectionsChange={(sections) => updateSong({ sections })}
+                />
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         <SectionEditor sections={song.sections} onChange={(sections) => updateSong({ sections })} />
         <PartNotesEditor partNotes={song.partNotes} onChange={(partNotes) => updateSong({ partNotes })} />
 
