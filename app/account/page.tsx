@@ -84,7 +84,7 @@ export default function AccountPage() {
     <div className="page-shell space-y-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-blue-700">Account</p>
+          <p className="text-sm font-bold text-blue-700">계정</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">내 계정</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">로그인 저장소와 찬양팀 기본 정보를 관리합니다.</p>
         </div>
@@ -105,8 +105,10 @@ export default function AccountPage() {
         <div className="card p-8 text-sm text-slate-500">계정 정보를 불러오는 중입니다.</div>
       ) : !isSupabaseConfigured() ? (
         <section className="card p-6">
-          <h2 className="text-xl font-black text-slate-950">Supabase 설정이 필요합니다</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">`.env.local`에 Supabase URL과 anon key를 넣어 주세요.</p>
+          <h2 className="text-xl font-black text-slate-950">로그인 기능 준비가 필요합니다</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            계정 저장을 사용하려면 관리자 설정이 먼저 필요합니다.
+          </p>
         </section>
       ) : (
         <>

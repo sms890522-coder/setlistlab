@@ -20,7 +20,7 @@ export default function SignupPage() {
     setMessage("");
 
     if (!isSupabaseConfigured()) {
-      setError("Supabase 환경변수가 설정되어 있지 않습니다.");
+      setError("회원가입 기능이 아직 준비되지 않았습니다. 관리자에게 문의해 주세요.");
       return;
     }
 
@@ -42,7 +42,7 @@ export default function SignupPage() {
   return (
     <div className="page-shell max-w-2xl">
       <section className="card p-6 sm:p-8">
-        <p className="text-sm font-bold text-blue-700">Account</p>
+        <p className="text-sm font-bold text-blue-700">계정</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">회원가입</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
           찬양팀 콘티와 곡 보관함을 계정에 저장하려면 이메일 계정을 만들어 주세요.

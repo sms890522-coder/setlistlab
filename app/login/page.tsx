@@ -24,7 +24,7 @@ export default function LoginPage() {
     setError("");
 
     if (!isSupabaseConfigured()) {
-      setError("Supabase 환경변수가 설정되어 있지 않습니다.");
+      setError("로그인 기능이 아직 준비되지 않았습니다. 관리자에게 문의해 주세요.");
       return;
     }
 
@@ -52,15 +52,15 @@ export default function LoginPage() {
   return (
     <div className="page-shell max-w-2xl">
       <section className="card p-6 sm:p-8">
-        <p className="text-sm font-bold text-blue-700">Account</p>
+        <p className="text-sm font-bold text-blue-700">계정</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">로그인</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          로그인하면 콘티, 곡 보관함, 팀원 목록을 Supabase에 저장해서 다른 기기에서도 이어서 볼 수 있습니다.
+          로그인하면 콘티, 곡 보관함, 팀원 목록을 계정 클라우드에 저장해서 다른 기기에서도 이어서 볼 수 있습니다.
         </p>
 
         {!isSupabaseConfigured() ? (
           <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-            Supabase 환경변수가 아직 없습니다. `.env.local`에 URL과 anon key를 넣으면 로그인 기능을 사용할 수 있습니다.
+            로그인 기능이 아직 준비되지 않았습니다. 관리자 설정이 끝나면 계정 저장을 사용할 수 있습니다.
           </div>
         ) : null}
 

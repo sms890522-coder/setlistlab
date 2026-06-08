@@ -118,7 +118,7 @@ export default function SongsPage() {
     <div className="page-shell space-y-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-blue-700">Song Library</p>
+          <p className="text-sm font-bold text-blue-700">곡 보관함</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">곡 보관함</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             자주 쓰는 곡 정보를 계정에 저장해두고 새 콘티에서 다시 불러올 수 있습니다.
@@ -134,7 +134,9 @@ export default function SongsPage() {
       ) : !isSupabaseConfigured() ? (
         <section className="card p-6">
           <h2 className="text-xl font-black text-slate-950">로그인 저장 설정이 필요합니다</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">곡 보관함 페이지는 Supabase 로그인 저장을 켠 뒤 사용할 수 있습니다.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            곡 보관함 페이지는 계정 클라우드 저장을 켠 뒤 사용할 수 있습니다.
+          </p>
         </section>
       ) : (
         <>

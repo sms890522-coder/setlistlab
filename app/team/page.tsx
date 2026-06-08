@@ -108,7 +108,7 @@ export default function TeamPage() {
     <div className="page-shell space-y-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-blue-700">Team</p>
+          <p className="text-sm font-bold text-blue-700">팀원</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">팀원 관리</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             자주 섬기는 팀원을 저장해두면 콘티 수정 화면에서 이번 주 팀원으로 바로 불러올 수 있습니다.
@@ -124,13 +124,15 @@ export default function TeamPage() {
       ) : !isSupabaseConfigured() ? (
         <section className="card p-6">
           <h2 className="text-xl font-black text-slate-950">로그인 저장 설정이 필요합니다</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">팀원 관리는 Supabase 로그인 저장을 켠 뒤 사용할 수 있습니다.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            팀원 관리는 계정 클라우드 저장을 켠 뒤 사용할 수 있습니다.
+          </p>
         </section>
       ) : (
         <>
           {profileRole && profileRole !== "찬양인도자" ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-              현재 역할은 {profileRole}입니다. MVP에서는 강하게 막지 않지만, 보통 찬양인도자가 팀원 목록을 관리합니다.
+              현재 역할은 {profileRole}입니다. 보통 찬양인도자가 팀원 목록을 관리하지만, 필요하면 여기서 함께 수정할 수 있습니다.
             </div>
           ) : null}
 

@@ -36,7 +36,7 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
     if (!setlist) return;
 
     if (!isSupabaseConfigured()) {
-      setError("공유 서버 설정이 없습니다. Vercel 환경변수를 확인해 주세요.");
+      setError("공유 기능이 아직 준비되지 않았습니다. 관리자에게 문의해 주세요.");
       setMessage("");
       return;
     }
@@ -102,12 +102,12 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
     try {
       const parsed = parseSetlistJson(jsonText);
       const imported = importSetlist(parsed);
-      setMessage("콘티를 가져와 localStorage에 저장했습니다.");
+      setMessage("콘티를 가져와 이 브라우저에 저장했습니다.");
       setError("");
       setJsonText("");
       onImported?.(imported);
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "잘못된 JSON입니다.");
+      setError(importError instanceof Error ? importError.message : "백업 텍스트 형식이 올바르지 않습니다.");
       setMessage("");
     }
   }
@@ -116,20 +116,20 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
     return (
       <section className="card p-5">
         <div className="space-y-2">
-          <h2 className="section-title">JSON 가져오기</h2>
+          <h2 className="section-title">백업 텍스트 가져오기</h2>
           <p className="text-sm leading-6 text-slate-600">
-            받은 콘티 JSON 텍스트를 붙여넣으면 이 브라우저의 localStorage에 저장됩니다.
+            받은 콘티 백업 텍스트를 붙여넣으면 이 브라우저에 저장됩니다.
           </p>
         </div>
 
         <div className="mt-6 space-y-3">
           <label className="block space-y-1">
-            <span className="field-label">콘티 JSON</span>
+            <span className="field-label">콘티 백업 텍스트</span>
             <textarea
               value={jsonText}
               onChange={(event) => setJsonText(event.target.value)}
               className="field-input min-h-44 resize-y font-mono text-xs"
-              placeholder="팀 카톡이나 백업 파일에서 받은 콘티 JSON을 붙여넣으세요."
+              placeholder="팀 카톡이나 백업 파일에서 받은 콘티 백업 텍스트를 붙여넣으세요."
             />
           </label>
           <button type="button" onClick={handleImport} disabled={!jsonText.trim()} className="btn-primary">

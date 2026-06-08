@@ -121,12 +121,12 @@ export default function SetlistsPage() {
     <div className="page-shell space-y-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-blue-700">Setlists</p>
+          <p className="text-sm font-bold text-blue-700">콘티</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">콘티 목록</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {storageMode === "cloud"
               ? "계정에 저장된 콘티를 다시 열고 수정할 수 있습니다."
-              : "로그인 전에는 이 브라우저의 localStorage에 임시 저장됩니다."}
+              : "로그인 전에는 이 브라우저에만 임시 저장됩니다."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -138,7 +138,7 @@ export default function SetlistsPage() {
 
       {storageMode === "local" ? (
         <section className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
-          로그인하면 콘티와 곡 보관함을 Supabase에 저장해서 다른 기기에서도 사용할 수 있습니다.{" "}
+          로그인하면 콘티와 곡 보관함을 계정 클라우드에 저장해서 다른 기기에서도 사용할 수 있습니다.{" "}
           <Link href="/login?redirect=/setlists" className="font-black underline underline-offset-4">
             로그인하기
           </Link>

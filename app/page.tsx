@@ -72,8 +72,7 @@ export default function HomePage() {
             </Link>
           </div>
           <p className="max-w-xl rounded-xl border border-blue-100 bg-white/75 p-4 text-sm leading-6 text-slate-600">
-            로그인 전에는 이 브라우저에 임시 저장되고, 로그인하면 Supabase 계정 저장소에 콘티와 곡 보관함, 팀원 목록을
-            저장합니다.
+            로그인 전에는 이 브라우저에 임시 저장되고, 로그인하면 계정 클라우드에 콘티와 곡 보관함, 팀원 목록을 저장합니다.
           </p>
           <div className="w-fit rounded-2xl border border-blue-100 bg-white/85 px-5 py-4 shadow-sm">
             <p className="text-sm font-bold text-slate-500">현재까지 공유된 콘티</p>

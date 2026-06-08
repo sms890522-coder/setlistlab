@@ -10,7 +10,7 @@ export function isSupabaseConfigured() {
 
 export function getSupabaseBrowserClient() {
   if (!isSupabaseConfigured()) {
-    throw new Error("Supabase 설정이 없습니다. 환경변수를 먼저 설정해 주세요.");
+    throw new Error("로그인 기능이 아직 준비되지 않았습니다. 관리자에게 문의해 주세요.");
   }
 
   if (!browserClient) {

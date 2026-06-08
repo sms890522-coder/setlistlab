@@ -19,7 +19,7 @@ export default function SharedSetlistPage() {
   useEffect(() => {
     async function loadSharedSetlist() {
       if (!isSupabaseConfigured()) {
-        setError("공유 서버 설정이 없어 공유 콘티를 불러올 수 없습니다.");
+        setError("공유 기능이 아직 준비되지 않아 콘티를 불러올 수 없습니다.");
         setLoaded(true);
         return;
       }

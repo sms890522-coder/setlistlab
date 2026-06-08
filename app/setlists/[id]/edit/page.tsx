@@ -218,7 +218,7 @@ export default function SetlistEditPage() {
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">콘티 수정</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            입력한 내용은 {storageMode === "cloud" ? "Supabase 계정 저장소" : "localStorage"}에 자동 저장됩니다.
+            입력한 내용은 {storageMode === "cloud" ? "계정 클라우드" : "이 브라우저"}에 자동 저장됩니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

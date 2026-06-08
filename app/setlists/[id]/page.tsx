@@ -78,14 +78,14 @@ export default function SetlistDetailPage() {
         <div className="card p-8 text-center">
           <h1 className="text-2xl font-black text-slate-950">콘티를 찾을 수 없습니다</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            이 MVP는 서버 저장이 없어 다른 기기에서는 링크만으로 콘티를 열 수 없습니다. JSON 가져오기를 사용해 주세요.
+            이 브라우저에 저장된 콘티가 아니거나, 공유가 끝난 콘티일 수 있습니다. 받은 백업 텍스트가 있다면 가져오기를 사용해 주세요.
           </p>
           <div className="mt-5 flex justify-center gap-2">
             <Link href="/setlists" className="btn-secondary">
               목록으로
             </Link>
             <Link href="/import" className="btn-primary">
-              JSON 가져오기
+              백업 텍스트 가져오기
             </Link>
           </div>
         </div>

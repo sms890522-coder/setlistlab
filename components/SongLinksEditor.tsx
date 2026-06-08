@@ -46,7 +46,7 @@ export function SongLinksEditor({ links, onChange }: SongLinksEditorProps) {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="field-label">URL</span>
+                  <span className="field-label">링크 주소</span>
                   <input
                     value={link.url}
                     onChange={(event) => updateLink(link.id, { url: event.target.value })}

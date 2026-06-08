@@ -74,7 +74,7 @@ export default function TunerPage() {
     setStarting(true);
 
     if (!canUseMicrophone()) {
-      setError("튜너는 HTTPS 환경 또는 localhost에서만 정상 동작합니다.");
+      setError("튜너는 안전한 접속 환경에서만 정상 동작합니다.");
       setStarting(false);
       return;
     }
@@ -194,8 +194,10 @@ export default function TunerPage() {
       {error ? <p className="rounded-xl bg-rose-50 p-4 text-sm font-semibold text-rose-700">{error}</p> : null}
 
       <section className="rounded-lg border border-blue-100 bg-blue-50/70 p-4 text-sm leading-6 text-blue-900">
-        <p className="font-bold">튜너는 HTTPS 환경 또는 localhost에서만 정상 동작합니다.</p>
-        <p className="mt-1 text-xs font-semibold text-blue-700">개발 중에는 localhost에서 마이크 테스트가 가능합니다.</p>
+        <p className="font-bold">튜너는 안전한 접속 환경에서만 정상 동작합니다.</p>
+        <p className="mt-1 text-xs font-semibold text-blue-700">
+          브라우저 주소창에 자물쇠 표시가 있는 페이지에서 마이크 권한을 허용해 주세요.
+        </p>
       </section>
 
       <TuningModeSelector presets={TUNING_PRESETS} selectedId={modeId} onChange={handleModeChange} />

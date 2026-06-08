@@ -68,7 +68,7 @@ export default function OnboardingPage() {
   return (
     <div className="page-shell max-w-3xl">
       <section className="card p-6 sm:p-8">
-        <p className="text-sm font-bold text-blue-700">Welcome</p>
+        <p className="text-sm font-bold text-blue-700">처음 설정</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">처음 설정</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
           콘티와 팀원 관리에 표시될 기본 정보를 입력해 주세요. 나중에 계정 화면에서 수정할 수 있습니다.

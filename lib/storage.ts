@@ -259,13 +259,13 @@ export function parseSetlistJson(json: string) {
     return normalizeSetlist(JSON.parse(json));
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error("콘티 JSON 형식이 올바르지 않습니다. JSON 문법을 확인해 주세요.");
+      throw new Error("콘티 백업 텍스트 형식이 올바르지 않습니다. 받은 내용을 그대로 붙여넣었는지 확인해 주세요.");
     }
 
     if (error instanceof Error) {
-      throw new Error(error.message || "콘티 JSON을 읽을 수 없습니다.");
+      throw new Error(error.message || "콘티 백업 텍스트를 읽을 수 없습니다.");
     }
-    throw new Error("콘티 JSON을 읽을 수 없습니다.");
+    throw new Error("콘티 백업 텍스트를 읽을 수 없습니다.");
   }
 }
 
