@@ -31,6 +31,7 @@ export type Song = {
   chordMemo?: string;
   chordProgression?: string;
   sheetLinks?: SongLink[];
+  imageLinks?: SongLink[];
 };
 
 export type SavedSong = {

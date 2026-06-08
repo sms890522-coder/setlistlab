@@ -247,6 +247,7 @@ function normalizeSongForCloud(song: Song): Song {
     chordMemo: song.chordMemo ?? "",
     chordProgression: song.chordProgression ?? "",
     sheetLinks: song.sheetLinks ?? [],
+    imageLinks: song.imageLinks ?? [],
   };
 }
 

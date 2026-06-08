@@ -39,6 +39,7 @@ export function createBlankSong(): Song {
     chordMemo: "",
     chordProgression: "",
     sheetLinks: [],
+    imageLinks: [],
   };
 }
 
@@ -50,6 +51,7 @@ export function cloneSong(song: Song): Song {
     partNotes: song.partNotes.map((partNote) => ({ ...partNote, id: createId("part") })),
     links: song.links?.map((link) => ({ ...link, id: createId("link") })) ?? [],
     sheetLinks: song.sheetLinks?.map((link) => ({ ...link, id: createId("sheet-link") })) ?? [],
+    imageLinks: song.imageLinks?.map((link) => ({ ...link, id: createId("image-link") })) ?? [],
   };
 }
 

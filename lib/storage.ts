@@ -325,6 +325,7 @@ function normalizeSong(value: unknown): Song {
     chordMemo: optionalString(value.chordMemo),
     chordProgression: optionalString(value.chordProgression),
     sheetLinks: Array.isArray(value.sheetLinks) ? value.sheetLinks.filter(isRecord).map(normalizeSongLink) : [],
+    imageLinks: Array.isArray(value.imageLinks) ? value.imageLinks.filter(isRecord).map(normalizeSongLink) : [],
   };
 }
 

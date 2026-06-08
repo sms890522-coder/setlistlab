@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
+import { SongImageGallery } from "@/components/SongImageGallery";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { getCurrentUser } from "@/lib/auth";
@@ -276,6 +277,8 @@ export default function SongPracticePage() {
           ) : null}
         </section>
       ) : null}
+
+      <SongImageGallery imageLinks={song.imageLinks} />
 
       <CapoTransposeHelper song={song} editable={false} />
 

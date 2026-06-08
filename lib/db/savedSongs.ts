@@ -115,6 +115,7 @@ export async function createCloudSavedSong(input: Partial<Song> & { title: strin
     chordMemo: input.chordMemo ?? "",
     chordProgression: input.chordProgression ?? "",
     sheetLinks: input.sheetLinks ?? [],
+    imageLinks: input.imageLinks ?? [],
   };
 
   return saveCloudSongToLibrary(song, true);
@@ -143,6 +144,7 @@ function rowToSavedSong(row: SavedSongRow): SavedSong {
     chordMemo: songFromJson.chordMemo ?? "",
     chordProgression: songFromJson.chordProgression ?? "",
     sheetLinks: songFromJson.sheetLinks ?? [],
+    imageLinks: songFromJson.imageLinks ?? [],
   });
 
   return {
@@ -175,6 +177,7 @@ function normalizeSong(song: Song): Song {
     chordMemo: song.chordMemo ?? "",
     chordProgression: song.chordProgression ?? "",
     sheetLinks: song.sheetLinks ?? [],
+    imageLinks: song.imageLinks ?? [],
   };
 }
 

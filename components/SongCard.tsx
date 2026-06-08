@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getFirstImageLink, getImagePreviewUrl } from "@/lib/images";
 import type { Song } from "@/lib/types";
 
 type SongCardProps = {
@@ -12,6 +13,7 @@ type SongCardProps = {
 export function SongCard({ href, index, song, completed = false, onCompletionChange }: SongCardProps) {
   const sectionSummary = song.sections.map((section) => section.name).filter(Boolean).join(" - ");
   const highlightSummary = song.highlights.filter(Boolean).slice(0, 2).join(" / ");
+  const imageLink = getFirstImageLink(song.imageLinks);
 
   return (
     <article className="card p-5">
@@ -20,6 +22,15 @@ export function SongCard({ href, index, song, completed = false, onCompletionCha
           <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
             {index + 1}
           </span>
+          {imageLink ? (
+            <img
+              src={getImagePreviewUrl(imageLink.url)}
+              alt=""
+              className="hidden h-20 w-20 shrink-0 rounded-lg border border-slate-100 object-cover sm:block"
+              loading="lazy"
+              aria-hidden="true"
+            />
+          ) : null}
           <div className="min-w-0 flex-1">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">

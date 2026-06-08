@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
+import { getFirstImageLink, getImagePreviewUrl } from "@/lib/images";
 import { getSharedSetlist, isSupabaseConfigured } from "@/lib/supabase";
 import { getPracticeCompletions, importSetlist, parseSetlistJson, setPracticeCompletion } from "@/lib/storage";
 import type { Setlist } from "@/lib/types";
@@ -119,6 +120,15 @@ export default function SharedSetlistPage() {
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
                           {index + 1}
                         </span>
+                        {getFirstImageLink(song.imageLinks) ? (
+                          <img
+                            src={getImagePreviewUrl(getFirstImageLink(song.imageLinks)?.url)}
+                            alt=""
+                            className="hidden h-20 w-20 shrink-0 rounded-lg border border-slate-100 object-cover sm:block"
+                            loading="lazy"
+                            aria-hidden="true"
+                          />
+                        ) : null}
                         <div className="min-w-0 flex-1">
                           <h3 className="text-lg font-black text-slate-950">{song.title || "제목 없는 곡"}</h3>
                           <p className="mt-1 text-sm text-slate-500">

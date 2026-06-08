@@ -11,7 +11,7 @@ type ChordMemoEditorProps = {
 export function ChordMemoEditor({ song, onChange }: ChordMemoEditorProps) {
   return (
     <details className="rounded-lg border border-slate-200 bg-slate-50/70">
-      <summary className="cursor-pointer list-none p-4 font-bold text-slate-950">코드 메모/악보 링크</summary>
+      <summary className="cursor-pointer list-none p-4 font-bold text-slate-950">코드 메모/악보/이미지</summary>
       <div className="space-y-5 border-t border-slate-200 p-4">
         <label className="block space-y-1">
           <span className="field-label">코드 메모</span>
@@ -23,6 +23,23 @@ export function ChordMemoEditor({ song, onChange }: ChordMemoEditorProps) {
           />
         </label>
         <SongLinksEditor links={song.sheetLinks ?? []} onChange={(sheetLinks) => onChange({ sheetLinks })} />
+        <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+          <SongLinksEditor
+            links={song.imageLinks ?? []}
+            onChange={(imageLinks) => onChange({ imageLinks })}
+            title="곡 이미지 링크"
+            addLabel="이미지 추가"
+            emptyMessage="등록된 곡 이미지가 없습니다."
+            labelPlaceholder="대표 이미지, 악보 이미지"
+            urlPlaceholder="Google Drive, Dropbox, 이미지 링크"
+            deleteMessage="곡 이미지 링크를 삭제할까요?"
+            showPreview
+          />
+          <p className="mt-3 text-xs leading-5 text-blue-800">
+            이미지 파일은 앱에 직접 저장하지 않고 링크만 보관합니다. Google Drive, Dropbox, 이미지 호스팅 등에 올린 뒤
+            공유 링크를 붙여넣어 주세요.
+          </p>
+        </div>
       </div>
     </details>
   );
