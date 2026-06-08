@@ -16,8 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 const COPYRIGHT_NOTICE =
   "악보 이미지는 사용 권한이 있는 자료만 등록해 주세요. 공유 및 출력 시 교회가 보유한 라이선스와 저작권 정책을 확인해 주세요.";
 
-type PdfImageMode = "fit" | "next-page" | "crop";
-type PdfCropPosition = "top" | "center" | "bottom";
+type PdfImageMode = "fit" | "compress-y" | "next-page" | "split";
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -312,78 +311,133 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<PdfImageMode>("fit");
   const [scale, setScale] = useState(100);
-  const [cropHeight, setCropHeight] = useState(220);
-  const [cropPosition, setCropPosition] = useState<PdfCropPosition>("center");
+  const [verticalScale, setVerticalScale] = useState(85);
+  const [splitRatio, setSplitRatio] = useState(50);
   const imageUrl = getImagePreviewUrl(link.url);
 
   if (failed) {
     return <p className="no-print rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">악보 이미지를 불러오지 못했습니다.</p>;
   }
 
+  const splitTotalScreenHeight = 720;
+  const splitTotalPrintHeight = 250;
+  const splitTopScreenHeight = Math.round((splitTotalScreenHeight * splitRatio) / 100);
+  const splitBottomScreenHeight = splitTotalScreenHeight - splitTopScreenHeight;
+  const splitTopPrintHeight = Math.round((splitTotalPrintHeight * splitRatio) / 100);
+  const splitBottomPrintHeight = splitTotalPrintHeight - splitTopPrintHeight;
+
   const imageStyle = {
     "--pdf-image-width": `${scale}%`,
     "--pdf-image-max-height": "250mm",
-    "--pdf-image-crop-height": `${cropHeight}mm`,
-    "--pdf-image-crop-height-screen": `${Math.round(cropHeight * 1.55)}px`,
-    "--pdf-image-position": getCropObjectPosition(cropPosition),
+    "--pdf-image-compress-height": `${Math.round((250 * verticalScale) / 100)}mm`,
+    "--pdf-image-compress-height-screen": `${Math.round((720 * verticalScale) / 100)}px`,
+    "--pdf-image-split-total-screen-height": `${splitTotalScreenHeight}px`,
+    "--pdf-image-split-top-screen-height": `${splitTopScreenHeight}px`,
+    "--pdf-image-split-bottom-screen-height": `${splitBottomScreenHeight}px`,
+    "--pdf-image-split-total-print-height": `${splitTotalPrintHeight}mm`,
+    "--pdf-image-split-top-print-height": `${splitTopPrintHeight}mm`,
+    "--pdf-image-split-bottom-print-height": `${splitBottomPrintHeight}mm`,
   } as CSSProperties;
+
+  const controls = (
+    <div className="no-print pdf-image-controls">
+      <div className="flex flex-wrap gap-1.5">
+        <PdfImageModeButton mode={mode} value="fit" onChange={setMode}>
+          비율 맞춰 줄이기
+        </PdfImageModeButton>
+        <PdfImageModeButton mode={mode} value="compress-y" onChange={setMode}>
+          위아래만 줄이기
+        </PdfImageModeButton>
+        <PdfImageModeButton mode={mode} value="next-page" onChange={setMode}>
+          다음 장
+        </PdfImageModeButton>
+        <PdfImageModeButton mode={mode} value="split" onChange={setMode}>
+          나눠서 넣기
+        </PdfImageModeButton>
+      </div>
+
+      {mode === "fit" || mode === "next-page" ? (
+        <label className="pdf-image-control-field mt-2">
+          <span>이미지 크기 {scale}%</span>
+          <input
+            type="range"
+            min="45"
+            max="100"
+            step="5"
+            value={scale}
+            onChange={(event) => setScale(Number(event.target.value))}
+          />
+        </label>
+      ) : null}
+
+      {mode === "compress-y" ? (
+        <label className="pdf-image-control-field mt-2">
+          <span>세로 높이 {verticalScale}%</span>
+          <input
+            type="range"
+            min="45"
+            max="100"
+            step="5"
+            value={verticalScale}
+            onChange={(event) => setVerticalScale(Number(event.target.value))}
+          />
+        </label>
+      ) : null}
+
+      {mode === "split" ? (
+        <div className="mt-2 space-y-1.5">
+          <label className="pdf-image-control-field">
+            <span>나누는 위치 위쪽 {splitRatio}% / 아래쪽 {100 - splitRatio}%</span>
+            <input
+              type="range"
+              min="30"
+              max="70"
+              step="5"
+              value={splitRatio}
+              onChange={(event) => setSplitRatio(Number(event.target.value))}
+            />
+          </label>
+          <p className="text-[11px] font-semibold leading-4 text-slate-500">
+            위쪽은 현재 페이지에, 아래쪽은 인쇄할 때 다음 페이지에 이어서 들어갑니다.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (mode === "split") {
+    return (
+      <figure className="pdf-image-frame pdf-image-frame-split" style={imageStyle}>
+        {controls}
+        <div className="pdf-split-piece pdf-split-piece-top">
+          <img
+            src={imageUrl}
+            alt={`${link.label || `악보 이미지 ${imageIndex + 1}`} 위쪽`}
+            className="pdf-image pdf-split-image pdf-split-image-top"
+            onError={() => setFailed(true)}
+          />
+        </div>
+        <div className="pdf-split-piece pdf-split-piece-bottom">
+          <img
+            src={imageUrl}
+            alt={`${link.label || `악보 이미지 ${imageIndex + 1}`} 아래쪽`}
+            className="pdf-image pdf-split-image pdf-split-image-bottom"
+            onError={() => setFailed(true)}
+          />
+        </div>
+        {link.label ? <figcaption className="pdf-image-caption">{link.label}</figcaption> : null}
+      </figure>
+    );
+  }
 
   return (
     <figure
       className={`pdf-image-frame ${mode === "next-page" ? "pdf-image-frame-next-page" : ""} ${
-        mode === "crop" ? "pdf-image-frame-crop" : ""
+        mode === "compress-y" ? "pdf-image-frame-compress-y" : ""
       }`}
       style={imageStyle}
     >
-      <div className="no-print pdf-image-controls">
-        <div className="flex flex-wrap gap-1.5">
-          <PdfImageModeButton mode={mode} value="fit" onChange={setMode}>
-            줄여서 넣기
-          </PdfImageModeButton>
-          <PdfImageModeButton mode={mode} value="next-page" onChange={setMode}>
-            다음 장
-          </PdfImageModeButton>
-          <PdfImageModeButton mode={mode} value="crop" onChange={setMode}>
-            잘라서 넣기
-          </PdfImageModeButton>
-        </div>
-
-        {mode === "crop" ? (
-          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr]">
-            <label className="pdf-image-control-field">
-              <span>남길 위치</span>
-              <select value={cropPosition} onChange={(event) => setCropPosition(event.target.value as PdfCropPosition)}>
-                <option value="top">위쪽</option>
-                <option value="center">가운데</option>
-                <option value="bottom">아래쪽</option>
-              </select>
-            </label>
-            <label className="pdf-image-control-field">
-              <span>자르기 높이 {cropHeight}mm</span>
-              <input
-                type="range"
-                min="120"
-                max="260"
-                step="10"
-                value={cropHeight}
-                onChange={(event) => setCropHeight(Number(event.target.value))}
-              />
-            </label>
-          </div>
-        ) : (
-          <label className="pdf-image-control-field mt-2">
-            <span>이미지 크기 {scale}%</span>
-            <input
-              type="range"
-              min="45"
-              max="100"
-              step="5"
-              value={scale}
-              onChange={(event) => setScale(Number(event.target.value))}
-            />
-          </label>
-        )}
-      </div>
+      {controls}
 
       <img
         src={imageUrl}
@@ -416,12 +470,6 @@ function PdfImageModeButton({
       {children}
     </button>
   );
-}
-
-function getCropObjectPosition(position: PdfCropPosition) {
-  if (position === "top") return "center top";
-  if (position === "bottom") return "center bottom";
-  return "center center";
 }
 
 function InfoLine({ label, value }: { label: string; value: string }) {

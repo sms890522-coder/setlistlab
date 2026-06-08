@@ -237,16 +237,47 @@ select {
     @apply border-blue-200 bg-blue-50/30;
   }
 
-  .pdf-image-frame-crop {
+  .pdf-image-frame-compress-y {
     @apply bg-slate-50;
   }
 
-  .pdf-image-frame-crop .pdf-image {
+  .pdf-image-frame-compress-y .pdf-image {
     width: 100%;
-    height: min(var(--pdf-image-crop-height-screen, 340px), 70vh);
+    height: min(var(--pdf-image-compress-height-screen, 612px), 70vh);
     max-height: none;
-    object-fit: cover;
-    object-position: var(--pdf-image-position, center center);
+    object-fit: fill;
+  }
+
+  .pdf-image-frame-split {
+    @apply bg-slate-50;
+  }
+
+  .pdf-split-piece {
+    @apply overflow-hidden rounded-md bg-white;
+  }
+
+  .pdf-split-piece-top {
+    height: min(var(--pdf-image-split-top-screen-height, 360px), 70vh);
+  }
+
+  .pdf-split-piece-bottom {
+    height: min(var(--pdf-image-split-bottom-screen-height, 360px), 70vh);
+  }
+
+  .pdf-split-piece + .pdf-split-piece {
+    @apply mt-2 border-t border-dashed border-blue-200 pt-2;
+  }
+
+  .pdf-split-image {
+    width: 100%;
+    height: var(--pdf-image-split-total-screen-height, 720px);
+    max-height: none;
+    border-radius: 0;
+    object-fit: fill;
+  }
+
+  .pdf-split-image-bottom {
+    transform: translateY(calc(-1 * var(--pdf-image-split-top-screen-height, 360px)));
   }
 
   .pdf-exclude-toggle {
@@ -369,7 +400,14 @@ select {
     page-break-before: always;
   }
 
-  .pdf-image-frame-crop {
+  .pdf-section-block:has(.pdf-image-frame-split),
+  .pdf-image-toggle:has(.pdf-image-frame-split),
+  .pdf-image-frame-split {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .pdf-image-frame-compress-y {
     overflow: hidden !important;
   }
 
@@ -381,11 +419,47 @@ select {
     object-fit: contain;
   }
 
-  .pdf-image-frame-crop .pdf-image {
+  .pdf-image-frame-compress-y .pdf-image {
     width: 100% !important;
-    height: var(--pdf-image-crop-height, 220mm) !important;
+    height: var(--pdf-image-compress-height, 213mm) !important;
     max-height: none !important;
-    object-fit: cover !important;
-    object-position: var(--pdf-image-position, center center) !important;
+    object-fit: fill !important;
+  }
+
+  .pdf-image-frame-split {
+    overflow: visible !important;
+  }
+
+  .pdf-split-piece {
+    overflow: hidden !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  .pdf-split-piece-top {
+    height: var(--pdf-image-split-top-print-height, 125mm) !important;
+  }
+
+  .pdf-split-piece-bottom {
+    height: var(--pdf-image-split-bottom-print-height, 125mm) !important;
+    margin-top: 0 !important;
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .pdf-split-image {
+    width: 100% !important;
+    height: var(--pdf-image-split-total-print-height, 250mm) !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    object-fit: fill !important;
+  }
+
+  .pdf-split-image-bottom {
+    transform: translateY(calc(-1 * var(--pdf-image-split-top-print-height, 125mm))) !important;
   }
 }
