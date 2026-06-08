@@ -10,6 +10,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { groupTeamAssignments } from "@/lib/teamAssignments";
 import type { Setlist, Song, SongLink } from "@/lib/types";
 import { useParams } from "next/navigation";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 const COPYRIGHT_NOTICE =
@@ -111,22 +112,19 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
           </div>
 
           {setlist.description ? (
-            <section className="pdf-section-block">
-              <h3 className="pdf-section-title">전체 설명</h3>
+            <PdfToggleBlock label="전체 설명">
               <p className="pdf-body-text">{setlist.description}</p>
-            </section>
+            </PdfToggleBlock>
           ) : null}
 
           {setlist.globalNotes ? (
-            <section className="pdf-section-block">
-              <h3 className="pdf-section-title">전체 강조사항</h3>
+            <PdfToggleBlock label="전체 강조사항">
               <p className="pdf-body-text">{setlist.globalNotes}</p>
-            </section>
+            </PdfToggleBlock>
           ) : null}
 
           {teamGroups.length > 0 ? (
-            <section className="pdf-section-block">
-              <h3 className="pdf-section-title">이번 주 팀원</h3>
+            <PdfToggleBlock label="이번 주 팀원">
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {teamGroups.map(({ part, members }) => (
                   <p key={part} className="pdf-team-line">
@@ -134,7 +132,7 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
                   </p>
                 ))}
               </div>
-            </section>
+            </PdfToggleBlock>
           ) : null}
 
           <p className="pdf-copyright">{COPYRIGHT_NOTICE}</p>
@@ -163,29 +161,30 @@ function SongPdfPage({ song, index, isLast }: { song: Song; index: number; isLas
         </div>
       </div>
 
-      {songForm ? <p className="pdf-song-form">{songForm}</p> : null}
+      {songForm ? (
+        <PdfToggleBlock label="송폼">
+          <p className="pdf-song-form">{songForm}</p>
+        </PdfToggleBlock>
+      ) : null}
 
       {song.description ? (
-        <section className="pdf-section-block">
-          <h3 className="pdf-section-title">곡 설명</h3>
+        <PdfToggleBlock label="곡 설명">
           <p className="pdf-body-text">{song.description}</p>
-        </section>
+        </PdfToggleBlock>
       ) : null}
 
       {song.highlights.length > 0 ? (
-        <section className="pdf-section-block">
-          <h3 className="pdf-section-title">강조사항</h3>
+        <PdfToggleBlock label="강조사항">
           <ul className="pdf-list">
             {song.highlights.map((highlight, highlightIndex) => (
               <li key={`${highlight}-${highlightIndex}`}>{highlight}</li>
             ))}
           </ul>
-        </section>
+        </PdfToggleBlock>
       ) : null}
 
       {song.partNotes.length > 0 ? (
-        <section className="pdf-section-block">
-          <h3 className="pdf-section-title">파트별 메모</h3>
+        <PdfToggleBlock label="파트별 메모">
           <div className="space-y-2">
             {song.partNotes.map((partNote) => (
               <p key={partNote.id} className="pdf-part-note">
@@ -193,19 +192,60 @@ function SongPdfPage({ song, index, isLast }: { song: Song; index: number; isLas
               </p>
             ))}
           </div>
-        </section>
+        </PdfToggleBlock>
       ) : null}
 
       {imageLinks.length > 0 ? (
-        <section className="pdf-section-block">
-          <h3 className="pdf-section-title">악보 이미지</h3>
+        <PdfToggleBlock label="악보 이미지">
           <div className="pdf-image-list">
             {imageLinks.map((link, imageIndex) => (
-              <PdfImage key={link.id || `${link.url}-${imageIndex}`} link={link} imageIndex={imageIndex} />
+              <PdfToggleBlock
+                key={link.id || `${link.url}-${imageIndex}`}
+                label={link.label || `악보 이미지 ${imageIndex + 1}`}
+                className="pdf-image-toggle"
+              >
+                <PdfImage link={link} imageIndex={imageIndex} />
+              </PdfToggleBlock>
             ))}
           </div>
-        </section>
+        </PdfToggleBlock>
       ) : null}
+    </section>
+  );
+}
+
+function PdfToggleBlock({
+  label,
+  children,
+  className = "pdf-section-block",
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [excluded, setExcluded] = useState(false);
+
+  if (excluded) {
+    return (
+      <section className="no-print pdf-excluded-block">
+        <label className="pdf-exclude-toggle">
+          <input type="checkbox" checked={excluded} onChange={(event) => setExcluded(event.target.checked)} />
+          <span>빼기</span>
+          <strong>{label}</strong>
+        </label>
+        <p className="pdf-excluded-text">{label} 항목을 PDF에서 뺐습니다.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={className}>
+      <label className="pdf-exclude-toggle no-print">
+        <input type="checkbox" checked={excluded} onChange={(event) => setExcluded(event.target.checked)} />
+        <span>빼기</span>
+        <strong>{label}</strong>
+      </label>
+      {children}
     </section>
   );
 }

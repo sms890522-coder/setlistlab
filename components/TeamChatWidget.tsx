@@ -269,9 +269,9 @@ export function TeamChatWidget() {
   }
 
   return (
-    <div className="team-chat-widget no-print fixed bottom-4 right-4 z-40 sm:bottom-6 sm:right-6">
+    <>
       {open ? (
-        <section className="mb-3 flex max-h-[calc(100dvh-6.5rem)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:max-h-[34rem]">
+        <section className="team-chat-panel no-print fixed bottom-20 right-4 z-40 flex max-h-[calc(100dvh-6.5rem)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:bottom-24 sm:right-6 sm:max-h-[34rem]">
           <div className="shrink-0 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -388,7 +388,7 @@ export function TeamChatWidget() {
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="relative flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100"
+        className="team-chat-widget no-print fixed bottom-4 right-4 z-50 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:bottom-6 sm:right-6"
         aria-label="팀 채팅 열기"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" className="size-7" fill="none" stroke="currentColor" strokeWidth="2">
@@ -401,7 +401,7 @@ export function TeamChatWidget() {
           </span>
         ) : null}
       </button>
-    </div>
+    </>
   );
 }
 
