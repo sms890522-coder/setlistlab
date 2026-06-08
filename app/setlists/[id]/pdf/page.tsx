@@ -104,11 +104,15 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
         <section className={`pdf-cover-page ${setlist.songs.length > 0 ? "pdf-cover-page-with-songs" : ""}`}>
           <div>
             <p className="pdf-eyebrow">콘티연습실</p>
-            <h2 className="pdf-title">{setlist.title || "제목 없는 콘티"}</h2>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <InfoLine label="예배 날짜" value={setlist.worshipDate || "미정"} />
-              <InfoLine label="예배 이름" value={setlist.serviceName || "미정"} />
-            </div>
+            <PdfToggleBlock label="콘티 이름" className="pdf-title-block">
+              <h2 className="pdf-title">{setlist.title || "제목 없는 콘티"}</h2>
+            </PdfToggleBlock>
+            <PdfToggleBlock label="예배 날짜/이름" className="pdf-info-block">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <InfoLine label="예배 날짜" value={setlist.worshipDate || "미정"} />
+                <InfoLine label="예배 이름" value={setlist.serviceName || "미정"} />
+              </div>
+            </PdfToggleBlock>
           </div>
 
           {setlist.description ? (
