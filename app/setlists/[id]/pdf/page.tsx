@@ -113,25 +113,6 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
     };
   }, [setlist.id, setlist.title]);
 
-  useEffect(() => {
-    function handleBeforePrint() {
-      setPrintError("");
-      setPrintMessage(`인쇄창이 열렸습니다. PDF 저장을 선택해 주세요. ${PRINT_HEADER_FOOTER_HELP}`);
-    }
-
-    function handleAfterPrint() {
-      setPrintMessage("인쇄창을 닫았습니다.");
-    }
-
-    window.addEventListener("beforeprint", handleBeforePrint);
-    window.addEventListener("afterprint", handleAfterPrint);
-
-    return () => {
-      window.removeEventListener("beforeprint", handleBeforePrint);
-      window.removeEventListener("afterprint", handleAfterPrint);
-    };
-  }, []);
-
   function handlePrint() {
     setPrintError("");
 
@@ -141,12 +122,13 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
       return;
     }
 
-    setPrintMessage(`인쇄창을 여는 중입니다. ${PRINT_HEADER_FOOTER_HELP}`);
-
     try {
       document.title = getPdfDocumentTitle(setlist);
       window.focus();
       window.print();
+      window.setTimeout(() => {
+        setPrintMessage(`인쇄창이 열리지 않으면 브라우저 메뉴의 인쇄 또는 Ctrl/Cmd+P를 사용해 주세요. ${PRINT_HEADER_FOOTER_HELP}`);
+      }, 250);
     } catch (printError) {
       setPrintMessage("");
       setPrintError(
