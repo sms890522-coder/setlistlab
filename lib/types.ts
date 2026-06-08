@@ -81,6 +81,7 @@ export const DEFAULT_TEAM_PARTS = [
   "일렉",
   "어쿠스틱",
   "건반",
+  "세컨",
   "베이스",
   "드럼",
   "음향",
