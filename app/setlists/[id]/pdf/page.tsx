@@ -82,6 +82,19 @@ export default function SetlistPdfPage() {
 
 function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
   const teamGroups = useMemo(() => groupTeamAssignments(setlist.teamAssignments), [setlist.teamAssignments]);
+  const [coverExcluded, setCoverExcluded] = useState<Record<string, boolean>>({});
+  const coverItems = [
+    { key: "title", exists: true },
+    { key: "service", exists: true },
+    { key: "description", exists: Boolean(setlist.description) },
+    { key: "globalNotes", exists: Boolean(setlist.globalNotes) },
+    { key: "team", exists: teamGroups.length > 0 },
+  ];
+  const hasVisibleCoverContent = coverItems.some((item) => item.exists && !coverExcluded[item.key]);
+
+  function setCoverItemExcluded(key: string, excluded: boolean) {
+    setCoverExcluded((current) => ({ ...current, [key]: excluded }));
+  }
 
   return (
     <div className="pdf-preview-shell">
@@ -101,13 +114,26 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
       </div>
 
       <article className="pdf-document">
-        <section className={`pdf-cover-page ${setlist.songs.length > 0 ? "pdf-cover-page-with-songs" : ""}`}>
+        <section
+          className={`pdf-cover-page ${hasVisibleCoverContent && setlist.songs.length > 0 ? "pdf-cover-page-with-songs" : ""} ${
+            hasVisibleCoverContent ? "" : "no-print pdf-cover-page-hidden"
+          }`}
+        >
           <div>
-            <p className="pdf-eyebrow">콘티연습실</p>
-            <PdfToggleBlock label="콘티 이름" className="pdf-title-block">
+            <PdfToggleBlock
+              label="콘티 이름"
+              className="pdf-title-block"
+              excluded={Boolean(coverExcluded.title)}
+              onExcludedChange={(excluded) => setCoverItemExcluded("title", excluded)}
+            >
               <h2 className="pdf-title">{setlist.title || "제목 없는 콘티"}</h2>
             </PdfToggleBlock>
-            <PdfToggleBlock label="예배 날짜/이름" className="pdf-info-block">
+            <PdfToggleBlock
+              label="예배 날짜/이름"
+              className="pdf-info-block"
+              excluded={Boolean(coverExcluded.service)}
+              onExcludedChange={(excluded) => setCoverItemExcluded("service", excluded)}
+            >
               <div className="grid gap-2 sm:grid-cols-2">
                 <InfoLine label="예배 날짜" value={setlist.worshipDate || "미정"} />
                 <InfoLine label="예배 이름" value={setlist.serviceName || "미정"} />
@@ -116,19 +142,31 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
           </div>
 
           {setlist.description ? (
-            <PdfToggleBlock label="전체 설명">
+            <PdfToggleBlock
+              label="전체 설명"
+              excluded={Boolean(coverExcluded.description)}
+              onExcludedChange={(excluded) => setCoverItemExcluded("description", excluded)}
+            >
               <p className="pdf-body-text">{setlist.description}</p>
             </PdfToggleBlock>
           ) : null}
 
           {setlist.globalNotes ? (
-            <PdfToggleBlock label="전체 강조사항">
+            <PdfToggleBlock
+              label="전체 강조사항"
+              excluded={Boolean(coverExcluded.globalNotes)}
+              onExcludedChange={(excluded) => setCoverItemExcluded("globalNotes", excluded)}
+            >
               <p className="pdf-body-text">{setlist.globalNotes}</p>
             </PdfToggleBlock>
           ) : null}
 
           {teamGroups.length > 0 ? (
-            <PdfToggleBlock label="이번 주 팀원">
+            <PdfToggleBlock
+              label="이번 주 팀원"
+              excluded={Boolean(coverExcluded.team)}
+              onExcludedChange={(excluded) => setCoverItemExcluded("team", excluded)}
+            >
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {teamGroups.map(({ part, members }) => (
                   <p key={part} className="pdf-team-line">
@@ -139,7 +177,7 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
             </PdfToggleBlock>
           ) : null}
 
-          <p className="pdf-copyright">{COPYRIGHT_NOTICE}</p>
+          {hasVisibleCoverContent ? <p className="pdf-copyright">{COPYRIGHT_NOTICE}</p> : null}
         </section>
 
         {setlist.songs.map((song, index) => (
@@ -222,18 +260,31 @@ function PdfToggleBlock({
   label,
   children,
   className = "pdf-section-block",
+  excluded: controlledExcluded,
+  onExcludedChange,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  excluded?: boolean;
+  onExcludedChange?: (excluded: boolean) => void;
 }) {
-  const [excluded, setExcluded] = useState(false);
+  const [uncontrolledExcluded, setUncontrolledExcluded] = useState(false);
+  const excluded = controlledExcluded ?? uncontrolledExcluded;
+
+  function updateExcluded(nextExcluded: boolean) {
+    if (onExcludedChange) {
+      onExcludedChange(nextExcluded);
+    } else {
+      setUncontrolledExcluded(nextExcluded);
+    }
+  }
 
   if (excluded) {
     return (
       <section className="no-print pdf-excluded-block">
         <label className="pdf-exclude-toggle">
-          <input type="checkbox" checked={excluded} onChange={(event) => setExcluded(event.target.checked)} />
+          <input type="checkbox" checked={excluded} onChange={(event) => updateExcluded(event.target.checked)} />
           <span>빼기</span>
           <strong>{label}</strong>
         </label>
@@ -245,7 +296,7 @@ function PdfToggleBlock({
   return (
     <section className={className}>
       <label className="pdf-exclude-toggle no-print">
-        <input type="checkbox" checked={excluded} onChange={(event) => setExcluded(event.target.checked)} />
+        <input type="checkbox" checked={excluded} onChange={(event) => updateExcluded(event.target.checked)} />
         <span>빼기</span>
         <strong>{label}</strong>
       </label>

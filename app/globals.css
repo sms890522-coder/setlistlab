@@ -97,6 +97,10 @@ select {
     @apply flex min-h-[42rem] flex-col;
   }
 
+  .pdf-cover-page-hidden {
+    @apply min-h-0 gap-2 p-3 sm:p-3;
+  }
+
   .pdf-song-page {
     @apply border-t border-slate-200;
   }
@@ -154,11 +158,11 @@ select {
   }
 
   .pdf-song-index {
-    @apply flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-black text-white;
+    @apply flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-black text-white;
   }
 
   .pdf-song-title {
-    @apply text-lg font-black leading-tight text-slate-950;
+    @apply text-base font-black leading-tight text-slate-950;
   }
 
   .pdf-song-meta {
@@ -290,7 +294,7 @@ select {
   }
 
   .pdf-song-title {
-    font-size: 14pt !important;
+    font-size: 11pt !important;
     line-height: 1.25 !important;
   }
 
@@ -310,7 +314,7 @@ select {
 
   .pdf-image {
     max-width: 100% !important;
-    max-height: 255mm !important;
+    max-height: 240mm !important;
     height: auto !important;
     object-fit: contain;
   }
