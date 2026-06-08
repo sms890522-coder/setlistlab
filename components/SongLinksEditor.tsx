@@ -1,9 +1,10 @@
 "use client";
 
 import { createBlankSongLink } from "@/lib/factories";
+import { uploadCloudinarySongImage } from "@/lib/cloudinary";
 import { getImagePreviewUrl } from "@/lib/images";
 import type { SongLink } from "@/lib/types";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type SongLinksEditorProps = {
@@ -16,6 +17,9 @@ type SongLinksEditorProps = {
   urlPlaceholder?: string;
   deleteMessage?: string;
   showPreview?: boolean;
+  enableImageUpload?: boolean;
+  uploadLabel?: string;
+  maxLinks?: number;
 };
 
 export function SongLinksEditor({
@@ -28,21 +32,88 @@ export function SongLinksEditor({
   urlPlaceholder = "https://...",
   deleteMessage = "악보/참고 링크를 삭제할까요?",
   showPreview = false,
+  enableImageUpload = false,
+  uploadLabel = "이미지 직접 넣기",
+  maxLinks = 10,
 }: SongLinksEditorProps) {
   const [deleteTarget, setDeleteTarget] = useState<SongLink | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function updateLink(id: string, patch: Partial<SongLink>) {
     onChange(links.map((link) => (link.id === id ? { ...link, ...patch } : link)));
   }
 
+  async function handleImageUpload(files: FileList | null) {
+    const selectedFiles = Array.from(files ?? []);
+    if (selectedFiles.length === 0) return;
+
+    if (links.length + selectedFiles.length > maxLinks) {
+      setUploadError(`이미지는 한 곡에 최대 ${maxLinks}개까지 넣을 수 있습니다.`);
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setUploadError("");
+      setUploadMessage("");
+      const uploadedLinks: SongLink[] = [];
+      for (const file of selectedFiles) {
+        const uploaded = await uploadCloudinarySongImage(file);
+        uploadedLinks.push({
+          ...createBlankSongLink(),
+          label: getImageLabel(file.name),
+          url: uploaded.url,
+        });
+      }
+
+      onChange([...links, ...uploadedLinks]);
+      setUploadMessage(`${uploadedLinks.length}개 이미지를 넣었습니다.`);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "이미지를 업로드하지 못했습니다.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h5 className="font-bold text-slate-950">{title}</h5>
-        <button type="button" onClick={() => onChange([...links, createBlankSongLink()])} className="btn-secondary min-h-10 px-3">
-          {addLabel}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {enableImageUpload ? (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="hidden"
+                onChange={(event) => handleImageUpload(event.target.files)}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="btn-primary min-h-10 px-3"
+              >
+                {uploading ? "이미지 넣는 중" : uploadLabel}
+              </button>
+            </>
+          ) : null}
+          <button type="button" onClick={() => onChange([...links, createBlankSongLink()])} className="btn-secondary min-h-10 px-3">
+            {addLabel}
+          </button>
+        </div>
       </div>
+
+      {uploadMessage ? <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{uploadMessage}</p> : null}
+      {uploadError ? <p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{uploadError}</p> : null}
 
       {links.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
@@ -149,4 +220,8 @@ export function SongLinksEditor({
 
 export function isHttpUrl(url: string) {
   return /^https?:\/\/\S+$/i.test(url.trim());
+}
+
+function getImageLabel(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, "").trim() || "곡 이미지";
 }

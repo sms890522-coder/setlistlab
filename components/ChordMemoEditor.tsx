@@ -27,17 +27,19 @@ export function ChordMemoEditor({ song, onChange }: ChordMemoEditorProps) {
           <SongLinksEditor
             links={song.imageLinks ?? []}
             onChange={(imageLinks) => onChange({ imageLinks })}
-            title="곡 이미지 링크"
-            addLabel="이미지 추가"
+            title="곡 이미지"
+            addLabel="링크로 추가"
             emptyMessage="등록된 곡 이미지가 없습니다."
             labelPlaceholder="대표 이미지, 악보 이미지"
             urlPlaceholder="Google Drive, Dropbox, 이미지 링크"
             deleteMessage="곡 이미지 링크를 삭제할까요?"
             showPreview
+            enableImageUpload
+            uploadLabel="이미지 직접 넣기"
           />
           <p className="mt-3 text-xs leading-5 text-blue-800">
-            이미지 파일은 앱에 직접 저장하지 않고 링크만 보관합니다. Google Drive, Dropbox, 이미지 호스팅 등에 올린 뒤
-            공유 링크를 붙여넣어 주세요.
+            이미지는 앱 서버가 아니라 별도 이미지 저장공간에 올리고, 곡에는 주소만 보관합니다. 직접 넣기와 링크 추가를
+            함께 사용할 수 있습니다.
           </p>
         </div>
       </div>

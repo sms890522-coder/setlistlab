@@ -35,6 +35,8 @@ npm run dev
 ```txt
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=
+NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=
 ```
 
 4. Supabase Auth에서 이메일 로그인 또는 구글 OAuth를 켭니다.
@@ -57,3 +59,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 - `setlists`: 콘티 본문과 곡 목록 JSON
 - `setlist_assignments`: 콘티별 이번 주 팀원 배정
 - `shared_setlists`: 기존 MVP 공유 링크 호환용
+
+## 이미지 업로드 설정
+
+곡 이미지는 앱 서버에 저장하지 않고 Cloudinary에 직접 업로드합니다.
+
+1. Cloudinary에서 unsigned upload preset을 만듭니다.
+2. Vercel 환경변수에 `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`, `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET`을 넣습니다.
+3. 앱은 업로드 전에 이미지를 1600px 이하로 줄인 뒤 업로드하고, 곡에는 이미지 주소만 저장합니다.
