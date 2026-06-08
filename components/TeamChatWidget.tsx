@@ -215,8 +215,8 @@ export function TeamChatWidget() {
   return (
     <div className="fixed bottom-4 right-4 z-40 sm:bottom-6 sm:right-6">
       {open ? (
-        <section className="mb-3 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
-          <div className="border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 p-4">
+        <section className="mb-3 flex max-h-[calc(100dvh-6.5rem)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:max-h-[34rem]">
+          <div className="shrink-0 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-black text-blue-700">팀 채팅</p>
@@ -229,7 +229,7 @@ export function TeamChatWidget() {
             </div>
           </div>
 
-          <div className="max-h-[26rem] overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {chatState === "disabled" || chatState === "signed-out" || chatState === "profile-needed" ? (
               <div className="space-y-3 p-4">
                 <p className="rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">{statusMessage}</p>
@@ -245,7 +245,7 @@ export function TeamChatWidget() {
               </div>
             ) : (
               <>
-                <div className="border-b border-slate-100 p-3">
+                <div className="shrink-0 border-b border-slate-100 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-black text-slate-500">접속중인 팀원</p>
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
@@ -268,9 +268,9 @@ export function TeamChatWidget() {
                   )}
                 </div>
 
-                <div className="h-72 overflow-y-auto bg-slate-50 p-3">
+                <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3">
                   {messages.length === 0 ? (
-                    <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white p-4 text-center text-sm leading-6 text-slate-500">
+                    <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white p-4 text-center text-sm leading-6 text-slate-500">
                       같은 팀원이 접속해 있으면 여기서 바로 대화할 수 있습니다.
                     </div>
                   ) : (
@@ -303,17 +303,17 @@ export function TeamChatWidget() {
                   )}
                 </div>
 
-                <form onSubmit={sendMessage} className="border-t border-slate-100 bg-white p-3">
+                <form onSubmit={sendMessage} className="shrink-0 border-t border-slate-100 bg-white p-3 pb-4">
                   <div className="flex gap-2">
                     <input
                       value={messageText}
                       onChange={(event) => setMessageText(event.target.value.slice(0, MAX_MESSAGE_LENGTH))}
                       disabled={!canChat}
-                      className="field-input min-h-11 flex-1"
+                      className="field-input min-h-11 flex-1 text-base sm:text-sm"
                       placeholder={canChat ? "메시지 입력" : "연결 중입니다"}
                       aria-label="팀 채팅 메시지"
                     />
-                    <button type="submit" disabled={!canChat || !messageText.trim()} className="btn-primary min-h-11 px-4">
+                    <button type="submit" disabled={!canChat || !messageText.trim()} className="btn-primary min-h-11 shrink-0 px-4">
                       보내기
                     </button>
                   </div>
