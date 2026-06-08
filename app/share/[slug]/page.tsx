@@ -116,7 +116,10 @@ export default function SharedSetlistPage() {
                 <div key={song.id} className="space-y-3">
                   <article className="card p-5">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                      <div className="flex min-w-0 flex-1 items-start gap-4">
+                      <Link
+                        href={`/share/${params.slug}/songs/${song.id}`}
+                        className="flex min-w-0 flex-1 items-start gap-4 rounded-xl transition hover:opacity-80 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                      >
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
                           {index + 1}
                         </span>
@@ -145,25 +148,8 @@ export default function SharedSetlistPage() {
                           {song.chordMemo ? (
                             <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">{song.chordMemo}</p>
                           ) : null}
-                          {(song.sheetLinks?.length ?? 0) > 0 ? (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {song.sheetLinks
-                                ?.filter((link) => /^https?:\/\//i.test(link.url))
-                                .map((link) => (
-                                  <a
-                                    key={link.id}
-                                    href={link.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn-secondary min-h-9 px-3"
-                                  >
-                                    {link.label || "참고 링크"}
-                                  </a>
-                                ))}
-                            </div>
-                          ) : null}
                         </div>
-                      </div>
+                      </Link>
                       <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
                         <input
                           type="checkbox"
@@ -174,6 +160,23 @@ export default function SharedSetlistPage() {
                         연습 완료
                       </label>
                     </div>
+                    {(song.sheetLinks?.length ?? 0) > 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-2 sm:pl-[3.25rem]">
+                        {song.sheetLinks
+                          ?.filter((link) => /^https?:\/\//i.test(link.url))
+                          .map((link) => (
+                            <a
+                              key={link.id}
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-secondary min-h-9 px-3"
+                            >
+                              {link.label || "참고 링크"}
+                            </a>
+                          ))}
+                      </div>
+                    ) : null}
                   </article>
                   {song.transitionNote ? (
                     <div className="mx-3 rounded-lg border border-violet-100 bg-violet-50 px-4 py-3 text-sm leading-6 text-violet-800">
