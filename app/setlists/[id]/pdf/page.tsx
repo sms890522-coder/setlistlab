@@ -389,7 +389,7 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
   }
 
   const splitTotalScreenHeight = 720;
-  const splitTotalPrintHeight = 290;
+  const splitTotalPrintHeight = 296;
   const splitTopScreenHeight = Math.round((splitTotalScreenHeight * splitRatio) / 100);
   const splitBottomScreenHeight = splitTotalScreenHeight - splitTopScreenHeight;
   const splitTopPrintHeight = Math.round((splitTotalPrintHeight * splitRatio) / 100);
@@ -397,8 +397,8 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
 
   const imageStyle = {
     "--pdf-image-width": `${scale}%`,
-    "--pdf-image-max-height": "290mm",
-    "--pdf-image-compress-height": `${Math.round((290 * verticalScale) / 100)}mm`,
+    "--pdf-image-max-height": "296mm",
+    "--pdf-image-compress-height": `${Math.round((296 * verticalScale) / 100)}mm`,
     "--pdf-image-compress-height-screen": `${Math.round((720 * verticalScale) / 100)}px`,
     "--pdf-image-split-total-screen-height": `${splitTotalScreenHeight}px`,
     "--pdf-image-split-top-screen-height": `${splitTopScreenHeight}px`,

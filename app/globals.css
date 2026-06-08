@@ -312,7 +312,7 @@ select {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 2mm;
+    margin: 0;
   }
 
   html,
@@ -346,7 +346,7 @@ select {
   }
 
   .pdf-cover-page {
-    min-height: calc(297mm - 4mm);
+    min-height: 297mm;
   }
 
   .pdf-cover-page-with-songs {
@@ -372,7 +372,7 @@ select {
   }
 
   .pdf-section-block {
-    margin-top: 2mm !important;
+    margin-top: 1mm !important;
   }
 
   .pdf-title {
@@ -418,14 +418,14 @@ select {
   .pdf-image {
     max-width: 100% !important;
     width: var(--pdf-image-width, 100%) !important;
-    max-height: var(--pdf-image-max-height, 290mm) !important;
+    max-height: var(--pdf-image-max-height, 296mm) !important;
     height: auto !important;
     object-fit: contain;
   }
 
   .pdf-image-frame-compress-y .pdf-image {
     width: 100% !important;
-    height: var(--pdf-image-compress-height, 247mm) !important;
+    height: var(--pdf-image-compress-height, 252mm) !important;
     max-height: none !important;
     object-fit: fill !important;
   }
@@ -443,11 +443,11 @@ select {
   }
 
   .pdf-split-piece-top {
-    height: var(--pdf-image-split-top-print-height, 145mm) !important;
+    height: var(--pdf-image-split-top-print-height, 148mm) !important;
   }
 
   .pdf-split-piece-bottom {
-    height: var(--pdf-image-split-bottom-print-height, 145mm) !important;
+    height: var(--pdf-image-split-bottom-print-height, 148mm) !important;
     margin-top: 0 !important;
     break-before: page;
     page-break-before: always;
@@ -455,7 +455,7 @@ select {
 
   .pdf-split-image {
     width: 100% !important;
-    height: var(--pdf-image-split-total-print-height, 290mm) !important;
+    height: var(--pdf-image-split-total-print-height, 296mm) !important;
     max-width: 100% !important;
     max-height: none !important;
     margin: 0 !important;
@@ -464,13 +464,13 @@ select {
   }
 
   .pdf-split-image-bottom {
-    transform: translateY(calc(-1 * var(--pdf-image-split-top-print-height, 145mm))) !important;
+    transform: translateY(calc(-1 * var(--pdf-image-split-top-print-height, 148mm))) !important;
   }
 
   .pdf-print-watermark {
     position: fixed;
-    right: 2mm;
-    bottom: 1.5mm;
+    right: 1mm;
+    bottom: 1mm;
     z-index: 50;
     display: block !important;
     font-size: 6pt;
