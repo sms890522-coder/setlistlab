@@ -31,6 +31,11 @@ export default function OnboardingPage() {
       }
 
       const profile = await getMyProfile();
+      if (profile?.role?.trim() && profile.churchName?.trim()) {
+        router.replace(getRedirectPath());
+        return;
+      }
+
       setDisplayName(profile?.displayName || user.email?.split("@")[0] || "");
       setRole(profile?.role || "찬양인도자");
       setCustomRole(profile?.customRole || "");
@@ -103,7 +108,7 @@ export default function OnboardingPage() {
             </label>
             <label className="space-y-1">
               <span className="field-label">교회 이름</span>
-              <input value={churchName} onChange={(event) => setChurchName(event.target.value)} className="field-input" />
+              <input value={churchName} onChange={(event) => setChurchName(event.target.value)} className="field-input" required />
             </label>
             <label className="space-y-1">
               <span className="field-label">기본 예배 이름</span>
