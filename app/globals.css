@@ -190,11 +190,63 @@ select {
   }
 
   .pdf-image {
-    @apply block h-auto w-full rounded-md;
+    display: block;
+    width: var(--pdf-image-width, 100%);
+    max-width: 100%;
+    max-height: var(--pdf-image-max-height, none);
+    height: auto;
+    margin-right: auto;
+    margin-left: auto;
+    border-radius: 0.375rem;
+    object-fit: contain;
   }
 
   .pdf-image-caption {
     @apply mt-1 text-[10px] font-semibold text-slate-500;
+  }
+
+  .pdf-image-controls {
+    @apply mb-2 rounded-lg border border-slate-200 bg-slate-50 p-2;
+  }
+
+  .pdf-image-mode-button {
+    @apply rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700;
+  }
+
+  .pdf-image-mode-button-active {
+    @apply border-blue-500 bg-blue-600 text-white hover:border-blue-500 hover:bg-blue-700 hover:text-white;
+  }
+
+  .pdf-image-control-field {
+    @apply block text-[11px] font-bold text-slate-600;
+  }
+
+  .pdf-image-control-field span {
+    @apply mb-1 block;
+  }
+
+  .pdf-image-control-field input[type="range"] {
+    @apply w-full accent-blue-600;
+  }
+
+  .pdf-image-control-field select {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100;
+  }
+
+  .pdf-image-frame-next-page {
+    @apply border-blue-200 bg-blue-50/30;
+  }
+
+  .pdf-image-frame-crop {
+    @apply bg-slate-50;
+  }
+
+  .pdf-image-frame-crop .pdf-image {
+    width: 100%;
+    height: min(var(--pdf-image-crop-height-screen, 340px), 70vh);
+    max-height: none;
+    object-fit: cover;
+    object-position: var(--pdf-image-position, center center);
   }
 
   .pdf-exclude-toggle {
@@ -312,10 +364,28 @@ select {
     border: 0 !important;
   }
 
+  .pdf-image-frame-next-page {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .pdf-image-frame-crop {
+    overflow: hidden !important;
+  }
+
   .pdf-image {
     max-width: 100% !important;
-    max-height: 240mm !important;
+    width: var(--pdf-image-width, 100%) !important;
+    max-height: var(--pdf-image-max-height, 250mm) !important;
     height: auto !important;
     object-fit: contain;
+  }
+
+  .pdf-image-frame-crop .pdf-image {
+    width: 100% !important;
+    height: var(--pdf-image-crop-height, 220mm) !important;
+    max-height: none !important;
+    object-fit: cover !important;
+    object-position: var(--pdf-image-position, center center) !important;
   }
 }

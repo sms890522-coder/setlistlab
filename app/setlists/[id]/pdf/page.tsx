@@ -10,11 +10,14 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { groupTeamAssignments } from "@/lib/teamAssignments";
 import type { Setlist, Song, SongLink } from "@/lib/types";
 import { useParams } from "next/navigation";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 const COPYRIGHT_NOTICE =
   "악보 이미지는 사용 권한이 있는 자료만 등록해 주세요. 공유 및 출력 시 교회가 보유한 라이선스와 저작권 정책을 확인해 주세요.";
+
+type PdfImageMode = "fit" | "next-page" | "crop";
+type PdfCropPosition = "top" | "center" | "bottom";
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -307,14 +310,81 @@ function PdfToggleBlock({
 
 function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) {
   const [failed, setFailed] = useState(false);
+  const [mode, setMode] = useState<PdfImageMode>("fit");
+  const [scale, setScale] = useState(100);
+  const [cropHeight, setCropHeight] = useState(220);
+  const [cropPosition, setCropPosition] = useState<PdfCropPosition>("center");
   const imageUrl = getImagePreviewUrl(link.url);
 
   if (failed) {
     return <p className="no-print rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">악보 이미지를 불러오지 못했습니다.</p>;
   }
 
+  const imageStyle = {
+    "--pdf-image-width": `${scale}%`,
+    "--pdf-image-max-height": "250mm",
+    "--pdf-image-crop-height": `${cropHeight}mm`,
+    "--pdf-image-crop-height-screen": `${Math.round(cropHeight * 1.55)}px`,
+    "--pdf-image-position": getCropObjectPosition(cropPosition),
+  } as CSSProperties;
+
   return (
-    <figure className="pdf-image-frame">
+    <figure
+      className={`pdf-image-frame ${mode === "next-page" ? "pdf-image-frame-next-page" : ""} ${
+        mode === "crop" ? "pdf-image-frame-crop" : ""
+      }`}
+      style={imageStyle}
+    >
+      <div className="no-print pdf-image-controls">
+        <div className="flex flex-wrap gap-1.5">
+          <PdfImageModeButton mode={mode} value="fit" onChange={setMode}>
+            줄여서 넣기
+          </PdfImageModeButton>
+          <PdfImageModeButton mode={mode} value="next-page" onChange={setMode}>
+            다음 장
+          </PdfImageModeButton>
+          <PdfImageModeButton mode={mode} value="crop" onChange={setMode}>
+            잘라서 넣기
+          </PdfImageModeButton>
+        </div>
+
+        {mode === "crop" ? (
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr]">
+            <label className="pdf-image-control-field">
+              <span>남길 위치</span>
+              <select value={cropPosition} onChange={(event) => setCropPosition(event.target.value as PdfCropPosition)}>
+                <option value="top">위쪽</option>
+                <option value="center">가운데</option>
+                <option value="bottom">아래쪽</option>
+              </select>
+            </label>
+            <label className="pdf-image-control-field">
+              <span>자르기 높이 {cropHeight}mm</span>
+              <input
+                type="range"
+                min="120"
+                max="260"
+                step="10"
+                value={cropHeight}
+                onChange={(event) => setCropHeight(Number(event.target.value))}
+              />
+            </label>
+          </div>
+        ) : (
+          <label className="pdf-image-control-field mt-2">
+            <span>이미지 크기 {scale}%</span>
+            <input
+              type="range"
+              min="45"
+              max="100"
+              step="5"
+              value={scale}
+              onChange={(event) => setScale(Number(event.target.value))}
+            />
+          </label>
+        )}
+      </div>
+
       <img
         src={imageUrl}
         alt={link.label || `악보 이미지 ${imageIndex + 1}`}
@@ -324,6 +394,34 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
       {link.label ? <figcaption className="pdf-image-caption">{link.label}</figcaption> : null}
     </figure>
   );
+}
+
+function PdfImageModeButton({
+  mode,
+  value,
+  onChange,
+  children,
+}: {
+  mode: PdfImageMode;
+  value: PdfImageMode;
+  onChange: (mode: PdfImageMode) => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(value)}
+      className={mode === value ? "pdf-image-mode-button pdf-image-mode-button-active" : "pdf-image-mode-button"}
+    >
+      {children}
+    </button>
+  );
+}
+
+function getCropObjectPosition(position: PdfCropPosition) {
+  if (position === "top") return "center top";
+  if (position === "bottom") return "center bottom";
+  return "center center";
 }
 
 function InfoLine({ label, value }: { label: string; value: string }) {
