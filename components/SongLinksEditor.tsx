@@ -161,7 +161,7 @@ export function SongLinksEditor({
                     <img
                       src={previewUrl}
                       alt={link.label || "곡 이미지 미리보기"}
-                      className="aspect-[4/3] w-full rounded-lg border border-slate-100 object-cover"
+                      className="h-auto w-full rounded-lg border border-slate-100"
                       loading="lazy"
                     />
                     <p className="mt-2 text-xs leading-5 text-slate-500">

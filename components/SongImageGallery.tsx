@@ -26,7 +26,7 @@ export function SongImageGallery({ imageLinks = [] }: SongImageGalleryProps) {
             <img
               src={getImagePreviewUrl(link.url)}
               alt={link.label || "곡 이미지"}
-              className="aspect-[4/3] w-full rounded-md object-cover"
+              className="h-auto w-full rounded-md"
               loading="lazy"
             />
             <p className="mt-3 text-sm font-bold text-slate-800 group-hover:text-blue-700">{link.label || "이미지 열기"}</p>
