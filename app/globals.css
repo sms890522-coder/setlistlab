@@ -411,6 +411,10 @@ select {
     border: 0 !important;
   }
 
+  .pdf-image-caption {
+    display: none !important;
+  }
+
   .pdf-image-frame-next-page {
     break-before: page;
     page-break-before: always;

@@ -17,6 +17,7 @@ const PRINT_HEADER_FOOTER_HELP =
   "주소, 날짜, 페이지 번호는 브라우저 인쇄 옵션이라 앱에서 자동으로 끌 수 없습니다. 인쇄창에서 머리글/바닥글을 꺼 주세요.";
 
 type PdfImageMode = "fit" | "compress-y" | "next-page" | "split";
+const DEFAULT_PDF_IMAGE_VERTICAL_SCALE = 90;
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -281,13 +282,13 @@ function SongPdfPage({ song, index, isLast }: { song: Song; index: number; isLas
       ) : null}
 
       {song.description ? (
-        <PdfToggleBlock label="곡 설명">
+        <PdfToggleBlock label="곡 설명" defaultExcluded>
           <p className="pdf-body-text">{song.description}</p>
         </PdfToggleBlock>
       ) : null}
 
       {song.highlights.length > 0 ? (
-        <PdfToggleBlock label="강조사항">
+        <PdfToggleBlock label="강조사항" defaultExcluded>
           <ul className="pdf-list">
             {song.highlights.map((highlight, highlightIndex) => (
               <li key={`${highlight}-${highlightIndex}`}>{highlight}</li>
@@ -297,7 +298,7 @@ function SongPdfPage({ song, index, isLast }: { song: Song; index: number; isLas
       ) : null}
 
       {song.partNotes.length > 0 ? (
-        <PdfToggleBlock label="파트별 메모">
+        <PdfToggleBlock label="파트별 메모" defaultExcluded>
           <div className="space-y-2">
             {song.partNotes.map((partNote) => (
               <p key={partNote.id} className="pdf-part-note">
@@ -332,15 +333,17 @@ function PdfToggleBlock({
   children,
   className = "pdf-section-block",
   excluded: controlledExcluded,
+  defaultExcluded = false,
   onExcludedChange,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
   excluded?: boolean;
+  defaultExcluded?: boolean;
   onExcludedChange?: (excluded: boolean) => void;
 }) {
-  const [uncontrolledExcluded, setUncontrolledExcluded] = useState(false);
+  const [uncontrolledExcluded, setUncontrolledExcluded] = useState(defaultExcluded);
   const excluded = controlledExcluded ?? uncontrolledExcluded;
 
   function updateExcluded(nextExcluded: boolean) {
@@ -378,9 +381,9 @@ function PdfToggleBlock({
 
 function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) {
   const [failed, setFailed] = useState(false);
-  const [mode, setMode] = useState<PdfImageMode>("fit");
+  const [mode, setMode] = useState<PdfImageMode>("compress-y");
   const [scale, setScale] = useState(100);
-  const [verticalScale, setVerticalScale] = useState(85);
+  const [verticalScale, setVerticalScale] = useState(DEFAULT_PDF_IMAGE_VERTICAL_SCALE);
   const [splitRatio, setSplitRatio] = useState(50);
   const imageUrl = getImagePreviewUrl(link.url);
 
