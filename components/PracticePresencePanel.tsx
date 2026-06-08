@@ -1,6 +1,7 @@
 "use client";
 
 import { getActivePracticePresence, heartbeatPracticePresence, type PracticePresence } from "@/lib/db/practicePresence";
+import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import type { Setlist, Song } from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
 
@@ -84,7 +85,7 @@ export function PracticePresencePanel({ setlist, song }: PracticePresencePanelPr
         <div className="mt-3 flex flex-wrap gap-2">
           {Object.entries(groupedPresence).map(([role, names]) => (
             <span key={role} className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800">
-              {role}: {names.join(", ")}
+              {role}: {names.map((name) => formatMemberNameWithEmoji(role, name)).join(", ")}
             </span>
           ))}
         </div>

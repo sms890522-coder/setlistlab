@@ -11,6 +11,7 @@ import { getCloudSetlist, getCloudSetlists, saveCloudSetlist } from "@/lib/db/se
 import { deleteCloudSongFromLibrary, getCloudSongLibrary } from "@/lib/db/savedSongs";
 import { getTeamMembers, teamMemberToAssignment, type TeamMember } from "@/lib/db/teamMembers";
 import { cloneSong, createBlankSong } from "@/lib/factories";
+import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { deleteSongFromLibrary, getSetlists, getSongLibrary, saveSetlist } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { SavedSong, Setlist, Song, TeamAssignment } from "@/lib/types";
@@ -298,7 +299,7 @@ export default function SetlistEditPage() {
                 onClick={() => addTeamMemberToSetlist(member)}
                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
               >
-                <span className="text-blue-700">{member.role}</span>: {member.name}
+                <span className="text-blue-700">{member.role}</span>: {formatMemberNameWithEmoji(member.role, member.name)}
               </button>
             ))}
           </div>

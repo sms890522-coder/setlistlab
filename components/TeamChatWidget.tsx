@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile, type Profile } from "@/lib/db/profiles";
 import { createId } from "@/lib/id";
+import { formatMemberNameWithEmoji, getRoleEmoji } from "@/lib/roleEmoji";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   getProfileRole,
@@ -261,7 +262,7 @@ export function TeamChatWidget() {
                           key={`${member.userId}-${member.onlineAt}`}
                           className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-800"
                         >
-                          {member.role}: {member.displayName}
+                          {member.role}: {formatMemberNameWithEmoji(member.role, member.displayName)}
                         </span>
                       ))}
                     </div>
@@ -288,7 +289,7 @@ export function TeamChatWidget() {
                               }
                             >
                               <p className={isMine ? "text-xs font-bold text-blue-100" : "text-xs font-bold text-blue-700"}>
-                                {message.role} · {message.displayName}
+                                {getRoleEmoji(message.role)} {message.role} · {message.displayName}
                               </p>
                               <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6">{message.text}</p>
                               <p className={isMine ? "mt-1 text-right text-[11px] text-blue-100" : "mt-1 text-right text-[11px] text-slate-400"}>

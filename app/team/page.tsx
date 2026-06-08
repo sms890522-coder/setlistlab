@@ -4,6 +4,7 @@ import Link from "next/link";
 import { DEFAULT_TEAM_PARTS } from "@/lib/types";
 import { getMyProfile } from "@/lib/db/profiles";
 import { deleteTeamMember, getTeamMembers, saveTeamMember, type TeamMember } from "@/lib/db/teamMembers";
+import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -210,7 +211,7 @@ export default function TeamPage() {
                               : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
                           }`}
                         >
-                          {member.role}: {member.name}
+                          {member.role}: {formatMemberNameWithEmoji(member.role, member.name)}
                         </button>
                       ))}
                     </div>

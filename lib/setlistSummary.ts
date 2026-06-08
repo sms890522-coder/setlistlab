@@ -1,5 +1,6 @@
 import type { Setlist } from "./types";
 import { groupTeamAssignments } from "./teamAssignments";
+import { formatMemberNameWithEmoji } from "./roleEmoji";
 
 type SetlistSummaryOptions = {
   playUrl?: string;
@@ -16,7 +17,7 @@ export function formatSetlistSummary(setlist: Setlist, options: SetlistSummaryOp
   if (assignmentGroups.length > 0) {
     lines.push("", "[팀원 파트]");
     assignmentGroups.forEach(({ part, members }) => {
-      lines.push(`${part}: ${members.map((member) => member.name || "이름 미정").join(", ")}`);
+      lines.push(`${part}: ${members.map((member) => formatMemberNameWithEmoji(part, member.name)).join(", ")}`);
     });
   }
 

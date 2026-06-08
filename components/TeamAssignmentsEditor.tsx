@@ -1,6 +1,7 @@
 "use client";
 
 import { createBlankTeamAssignment } from "@/lib/factories";
+import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { sortTeamAssignments } from "@/lib/teamAssignments";
 import { DEFAULT_TEAM_PARTS, type TeamAssignment } from "@/lib/types";
 import { useState } from "react";
@@ -150,7 +151,7 @@ export function TeamAssignmentsEditor({ assignments, onChange }: TeamAssignments
             >
               <span className={editingId === assignment.id ? "text-blue-100" : "text-blue-700"}>{assignment.part}</span>
               <span className="mx-1 text-current">:</span>
-              <span>{assignment.name || "이름 미정"}</span>
+              <span>{formatMemberNameWithEmoji(assignment.part, assignment.name)}</span>
             </button>
           ))}
         </div>
