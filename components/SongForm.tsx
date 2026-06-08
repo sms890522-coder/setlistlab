@@ -103,6 +103,35 @@ export function SongForm({
               </span>
             ) : null}
           </div>
+          {song.youtubeVideoId ? (
+            <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 lg:col-span-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h4 className="font-bold text-slate-950">유튜브로 송폼 만들기</h4>
+                  <p className="field-help">
+                    확인 버튼을 누르면 영상 재생 중 Intro, Verse, Chorus 버튼으로 구간을 바로 찍을 수 있습니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSectionBuilderOpen((value) => !value)}
+                  className="btn-secondary min-h-10 px-3"
+                >
+                  {sectionBuilderOpen ? "송폼 만들기 접기" : "송폼 만들기 열기"}
+                </button>
+              </div>
+
+              {sectionBuilderOpen ? (
+                <div className="mt-4">
+                  <YouTubePlayer
+                    videoId={song.youtubeVideoId}
+                    sections={song.sections}
+                    onSectionsChange={(sections) => updateSong({ sections })}
+                  />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
           <label className="space-y-1 lg:col-span-2">
             <span className="field-label">곡 설명</span>
             <textarea
@@ -161,36 +190,6 @@ export function SongForm({
 
         <CapoTransposeHelper song={song} onChange={updateSong} />
         <ChordMemoEditor song={song} onChange={updateSong} />
-
-        {song.youtubeVideoId ? (
-          <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h4 className="font-bold text-slate-950">유튜브로 송폼 만들기</h4>
-                <p className="field-help">
-                  확인 버튼을 누르면 영상 재생 중 Intro, Verse, Chorus 버튼으로 구간을 바로 찍을 수 있습니다.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSectionBuilderOpen((value) => !value)}
-                className="btn-secondary min-h-10 px-3"
-              >
-                {sectionBuilderOpen ? "송폼 만들기 접기" : "송폼 만들기 열기"}
-              </button>
-            </div>
-
-            {sectionBuilderOpen ? (
-              <div className="mt-4">
-                <YouTubePlayer
-                  videoId={song.youtubeVideoId}
-                  sections={song.sections}
-                  onSectionsChange={(sections) => updateSong({ sections })}
-                />
-              </div>
-            ) : null}
-          </section>
-        ) : null}
 
         <SectionEditor sections={song.sections} onChange={(sections) => updateSong({ sections })} />
         <PartNotesEditor partNotes={song.partNotes} onChange={(partNotes) => updateSong({ partNotes })} />
