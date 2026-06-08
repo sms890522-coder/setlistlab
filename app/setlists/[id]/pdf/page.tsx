@@ -11,13 +11,17 @@ import { groupTeamAssignments } from "@/lib/teamAssignments";
 import type { Setlist, Song, SongLink } from "@/lib/types";
 import { useParams } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const PRINT_HEADER_FOOTER_HELP =
   "주소, 날짜, 페이지 번호는 브라우저 인쇄 옵션이라 앱에서 자동으로 끌 수 없습니다. 인쇄창에서 머리글/바닥글을 꺼 주세요.";
 
 type PdfImageMode = "fit" | "compress-y" | "next-page" | "split";
 const DEFAULT_PDF_IMAGE_VERTICAL_SCALE = 90;
+const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
+const PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT = 80;
+const PDF_IMAGE_HEIGHT_TARGET_PERCENT = 72;
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -367,7 +371,25 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
   const [scale, setScale] = useState(100);
   const [verticalScale, setVerticalScale] = useState(DEFAULT_PDF_IMAGE_VERTICAL_SCALE);
   const [splitRatio, setSplitRatio] = useState(50);
+  const verticalScaleTouchedRef = useRef(false);
   const imageUrl = getImagePreviewUrl(link.url);
+
+  useEffect(() => {
+    let cancelled = false;
+    verticalScaleTouchedRef.current = false;
+    setVerticalScale(DEFAULT_PDF_IMAGE_VERTICAL_SCALE);
+
+    const image = new window.Image();
+    image.onload = () => {
+      if (cancelled || verticalScaleTouchedRef.current) return;
+      setVerticalScale(getDefaultPdfImageVerticalScale(image.naturalWidth, image.naturalHeight));
+    };
+    image.src = imageUrl;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
 
   if (failed) {
     return <p className="no-print rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">악보 이미지를 불러오지 못했습니다.</p>;
@@ -433,7 +455,10 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
             max="100"
             step="5"
             value={verticalScale}
-            onChange={(event) => setVerticalScale(Number(event.target.value))}
+            onChange={(event) => {
+              verticalScaleTouchedRef.current = true;
+              setVerticalScale(Number(event.target.value));
+            }}
           />
         </label>
       ) : null}
@@ -552,4 +577,19 @@ function getSongImageLinks(song: Song) {
 function getPdfDocumentTitle(setlist: Setlist) {
   const title = (setlist.title || "콘티").trim();
   return title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").slice(0, 80) || "콘티";
+}
+
+function getDefaultPdfImageVerticalScale(width: number, height: number) {
+  if (!width || !height) return DEFAULT_PDF_IMAGE_VERTICAL_SCALE;
+
+  const imageHeightPercentOfA4 = ((height / width) * A4_WIDTH_MM * 100) / A4_HEIGHT_MM;
+  if (imageHeightPercentOfA4 <= PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT) return 100;
+
+  const suggestedScale = (PDF_IMAGE_HEIGHT_TARGET_PERCENT / imageHeightPercentOfA4) * 100;
+  return clampToStep(suggestedScale, 45, 100, 5);
+}
+
+function clampToStep(value: number, min: number, max: number, step: number) {
+  const stepped = Math.round(value / step) * step;
+  return Math.min(max, Math.max(min, stepped));
 }
