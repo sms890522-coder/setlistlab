@@ -13,8 +13,8 @@ import { useParams } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-const COPYRIGHT_NOTICE =
-  "악보 이미지는 사용 권한이 있는 자료만 등록해 주세요. 공유 및 출력 시 교회가 보유한 라이선스와 저작권 정책을 확인해 주세요.";
+const PRINT_HEADER_FOOTER_HELP =
+  "주소, 날짜, 페이지 번호가 보이면 인쇄창에서 머리글/바닥글 옵션을 꺼 주세요.";
 
 type PdfImageMode = "fit" | "compress-y" | "next-page" | "split";
 
@@ -101,9 +101,21 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
   }
 
   useEffect(() => {
+    const nextTitle = getPdfDocumentTitle(setlist);
+    document.title = nextTitle;
+    const timeoutId = window.setTimeout(() => {
+      document.title = nextTitle;
+    }, 50);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [setlist.id, setlist.title]);
+
+  useEffect(() => {
     function handleBeforePrint() {
       setPrintError("");
-      setPrintMessage("인쇄창이 열렸습니다. 저장하려면 인쇄창에서 PDF 저장을 선택해 주세요.");
+      setPrintMessage(`인쇄창이 열렸습니다. PDF 저장을 선택해 주세요. ${PRINT_HEADER_FOOTER_HELP}`);
     }
 
     function handleAfterPrint() {
@@ -128,9 +140,10 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
       return;
     }
 
-    setPrintMessage("인쇄창을 여는 중입니다. 창이 열리지 않으면 브라우저 메뉴에서 인쇄를 선택해 주세요.");
+    setPrintMessage(`인쇄창을 여는 중입니다. ${PRINT_HEADER_FOOTER_HELP}`);
 
     try {
+      document.title = getPdfDocumentTitle(setlist);
       window.focus();
       window.print();
     } catch (printError) {
@@ -233,13 +246,14 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
               </div>
             </PdfToggleBlock>
           ) : null}
-
-          {hasVisibleCoverContent ? <p className="pdf-copyright">{COPYRIGHT_NOTICE}</p> : null}
         </section>
 
         {setlist.songs.map((song, index) => (
           <SongPdfPage key={song.id} song={song} index={index} isLast={index === setlist.songs.length - 1} />
         ))}
+        <div className="pdf-print-watermark" aria-hidden="true">
+          콘티연습실
+        </div>
       </article>
     </div>
   );
@@ -375,7 +389,7 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
   }
 
   const splitTotalScreenHeight = 720;
-  const splitTotalPrintHeight = 250;
+  const splitTotalPrintHeight = 290;
   const splitTopScreenHeight = Math.round((splitTotalScreenHeight * splitRatio) / 100);
   const splitBottomScreenHeight = splitTotalScreenHeight - splitTopScreenHeight;
   const splitTopPrintHeight = Math.round((splitTotalPrintHeight * splitRatio) / 100);
@@ -383,8 +397,8 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
 
   const imageStyle = {
     "--pdf-image-width": `${scale}%`,
-    "--pdf-image-max-height": "250mm",
-    "--pdf-image-compress-height": `${Math.round((250 * verticalScale) / 100)}mm`,
+    "--pdf-image-max-height": "290mm",
+    "--pdf-image-compress-height": `${Math.round((290 * verticalScale) / 100)}mm`,
     "--pdf-image-compress-height-screen": `${Math.round((720 * verticalScale) / 100)}px`,
     "--pdf-image-split-total-screen-height": `${splitTotalScreenHeight}px`,
     "--pdf-image-split-top-screen-height": `${splitTopScreenHeight}px`,
@@ -548,4 +562,9 @@ function getSongMeta(song: Song) {
 
 function getSongImageLinks(song: Song) {
   return (song.imageLinks ?? []).filter((link) => /^https?:\/\/\S+$/i.test(link.url.trim()));
+}
+
+function getPdfDocumentTitle(setlist: Setlist) {
+  const title = (setlist.title || "콘티").trim();
+  return title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").slice(0, 80) || "콘티";
 }
