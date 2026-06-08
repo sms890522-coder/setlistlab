@@ -6,7 +6,7 @@ export function createBlankSetlist(): Setlist {
 
   return {
     id: createId("setlist"),
-    title: "새 콘티",
+    title: "",
     worshipDate: formatDateInput(new Date()),
     serviceName: "",
     description: "",

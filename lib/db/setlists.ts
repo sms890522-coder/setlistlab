@@ -213,7 +213,7 @@ function normalizeSetlistForCloud(setlist: Setlist): Setlist {
   const now = new Date().toISOString();
   return {
     ...setlist,
-    title: setlist.title || "제목 없는 콘티",
+    title: setlist.title ?? "",
     worshipDate: setlist.worshipDate ?? "",
     serviceName: setlist.serviceName ?? "",
     description: setlist.description ?? "",
