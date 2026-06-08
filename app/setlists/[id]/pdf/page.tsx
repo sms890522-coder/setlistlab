@@ -21,7 +21,8 @@ const DEFAULT_PDF_IMAGE_VERTICAL_SCALE = 90;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT = 80;
-const PDF_IMAGE_HEIGHT_TARGET_PERCENT = 72;
+const PDF_IMAGE_HEIGHT_MAX_REFERENCE_PERCENT = 140;
+const PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE = 70;
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -585,8 +586,11 @@ function getDefaultPdfImageVerticalScale(width: number, height: number) {
   const imageHeightPercentOfA4 = ((height / width) * A4_WIDTH_MM * 100) / A4_HEIGHT_MM;
   if (imageHeightPercentOfA4 <= PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT) return 100;
 
-  const suggestedScale = (PDF_IMAGE_HEIGHT_TARGET_PERCENT / imageHeightPercentOfA4) * 100;
-  return clampToStep(suggestedScale, 45, 100, 5);
+  const overflowRange = PDF_IMAGE_HEIGHT_MAX_REFERENCE_PERCENT - PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT;
+  const scaleRange = 100 - PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE;
+  const overflowRatio = (imageHeightPercentOfA4 - PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT) / overflowRange;
+  const suggestedScale = 100 - overflowRatio * scaleRange;
+  return clampToStep(suggestedScale, PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE, 100, 5);
 }
 
 function clampToStep(value: number, min: number, max: number, step: number) {
