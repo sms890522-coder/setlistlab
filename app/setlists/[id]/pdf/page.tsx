@@ -372,18 +372,28 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
   const [scale, setScale] = useState(100);
   const [verticalScale, setVerticalScale] = useState(DEFAULT_PDF_IMAGE_VERTICAL_SCALE);
   const [splitRatio, setSplitRatio] = useState(50);
+  const modeTouchedRef = useRef(false);
+  const scaleTouchedRef = useRef(false);
   const verticalScaleTouchedRef = useRef(false);
   const imageUrl = getImagePreviewUrl(link.url);
 
   useEffect(() => {
     let cancelled = false;
+    modeTouchedRef.current = false;
+    scaleTouchedRef.current = false;
     verticalScaleTouchedRef.current = false;
+    setMode("compress-y");
+    setScale(100);
     setVerticalScale(DEFAULT_PDF_IMAGE_VERTICAL_SCALE);
 
     const image = new window.Image();
     image.onload = () => {
-      if (cancelled || verticalScaleTouchedRef.current) return;
-      setVerticalScale(getDefaultPdfImageVerticalScale(image.naturalWidth, image.naturalHeight));
+      if (cancelled || modeTouchedRef.current || scaleTouchedRef.current || verticalScaleTouchedRef.current) return;
+
+      const defaultLayout = getDefaultPdfImageLayout(image.naturalWidth, image.naturalHeight);
+      setMode(defaultLayout.mode);
+      setScale(defaultLayout.scale);
+      setVerticalScale(defaultLayout.verticalScale);
     };
     image.src = imageUrl;
 
@@ -394,6 +404,11 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
 
   if (failed) {
     return <p className="no-print rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">악보 이미지를 불러오지 못했습니다.</p>;
+  }
+
+  function handleModeChange(nextMode: PdfImageMode) {
+    modeTouchedRef.current = true;
+    setMode(nextMode);
   }
 
   const splitTotalScreenHeight = 720;
@@ -419,16 +434,16 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
   const controls = (
     <div className="no-print pdf-image-controls">
       <div className="flex flex-wrap gap-1.5">
-        <PdfImageModeButton mode={mode} value="fit" onChange={setMode}>
+        <PdfImageModeButton mode={mode} value="fit" onChange={handleModeChange}>
           비율 맞춰 줄이기
         </PdfImageModeButton>
-        <PdfImageModeButton mode={mode} value="compress-y" onChange={setMode}>
+        <PdfImageModeButton mode={mode} value="compress-y" onChange={handleModeChange}>
           위아래만 줄이기
         </PdfImageModeButton>
-        <PdfImageModeButton mode={mode} value="next-page" onChange={setMode}>
+        <PdfImageModeButton mode={mode} value="next-page" onChange={handleModeChange}>
           다음 장
         </PdfImageModeButton>
-        <PdfImageModeButton mode={mode} value="split" onChange={setMode}>
+        <PdfImageModeButton mode={mode} value="split" onChange={handleModeChange}>
           나눠서 넣기
         </PdfImageModeButton>
       </div>
@@ -442,7 +457,10 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
             max="100"
             step="5"
             value={scale}
-            onChange={(event) => setScale(Number(event.target.value))}
+            onChange={(event) => {
+              scaleTouchedRef.current = true;
+              setScale(Number(event.target.value));
+            }}
           />
         </label>
       ) : null}
@@ -580,17 +598,29 @@ function getPdfDocumentTitle(setlist: Setlist) {
   return title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").slice(0, 80) || "콘티";
 }
 
-function getDefaultPdfImageVerticalScale(width: number, height: number) {
-  if (!width || !height) return DEFAULT_PDF_IMAGE_VERTICAL_SCALE;
+function getDefaultPdfImageLayout(width: number, height: number): {
+  mode: PdfImageMode;
+  scale: number;
+  verticalScale: number;
+} {
+  if (!width || !height) {
+    return { mode: "compress-y", scale: 100, verticalScale: DEFAULT_PDF_IMAGE_VERTICAL_SCALE };
+  }
 
   const imageHeightPercentOfA4 = ((height / width) * A4_WIDTH_MM * 100) / A4_HEIGHT_MM;
-  if (imageHeightPercentOfA4 <= PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT) return 100;
+  if (imageHeightPercentOfA4 <= PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT) {
+    return { mode: "fit", scale: 100, verticalScale: 100 };
+  }
 
   const overflowRange = PDF_IMAGE_HEIGHT_MAX_REFERENCE_PERCENT - PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT;
   const scaleRange = 100 - PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE;
   const overflowRatio = (imageHeightPercentOfA4 - PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT) / overflowRange;
   const suggestedScale = 100 - overflowRatio * scaleRange;
-  return clampToStep(suggestedScale, PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE, 100, 5);
+  return {
+    mode: "compress-y",
+    scale: 100,
+    verticalScale: clampToStep(suggestedScale, PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE, 100, 5),
+  };
 }
 
 function clampToStep(value: number, min: number, max: number, step: number) {
