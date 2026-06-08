@@ -64,17 +64,26 @@ export async function upsertMyProfile(input: {
 
   const now = new Date().toISOString();
   const supabase = getSupabaseBrowserClient();
+  const normalizedInput = {
+    displayName: input.displayName.trim(),
+    role: input.role,
+    customRole: input.customRole?.trim() || null,
+    churchName: input.churchName?.trim() || null,
+    praiseTeamName: input.praiseTeamName?.trim() || null,
+    serviceName: input.serviceName?.trim() || null,
+    sharePracticePresence: input.sharePracticePresence ?? true,
+  };
   const { data, error } = await supabase
     .from("profiles")
     .upsert({
       id: user.id,
-      display_name: input.displayName.trim(),
-      role: input.role,
-      custom_role: input.customRole?.trim() || null,
-      church_name: input.churchName?.trim() || null,
-      praise_team_name: input.praiseTeamName?.trim() || null,
-      service_name: input.serviceName?.trim() || null,
-      share_practice_presence: input.sharePracticePresence ?? true,
+      display_name: normalizedInput.displayName,
+      role: normalizedInput.role,
+      custom_role: normalizedInput.customRole,
+      church_name: normalizedInput.churchName,
+      praise_team_name: normalizedInput.praiseTeamName,
+      service_name: normalizedInput.serviceName,
+      share_practice_presence: normalizedInput.sharePracticePresence,
       updated_at: now,
     })
     .select("*")
@@ -83,6 +92,8 @@ export async function upsertMyProfile(input: {
   if (error) {
     throw new Error(error.message || "프로필을 저장하지 못했습니다.");
   }
+
+  await syncPracticePresenceProfile(user.id, normalizedInput, now).catch(() => undefined);
 
   return rowToProfile(data);
 }
@@ -100,4 +111,40 @@ function rowToProfile(row: ProfileRow): Profile {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+async function syncPracticePresenceProfile(
+  userId: string,
+  input: {
+    displayName: string;
+    role: string;
+    customRole: string | null;
+    churchName: string | null;
+    praiseTeamName: string | null;
+    sharePracticePresence: boolean;
+  },
+  now: string,
+) {
+  const supabase = getSupabaseBrowserClient();
+
+  if (!input.sharePracticePresence || !input.churchName || !input.praiseTeamName) {
+    await supabase.from("practice_presence").delete().eq("user_id", userId);
+    return;
+  }
+
+  await supabase
+    .from("practice_presence")
+    .update({
+      display_name: input.displayName || "팀원",
+      role: getPresenceProfileRole(input),
+      church_name: input.churchName,
+      praise_team_name: input.praiseTeamName,
+      updated_at: now,
+    })
+    .eq("user_id", userId);
+}
+
+function getPresenceProfileRole(input: { role: string; customRole: string | null }) {
+  if (input.role === "기타" && input.customRole) return input.customRole;
+  return input.role || "팀원";
 }

@@ -321,14 +321,23 @@ on public.practice_presence
 for select
 using (
   auth.uid() is not null
-  and exists (
-    select 1
-    from public.profiles
-    where public.profiles.id = auth.uid()
-      and public.profiles.church_name is not null
-      and public.profiles.praise_team_name is not null
-      and lower(public.profiles.church_name) = lower(public.practice_presence.church_name)
-      and lower(public.profiles.praise_team_name) = lower(public.practice_presence.praise_team_name)
+  and (
+    auth.uid() = public.practice_presence.user_id
+    or exists (
+      select 1
+      from public.profiles
+      where public.profiles.id = auth.uid()
+        and public.profiles.church_name is not null
+        and public.profiles.praise_team_name is not null
+        and lower(public.profiles.church_name) = lower(public.practice_presence.church_name)
+        and lower(public.profiles.praise_team_name) = lower(public.practice_presence.praise_team_name)
+    )
+    or exists (
+      select 1
+      from public.setlists
+      where public.setlists.id::text = public.practice_presence.setlist_id
+        and public.setlists.user_id = auth.uid()
+    )
   )
 );
 
