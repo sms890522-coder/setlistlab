@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { getMyProfile, type Profile } from "@/lib/db/profiles";
+import { getMyProfile, PROFILE_UPDATED_EVENT, type Profile } from "@/lib/db/profiles";
 import { createId } from "@/lib/id";
 import { formatMemberNameWithEmoji, getRoleEmoji } from "@/lib/roleEmoji";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -34,6 +34,7 @@ export function TeamChatWidget() {
   const [messages, setMessages] = useState<TeamChatMessage[]>([]);
   const [readReceipts, setReadReceipts] = useState<Record<string, string[]>>({});
   const [messageText, setMessageText] = useState("");
+  const [profileRefreshToken, setProfileRefreshToken] = useState(0);
   const channelRef = useRef<TeamChatChannel | null>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const sentReadReceiptKeysRef = useRef<Set<string>>(new Set());
@@ -93,15 +94,26 @@ export function TeamChatWidget() {
       setStatusMessage("같은 찬양팀 채팅방에 연결하는 중입니다.");
     }
 
-    loadMe().catch((error) => {
+    function handleLoadError(error: unknown) {
       if (cancelled) return;
       setChatState("error");
       setStatusMessage(error instanceof Error ? error.message : "팀 채팅 정보를 불러오지 못했습니다.");
-    });
+    }
+
+    function refreshProfile() {
+      loadMe().catch(handleLoadError);
+    }
+
+    refreshProfile();
+
+    window.addEventListener(PROFILE_UPDATED_EVENT, refreshProfile);
+    window.addEventListener("focus", refreshProfile);
 
     if (!isSupabaseConfigured()) {
       return () => {
         cancelled = true;
+        window.removeEventListener(PROFILE_UPDATED_EVENT, refreshProfile);
+        window.removeEventListener("focus", refreshProfile);
       };
     }
 
@@ -112,9 +124,11 @@ export function TeamChatWidget() {
 
     return () => {
       cancelled = true;
+      window.removeEventListener(PROFILE_UPDATED_EVENT, refreshProfile);
+      window.removeEventListener("focus", refreshProfile);
       data.subscription.unsubscribe();
     };
-  }, []);
+  }, [profileRefreshToken]);
 
   useEffect(() => {
     if (!isSupabaseConfigured() || !user || !profile?.churchName?.trim() || !profile.praiseTeamName?.trim()) {
@@ -268,6 +282,14 @@ export function TeamChatWidget() {
     return (readReceipts[message.id] ?? []).filter((readerId) => readerId !== message.userId).length;
   }
 
+  function toggleChat() {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+    if (nextOpen) {
+      setProfileRefreshToken((current) => current + 1);
+    }
+  }
+
   return (
     <>
       {open ? (
@@ -387,7 +409,7 @@ export function TeamChatWidget() {
 
       <button
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleChat}
         className="team-chat-widget no-print fixed bottom-4 right-4 z-50 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:bottom-6 sm:right-6"
         aria-label="팀 채팅 열기"
       >

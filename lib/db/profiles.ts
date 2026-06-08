@@ -4,6 +4,8 @@ import type { UserRole } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
+export const PROFILE_UPDATED_EVENT = "conti-practice-room:profile-updated";
+
 export type Profile = {
   id: string;
   displayName: string;
@@ -95,7 +97,12 @@ export async function upsertMyProfile(input: {
 
   await syncPracticePresenceProfile(user.id, normalizedInput, now).catch(() => undefined);
 
-  return rowToProfile(data);
+  const profile = rowToProfile(data);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT, { detail: profile }));
+  }
+
+  return profile;
 }
 
 function rowToProfile(row: ProfileRow): Profile {

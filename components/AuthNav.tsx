@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { getMyProfile } from "@/lib/db/profiles";
+import { getMyProfile, PROFILE_UPDATED_EVENT } from "@/lib/db/profiles";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 
@@ -29,15 +29,26 @@ export function AuthNav() {
       setLoaded(true);
     }
 
-    loadAuth();
+    function refreshAuth() {
+      loadAuth();
+    }
 
-    if (!isSupabaseConfigured()) return;
+    refreshAuth();
+    window.addEventListener(PROFILE_UPDATED_EVENT, refreshAuth);
+
+    if (!isSupabaseConfigured()) {
+      return () => {
+        window.removeEventListener(PROFILE_UPDATED_EVENT, refreshAuth);
+      };
+    }
+
     const supabase = getSupabaseBrowserClient();
     const { data } = supabase.auth.onAuthStateChange(() => {
       loadAuth();
     });
 
     return () => {
+      window.removeEventListener(PROFILE_UPDATED_EVENT, refreshAuth);
       data.subscription.unsubscribe();
     };
   }, []);

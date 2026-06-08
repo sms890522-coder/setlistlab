@@ -32,7 +32,7 @@ export default function LoginPage() {
       setLoading(true);
       await signInWithEmail(email, password);
       const profile = await getMyProfile();
-      router.push(profile ? getRedirectPath() : `/onboarding?redirect=${encodeURIComponent(getRedirectPath())}`);
+      router.push(isProfileReady(profile) ? getRedirectPath() : `/onboarding?redirect=${encodeURIComponent(getRedirectPath())}`);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "로그인에 실패했습니다.");
     } finally {
@@ -110,4 +110,8 @@ export default function LoginPage() {
       </section>
     </div>
   );
+}
+
+function isProfileReady(profile: Awaited<ReturnType<typeof getMyProfile>>) {
+  return Boolean(profile?.role?.trim() && profile.churchName?.trim() && profile.praiseTeamName?.trim());
 }
