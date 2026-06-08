@@ -24,6 +24,7 @@ npm run dev
 - Supabase Auth 로그인 저장
 - Supabase 기반 콘티, 곡 보관함, 팀원 관리
 - 공개 공유 링크 `/s/[shareSlug]`
+- 같은 교회/찬양팀 기준 연습중인 팀원 표시
 - JSON 가져오기
 
 ## Supabase 설정
@@ -58,6 +59,7 @@ NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=
 - `saved_songs`: 곡 보관함
 - `setlists`: 콘티 본문과 곡 목록 JSON
 - `setlist_assignments`: 콘티별 이번 주 팀원 배정
+- `practice_presence`: 같은 교회/찬양팀 팀원끼리 보이는 연습중 상태
 - `shared_setlists`: 기존 MVP 공유 링크 호환용
 
 ## 이미지 업로드 설정

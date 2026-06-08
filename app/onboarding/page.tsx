@@ -13,7 +13,9 @@ export default function OnboardingPage() {
   const [role, setRole] = useState("찬양인도자");
   const [customRole, setCustomRole] = useState("");
   const [churchName, setChurchName] = useState("");
+  const [praiseTeamName, setPraiseTeamName] = useState("");
   const [serviceName, setServiceName] = useState("");
+  const [sharePracticePresence, setSharePracticePresence] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -31,7 +33,7 @@ export default function OnboardingPage() {
       }
 
       const profile = await getMyProfile();
-      if (profile?.role?.trim() && profile.churchName?.trim()) {
+      if (profile?.role?.trim() && profile.churchName?.trim() && profile.praiseTeamName?.trim()) {
         router.replace(getRedirectPath());
         return;
       }
@@ -40,7 +42,9 @@ export default function OnboardingPage() {
       setRole(profile?.role || "찬양인도자");
       setCustomRole(profile?.customRole || "");
       setChurchName(profile?.churchName || "");
+      setPraiseTeamName(profile?.praiseTeamName || "");
       setServiceName(profile?.serviceName || "");
+      setSharePracticePresence(profile?.sharePracticePresence ?? true);
       setLoaded(true);
     }
 
@@ -61,7 +65,7 @@ export default function OnboardingPage() {
 
     try {
       setSaving(true);
-      await upsertMyProfile({ displayName, role, customRole, churchName, serviceName });
+      await upsertMyProfile({ displayName, role, customRole, churchName, praiseTeamName, serviceName, sharePracticePresence });
       router.push(getRedirectPath());
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "프로필을 저장하지 못했습니다.");
@@ -111,8 +115,33 @@ export default function OnboardingPage() {
               <input value={churchName} onChange={(event) => setChurchName(event.target.value)} className="field-input" required />
             </label>
             <label className="space-y-1">
+              <span className="field-label">찬양팀 이름</span>
+              <input
+                value={praiseTeamName}
+                onChange={(event) => setPraiseTeamName(event.target.value)}
+                className="field-input"
+                placeholder="예: 주일 2부 찬양팀"
+                required
+              />
+              <span className="field-help">교회 이름과 찬양팀 이름이 같은 사람을 한 팀으로 봅니다.</span>
+            </label>
+            <label className="space-y-1">
               <span className="field-label">기본 예배 이름</span>
               <input value={serviceName} onChange={(event) => setServiceName(event.target.value)} className="field-input" />
+            </label>
+            <label className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/60 p-4 sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={sharePracticePresence}
+                onChange={(event) => setSharePracticePresence(event.target.checked)}
+                className="mt-1 size-4 accent-blue-600"
+              />
+              <span>
+                <span className="block text-sm font-bold text-blue-950">연습중 표시 공유</span>
+                <span className="mt-1 block text-xs leading-5 text-blue-800">
+                  같은 교회와 찬양팀으로 설정한 팀원에게 내가 어떤 곡을 연습 중인지 보여줍니다. 기본값은 공유입니다.
+                </span>
+              </span>
             </label>
             <button type="submit" disabled={saving} className="btn-primary sm:col-span-2">
               {saving ? "저장 중" : "시작하기"}

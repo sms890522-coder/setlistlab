@@ -16,10 +16,18 @@ create table if not exists public.profiles (
   role text not null default '기타',
   custom_role text,
   church_name text,
+  praise_team_name text,
   service_name text,
+  share_practice_presence boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+add column if not exists praise_team_name text;
+
+alter table public.profiles
+add column if not exists share_practice_presence boolean not null default true;
 
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at
@@ -132,12 +140,41 @@ create table if not exists public.shared_setlists (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.practice_presence (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  setlist_id text not null,
+  song_id text not null,
+  song_title text not null,
+  display_name text not null,
+  role text not null,
+  church_name text not null,
+  praise_team_name text not null,
+  last_seen_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, setlist_id, song_id)
+);
+
+create index if not exists practice_presence_setlist_seen_idx
+on public.practice_presence (setlist_id, last_seen_at desc);
+
+create index if not exists practice_presence_team_seen_idx
+on public.practice_presence (lower(church_name), lower(praise_team_name), last_seen_at desc);
+
+drop trigger if exists practice_presence_set_updated_at on public.practice_presence;
+create trigger practice_presence_set_updated_at
+before update on public.practice_presence
+for each row
+execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.team_members enable row level security;
 alter table public.saved_songs enable row level security;
 alter table public.setlists enable row level security;
 alter table public.setlist_assignments enable row level security;
 alter table public.shared_setlists enable row level security;
+alter table public.practice_presence enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
@@ -277,3 +314,39 @@ create policy "shared_setlists_insert_public"
 on public.shared_setlists
 for insert
 with check (true);
+
+drop policy if exists "practice_presence_select_same_team" on public.practice_presence;
+create policy "practice_presence_select_same_team"
+on public.practice_presence
+for select
+using (
+  auth.uid() is not null
+  and exists (
+    select 1
+    from public.profiles
+    where public.profiles.id = auth.uid()
+      and public.profiles.church_name is not null
+      and public.profiles.praise_team_name is not null
+      and lower(public.profiles.church_name) = lower(public.practice_presence.church_name)
+      and lower(public.profiles.praise_team_name) = lower(public.practice_presence.praise_team_name)
+  )
+);
+
+drop policy if exists "practice_presence_insert_own" on public.practice_presence;
+create policy "practice_presence_insert_own"
+on public.practice_presence
+for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "practice_presence_update_own" on public.practice_presence;
+create policy "practice_presence_update_own"
+on public.practice_presence
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "practice_presence_delete_own" on public.practice_presence;
+create policy "practice_presence_delete_own"
+on public.practice_presence
+for delete
+using (auth.uid() = user_id);

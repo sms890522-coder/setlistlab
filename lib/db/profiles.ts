@@ -10,7 +10,9 @@ export type Profile = {
   role: UserRole | "기타" | string;
   customRole?: string;
   churchName?: string;
+  praiseTeamName?: string;
   serviceName?: string;
+  sharePracticePresence: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -21,7 +23,9 @@ type ProfileRow = {
   role: string | null;
   custom_role: string | null;
   church_name: string | null;
+  praise_team_name: string | null;
   service_name: string | null;
+  share_practice_presence: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -49,7 +53,9 @@ export async function upsertMyProfile(input: {
   role: string;
   customRole?: string;
   churchName?: string;
+  praiseTeamName?: string;
   serviceName?: string;
+  sharePracticePresence?: boolean;
 }) {
   const user = await getCurrentUser();
   if (!user) {
@@ -66,7 +72,9 @@ export async function upsertMyProfile(input: {
       role: input.role,
       custom_role: input.customRole?.trim() || null,
       church_name: input.churchName?.trim() || null,
+      praise_team_name: input.praiseTeamName?.trim() || null,
       service_name: input.serviceName?.trim() || null,
+      share_practice_presence: input.sharePracticePresence ?? true,
       updated_at: now,
     })
     .select("*")
@@ -86,7 +94,9 @@ function rowToProfile(row: ProfileRow): Profile {
     role: row.role ?? "기타",
     customRole: row.custom_role ?? undefined,
     churchName: row.church_name ?? undefined,
+    praiseTeamName: row.praise_team_name ?? undefined,
     serviceName: row.service_name ?? undefined,
+    sharePracticePresence: row.share_practice_presence ?? true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

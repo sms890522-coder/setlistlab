@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
+import { PracticePresencePanel } from "@/components/PracticePresencePanel";
 import { SongImageGallery } from "@/components/SongImageGallery";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
@@ -162,6 +163,8 @@ export default function SongPracticePage() {
           <SongLibrarySaveButton song={song} />
         </div>
       </section>
+
+      {storageMode === "cloud" ? <PracticePresencePanel setlist={setlist} song={song} /> : null}
 
       {song.description ? (
         <section className="card p-5">
