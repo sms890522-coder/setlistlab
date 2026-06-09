@@ -35,6 +35,8 @@ export default function SetlistEditPage() {
   const saveRequestIdRef = useRef(0);
 
   useEffect(() => {
+    saveRequestIdRef.current += 1;
+
     async function loadSetlist() {
       const localSetlists = getSetlists();
 
