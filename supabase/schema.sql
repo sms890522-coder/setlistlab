@@ -246,6 +246,9 @@ create table if not exists public.practice_presence (
   unique (user_id, setlist_id, song_id)
 );
 
+alter table public.practice_presence
+add column if not exists team_id uuid references public.teams(id) on delete cascade;
+
 create index if not exists practice_presence_setlist_seen_idx
 on public.practice_presence (setlist_id, last_seen_at desc);
 
