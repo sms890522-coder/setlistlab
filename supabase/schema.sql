@@ -114,8 +114,22 @@ create table if not exists public.team_chat_messages (
   team_id uuid not null references public.teams(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   message text not null,
+  read_by uuid[] not null default '{}'::uuid[],
   created_at timestamptz not null default now()
 );
+
+alter table public.team_chat_messages
+add column if not exists read_by uuid[] not null default '{}'::uuid[];
+
+alter table public.team_chat_messages
+alter column read_by set default '{}'::uuid[];
+
+update public.team_chat_messages
+set read_by = '{}'::uuid[]
+where read_by is null;
+
+alter table public.team_chat_messages
+alter column read_by set not null;
 
 create index if not exists team_chat_messages_team_created_idx
 on public.team_chat_messages (team_id, created_at desc);
@@ -308,6 +322,28 @@ as $$
       and role in ('owner', 'admin')
       and removed_at is null
   );
+$$;
+
+create or replace function public.mark_team_chat_messages_read(p_team_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  if not public.is_team_approved_member(p_team_id, auth.uid()) then
+    raise exception '이 팀 채팅에 접근할 권한이 없습니다.';
+  end if;
+
+  update public.team_chat_messages
+  set read_by = array_append(read_by, auth.uid())
+  where team_id = p_team_id
+    and not (auth.uid() = any(read_by));
+end;
 $$;
 
 create or replace function public.find_team_by_invite_code(p_invite_code text)

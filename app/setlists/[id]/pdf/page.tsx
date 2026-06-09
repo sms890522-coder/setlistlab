@@ -24,6 +24,7 @@ const A4_HEIGHT_MM = 297;
 const PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT = 80;
 const PDF_IMAGE_HEIGHT_MAX_REFERENCE_PERCENT = 140;
 const PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE = 70;
+const PDF_IMAGE_DESKTOP_VERTICAL_SCALE_BONUS = 10;
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -402,7 +403,9 @@ function PdfImage({ link, imageIndex }: { link: SongLink; imageIndex: number }) 
     image.onload = () => {
       if (cancelled || modeTouchedRef.current || scaleTouchedRef.current || verticalScaleTouchedRef.current) return;
 
-      const defaultLayout = getDefaultPdfImageLayout(image.naturalWidth, image.naturalHeight);
+      const defaultLayout = getDefaultPdfImageLayout(image.naturalWidth, image.naturalHeight, {
+        verticalScaleBonus: window.matchMedia("(min-width: 768px)").matches ? PDF_IMAGE_DESKTOP_VERTICAL_SCALE_BONUS : 0,
+      });
       setMode(defaultLayout.mode);
       setScale(defaultLayout.scale);
       setVerticalScale(defaultLayout.verticalScale);
@@ -610,7 +613,11 @@ function getPdfDocumentTitle(setlist: Setlist) {
   return title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").slice(0, 80) || "콘티";
 }
 
-function getDefaultPdfImageLayout(width: number, height: number): {
+function getDefaultPdfImageLayout(
+  width: number,
+  height: number,
+  options: { verticalScaleBonus?: number } = {},
+): {
   mode: PdfImageMode;
   scale: number;
   verticalScale: number;
@@ -627,7 +634,7 @@ function getDefaultPdfImageLayout(width: number, height: number): {
   const overflowRange = PDF_IMAGE_HEIGHT_MAX_REFERENCE_PERCENT - PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT;
   const scaleRange = 100 - PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE;
   const overflowRatio = (imageHeightPercentOfA4 - PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT) / overflowRange;
-  const suggestedScale = 100 - overflowRatio * scaleRange;
+  const suggestedScale = 100 - overflowRatio * scaleRange + (options.verticalScaleBonus ?? 0);
   return {
     mode: "compress-y",
     scale: 100,

@@ -1,6 +1,7 @@
 "use client";
 
-import { sendTeamMessage, subscribeTeamMessages, getTeamMessages, type TeamChatMessage } from "@/lib/db/teamChat";
+import { getCurrentUser } from "@/lib/auth";
+import { sendTeamMessage, subscribeTeamMessages, getTeamMessages, markTeamMessagesRead, type TeamChatMessage } from "@/lib/db/teamChat";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import type { Team } from "@/lib/db/teams";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +18,7 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const currentUserIdRef = useRef<string | null>(null);
 
   const title = useMemo(() => `${team.churchName} · ${team.teamName}`, [team]);
 
@@ -24,10 +26,14 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
     let cancelled = false;
 
     async function loadMessages() {
-      const nextMessages = await getTeamMessages(team.id);
+      const [nextMessages, currentUser] = await Promise.all([getTeamMessages(team.id), getCurrentUser()]);
       if (cancelled) return;
-      setMessages(nextMessages);
+      currentUserIdRef.current = currentUser?.id ?? null;
+      setMessages(currentUser ? markMessagesReadLocally(nextMessages, currentUser.id) : nextMessages);
       setLoaded(true);
+      if (currentUser) {
+        void markTeamMessagesRead(team.id).catch(() => undefined);
+      }
     }
 
     loadMessages().catch((loadError) => {
@@ -36,11 +42,23 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
       setLoaded(true);
     });
 
-    const unsubscribe = subscribeTeamMessages(team.id, (message) => {
+    const unsubscribe = subscribeTeamMessages(team.id, (message, event) => {
+      const currentUserId = currentUserIdRef.current;
+      const nextMessage =
+        event === "INSERT" && currentUserId && message.userId !== currentUserId ? markMessageReadLocally(message, currentUserId) : message;
+
       setMessages((current) => {
-        if (current.some((item) => item.id === message.id)) return current;
-        return [...current, message].slice(-150);
+        const existingIndex = current.findIndex((item) => item.id === nextMessage.id);
+        if (existingIndex >= 0) {
+          return current.map((item) => (item.id === nextMessage.id ? { ...item, ...nextMessage, profile: nextMessage.profile ?? item.profile } : item));
+        }
+
+        return [...current, nextMessage].slice(-150);
       });
+
+      if (event === "INSERT" && currentUserId && message.userId !== currentUserId) {
+        void markTeamMessagesRead(team.id).catch(() => undefined);
+      }
     });
 
     return () => {
@@ -94,16 +112,27 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
             {messages.map((message) => {
               const role = getRole(message);
               const name = message.profile?.displayName || "팀원";
+              const isMine = message.userId === currentUserIdRef.current;
+              const readCount = getReadCount(message);
               return (
-                <article key={message.id} className="max-w-[88%] rounded-2xl bg-white px-4 py-3 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-black text-slate-600">{formatMemberNameWithEmoji(role, name)}</p>
-                    <time className="text-[11px] font-semibold text-slate-400">
-                      {new Date(message.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
-                    </time>
-                  </div>
-                  <p className="mt-1 whitespace-pre-line text-sm leading-6 text-slate-800">{message.message}</p>
-                </article>
+                <div key={message.id} className={isMine ? "flex justify-end" : "flex justify-start"}>
+                  <article
+                    className={
+                      isMine
+                        ? "max-w-[88%] rounded-2xl bg-blue-600 px-4 py-3 text-white shadow-sm"
+                        : "max-w-[88%] rounded-2xl bg-white px-4 py-3 text-slate-800 shadow-sm"
+                    }
+                  >
+                    <p className={isMine ? "text-xs font-black text-blue-100" : "text-xs font-black text-slate-600"}>
+                      {formatMemberNameWithEmoji(role, name)}
+                    </p>
+                    <p className="mt-1 whitespace-pre-line break-words text-sm leading-6">{message.message}</p>
+                    <p className={isMine ? "mt-1 text-right text-[11px] font-semibold text-blue-100" : "mt-1 text-right text-[11px] font-semibold text-slate-400"}>
+                      {formatChatTime(message.createdAt)}
+                      {isMine ? ` · 읽음 ${readCount}` : ""}
+                    </p>
+                  </article>
+                </div>
               );
             })}
             <div ref={endRef} />
@@ -135,4 +164,24 @@ function getRole(message: TeamChatMessage) {
   if (!profile) return "팀원";
   if (profile.role === "기타" && profile.customRole) return profile.customRole;
   return profile.role || "팀원";
+}
+
+function getReadCount(message: TeamChatMessage) {
+  return message.readBy.filter((readerId) => readerId !== message.userId).length;
+}
+
+function markMessagesReadLocally(messages: TeamChatMessage[], userId: string) {
+  return messages.map((message) => markMessageReadLocally(message, userId));
+}
+
+function markMessageReadLocally(message: TeamChatMessage, userId: string): TeamChatMessage {
+  if (message.readBy.includes(userId)) return message;
+  return { ...message, readBy: [...message.readBy, userId] };
+}
+
+function formatChatTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }

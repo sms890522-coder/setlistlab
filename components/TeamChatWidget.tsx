@@ -3,19 +3,31 @@
 import Link from "next/link";
 import { TeamChatPanel } from "@/components/TeamChatPanel";
 import { getCurrentUser } from "@/lib/auth";
+import { getTeamMessages, subscribeTeamMessages } from "@/lib/db/teamChat";
 import { getApprovedMemberships, type TeamMembership } from "@/lib/db/teamMemberships";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function TeamChatWidget() {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<TeamMembership[]>([]);
+  const [hasUnread, setHasUnread] = useState(false);
   const [error, setError] = useState("");
+  const openRef = useRef(open);
 
   const activeMembership = useMemo(() => memberships.find((membership) => membership.team), [memberships]);
   const activeTeam = activeMembership?.team;
+
+  useEffect(() => {
+    openRef.current = open;
+    if (open && activeTeam) {
+      setHasUnread(false);
+      saveTeamChatSeenAt(activeTeam.id);
+    }
+  }, [activeTeam, open]);
 
   useEffect(() => {
     async function loadTeams() {
@@ -26,6 +38,7 @@ export function TeamChatWidget() {
 
       const user = await getCurrentUser();
       setSignedIn(Boolean(user));
+      setUserId(user?.id ?? null);
       if (!user) {
         setLoaded(true);
         return;
@@ -40,6 +53,49 @@ export function TeamChatWidget() {
       setLoaded(true);
     });
   }, [open]);
+
+  useEffect(() => {
+    if (!activeTeam || !userId) {
+      setHasUnread(false);
+      return;
+    }
+
+    const team = activeTeam;
+    let cancelled = false;
+
+    async function checkInitialUnread() {
+      if (openRef.current) {
+        saveTeamChatSeenAt(team.id);
+        setHasUnread(false);
+        return;
+      }
+
+      const messages = await getTeamMessages(team.id);
+      if (cancelled) return;
+
+      const lastSeenAt = getTeamChatSeenAt(team.id);
+      setHasUnread(messages.some((message) => message.userId !== userId && Date.parse(message.createdAt) > lastSeenAt));
+    }
+
+    checkInitialUnread().catch(() => undefined);
+
+    const unsubscribe = subscribeTeamMessages(team.id, (message, event) => {
+      if (event !== "INSERT" || message.userId === userId) return;
+
+      if (openRef.current) {
+        saveTeamChatSeenAt(team.id, message.createdAt);
+        setHasUnread(false);
+        return;
+      }
+
+      setHasUnread(true);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [activeTeam, userId]);
 
   return (
     <>
@@ -79,6 +135,9 @@ export function TeamChatWidget() {
         className="team-chat-widget no-print fixed bottom-4 right-4 z-50 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:bottom-6 sm:right-6"
         aria-label="팀 채팅 열기"
       >
+        {hasUnread && !open ? (
+          <span className="absolute left-0 top-0 size-3 rounded-full border-2 border-white bg-rose-500" aria-hidden="true" />
+        ) : null}
         <svg aria-hidden="true" viewBox="0 0 24 24" className="size-7" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M5 6.5A4.5 4.5 0 0 1 9.5 2h5A4.5 4.5 0 0 1 19 6.5v4A4.5 4.5 0 0 1 14.5 15H12l-4 3v-3.25A4.5 4.5 0 0 1 5 10.5v-4Z" />
           <path d="M9 7h6M9 10h4" />
@@ -86,6 +145,20 @@ export function TeamChatWidget() {
       </button>
     </>
   );
+}
+
+function getTeamChatSeenStorageKey(teamId: string) {
+  return `conti-practice-room:team-chat-seen-at:${teamId}`;
+}
+
+function getTeamChatSeenAt(teamId: string) {
+  if (typeof window === "undefined") return 0;
+  return Number(window.localStorage.getItem(getTeamChatSeenStorageKey(teamId)) ?? 0);
+}
+
+function saveTeamChatSeenAt(teamId: string, value = new Date().toISOString()) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(getTeamChatSeenStorageKey(teamId), String(Date.parse(value) || Date.now()));
 }
 
 function WidgetNotice({ message, href, action }: { message: string; href?: string; action?: string }) {

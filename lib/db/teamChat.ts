@@ -9,15 +9,19 @@ export type TeamChatMessage = {
   teamId: string;
   userId: string;
   message: string;
+  readBy: string[];
   createdAt: string;
   profile?: Profile | null;
 };
+
+export type TeamChatMessageEvent = "INSERT" | "UPDATE";
 
 type TeamChatMessageRow = {
   id: string;
   team_id: string;
   user_id: string;
   message: string;
+  read_by: string[] | null;
   created_at: string;
 };
 
@@ -43,22 +47,45 @@ export async function sendTeamMessage(teamId: string, message: string) {
   if (!trimmedMessage) throw new Error("메시지를 입력해 주세요.");
 
   const supabase = getSupabaseBrowserClient();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("team_chat_messages")
     .insert({
       team_id: teamId,
       user_id: user.id,
       message: trimmedMessage.slice(0, 500),
+      read_by: [user.id],
     })
     .select("*")
     .single<TeamChatMessageRow>();
 
-  if (error) throw new Error(error.message || "메시지를 보내지 못했습니다.");
+  if (error && isMissingReadByColumnError(error.message)) {
+    const retryResult = await supabase
+      .from("team_chat_messages")
+      .insert({
+        team_id: teamId,
+        user_id: user.id,
+        message: trimmedMessage.slice(0, 500),
+      })
+      .select("*")
+      .single<TeamChatMessageRow>();
+
+    data = retryResult.data;
+    error = retryResult.error;
+  }
+
+  if (error || !data) throw new Error(error?.message || "메시지를 보내지 못했습니다.");
   const [nextMessage] = await attachProfiles([rowToMessage(data)]);
   return nextMessage;
 }
 
-export function subscribeTeamMessages(teamId: string, callback: (message: TeamChatMessage) => void) {
+export async function markTeamMessagesRead(teamId: string) {
+  const supabase = getSupabaseBrowserClient();
+  const { error } = await supabase.rpc("mark_team_chat_messages_read", { p_team_id: teamId });
+
+  if (error) throw new Error(error.message || "채팅 읽음 처리를 하지 못했습니다.");
+}
+
+export function subscribeTeamMessages(teamId: string, callback: (message: TeamChatMessage, event: TeamChatMessageEvent) => void) {
   const supabase = getSupabaseBrowserClient();
   const channel = supabase
     .channel(`team-chat:${teamId}`)
@@ -73,7 +100,21 @@ export function subscribeTeamMessages(teamId: string, callback: (message: TeamCh
       async ({ new: row }) => {
         const message = rowToMessage(row as TeamChatMessageRow);
         const [messageWithProfile] = await attachProfiles([message]);
-        callback(messageWithProfile);
+        callback(messageWithProfile, "INSERT");
+      },
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "team_chat_messages",
+        filter: `team_id=eq.${teamId}`,
+      },
+      async ({ new: row }) => {
+        const message = rowToMessage(row as TeamChatMessageRow);
+        const [messageWithProfile] = await attachProfiles([message]);
+        callback(messageWithProfile, "UPDATE");
       },
     )
     .subscribe();
@@ -101,6 +142,11 @@ function rowToMessage(row: TeamChatMessageRow): TeamChatMessage {
     teamId: row.team_id,
     userId: row.user_id,
     message: row.message,
+    readBy: row.read_by ?? [],
     createdAt: row.created_at,
   };
+}
+
+function isMissingReadByColumnError(message?: string) {
+  return Boolean(message?.includes("read_by") || message?.toLowerCase().includes("schema cache"));
 }
