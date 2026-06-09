@@ -36,6 +36,7 @@ export default function SetlistEditPage() {
 
   useEffect(() => {
     saveRequestIdRef.current += 1;
+    setSaveError("");
 
     async function loadSetlist() {
       const localSetlists = getSetlists();
@@ -51,6 +52,13 @@ export default function SetlistEditPage() {
 
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
+            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
+              setSetlist(null);
+              setSaveError("공유 받은 콘티의 원본은 만든 사람만 수정할 수 있습니다. 공유 화면에서 내 연습실로 복사한 뒤 수정해 주세요.");
+              setLoaded(true);
+              return;
+            }
+
             const [cloudSetlists, cloudLibrary, savedTeamMembers] = await Promise.all([
               getCloudSetlists(),
               getCloudSongLibrary(),
@@ -209,6 +217,7 @@ export default function SetlistEditPage() {
       <div className="page-shell">
         <div className="card p-8 text-center">
           <h1 className="text-2xl font-black text-slate-950">수정할 콘티를 찾을 수 없습니다</h1>
+          {saveError ? <p className="mt-3 text-sm leading-6 text-rose-700">{saveError}</p> : null}
           <Link href="/setlists" className="btn-primary mt-5">
             목록으로
           </Link>

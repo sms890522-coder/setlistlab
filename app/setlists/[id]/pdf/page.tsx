@@ -39,12 +39,21 @@ export default function SetlistPdfPage() {
   }, []);
 
   useEffect(() => {
+    setError("");
+
     async function loadSetlist() {
       if (isSupabaseConfigured()) {
         const user = await getCurrentUser();
         if (user) {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
+            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
+              setError("공유 받은 콘티의 PDF는 원본에서 바로 만들 수 없습니다. 공유 화면에서 내 연습실로 복사한 뒤 PDF를 만들어 주세요.");
+              setSetlist(null);
+              setLoaded(true);
+              return;
+            }
+
             setSetlist(cloudSetlist);
             setLoaded(true);
             return;

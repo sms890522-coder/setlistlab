@@ -17,15 +17,21 @@ export default function SetlistPlayPage() {
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
+
     async function loadSetlist() {
       if (isSupabaseConfigured()) {
         const user = await getCurrentUser();
         if (user) {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
-            setSetlist(cloudSetlist);
-            setLoaded(true);
-            return;
+            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
+              setLoadError("공유 받은 콘티의 원본 연속재생은 공유 링크에서 열어 주세요. 수정하려면 내 연습실로 복사하면 됩니다.");
+            } else {
+              setSetlist(cloudSetlist);
+              setLoaded(true);
+              return;
+            }
           }
         }
       }

@@ -2,23 +2,29 @@
 
 import Link from "next/link";
 import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
-import { getPublicSetlistBySlug } from "@/lib/db/setlists";
+import { getCurrentUser } from "@/lib/auth";
+import { createCloudSetlist, getPublicSetlistBySlug, type CloudSetlist } from "@/lib/db/setlists";
+import { cloneSetlist } from "@/lib/factories";
 import { getFirstImageLink, getImagePreviewUrl } from "@/lib/images";
-import { getPracticeCompletions, setPracticeCompletion } from "@/lib/storage";
-import type { Setlist } from "@/lib/types";
-import { useParams } from "next/navigation";
+import { getPracticeCompletions, saveSetlist, setPracticeCompletion } from "@/lib/storage";
+import { useParams, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 
 export default function PublicSetlistPage() {
   const params = useParams<{ shareSlug: string }>();
-  const [setlist, setSetlist] = useState<Setlist | null>(null);
+  const router = useRouter();
+  const [setlist, setSetlist] = useState<CloudSetlist | null>(null);
   const [completedSongs, setCompletedSongs] = useState<Record<string, boolean>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [isOwner, setIsOwner] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [copyError, setCopyError] = useState("");
 
   useEffect(() => {
     async function loadSetlist() {
-      const sharedSetlist = await getPublicSetlistBySlug(params.shareSlug);
+      const [sharedSetlist, user] = await Promise.all([getPublicSetlistBySlug(params.shareSlug), getCurrentUser()]);
       if (!sharedSetlist) {
         setError("공개 공유 콘티를 찾을 수 없습니다.");
         setLoaded(true);
@@ -26,6 +32,7 @@ export default function PublicSetlistPage() {
       }
 
       setSetlist(sharedSetlist);
+      setIsOwner(Boolean(user && sharedSetlist.ownerId === user.id));
       setCompletedSongs(getPracticeCompletions(sharedSetlist.id));
       setLoaded(true);
     }
@@ -40,6 +47,27 @@ export default function PublicSetlistPage() {
     if (!setlist) return;
     setPracticeCompletion(setlist.id, songId, completed);
     setCompletedSongs((current) => ({ ...current, [songId]: completed }));
+  }
+
+  async function copyToMyPracticeRoom() {
+    if (!setlist) return;
+
+    try {
+      setCopying(true);
+      setCopyMessage("");
+      setCopyError("");
+
+      const copiedSetlist = cloneSetlist(setlist);
+      const user = await getCurrentUser();
+      const savedSetlist = user ? await createCloudSetlist(copiedSetlist) : saveSetlist(copiedSetlist);
+
+      setCopyMessage("내 연습실에 복사했습니다. 이제 자유롭게 수정할 수 있습니다.");
+      router.push(`/setlists/${savedSetlist.id}/edit`);
+    } catch (copyError) {
+      setCopyError(copyError instanceof Error ? copyError.message : "내 연습실로 복사하지 못했습니다.");
+    } finally {
+      setCopying(false);
+    }
   }
 
   if (!loaded) {
@@ -81,10 +109,26 @@ export default function PublicSetlistPage() {
             <Link href={`/s/${params.shareSlug}/play`} className="btn-primary">
               연속재생 시작
             </Link>
+            {isOwner ? (
+              <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
+                원본 수정
+              </Link>
+            ) : (
+              <button type="button" onClick={copyToMyPracticeRoom} disabled={copying} className="btn-secondary">
+                {copying ? "복사 중" : "내 연습실로 복사"}
+              </button>
+            )}
             <Link href="/" className="btn-secondary">
               홈으로
             </Link>
           </div>
+          <div className="mt-4 rounded-xl border border-blue-100 bg-white/70 p-3 text-sm leading-6 text-blue-900">
+            {isOwner
+              ? "이 공유 링크는 원본 콘티를 보여줍니다. 원본을 수정하면 팀원들이 보는 공유 화면에도 최신 내용이 반영됩니다."
+              : "이 화면은 만든 사람이 공유한 원본 콘티를 보여줍니다. 원본이 수정되면 공유 화면도 최신 내용으로 바뀌고, 직접 수정하고 싶다면 내 연습실로 복사해 주세요."}
+          </div>
+          {copyMessage ? <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{copyMessage}</p> : null}
+          {copyError ? <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{copyError}</p> : null}
         </div>
         {setlist.globalNotes ? (
           <div className="border-t border-slate-100 p-5 sm:p-7">

@@ -4,7 +4,7 @@ import { importSetlist, parseSetlistJson } from "@/lib/storage";
 import { formatSetlistSummary } from "@/lib/setlistSummary";
 import { getCurrentUser } from "@/lib/auth";
 import { setCloudSetlistPublic } from "@/lib/db/setlists";
-import { isSupabaseConfigured, publishSetlist } from "@/lib/supabase";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import type { Setlist } from "@/lib/types";
 import { useState } from "react";
 
@@ -44,22 +44,19 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
     try {
       setPublishing(true);
       const user = await getCurrentUser();
-      if (user && isUuid(setlist.id)) {
-        const sharedSetlist = await setCloudSetlistPublic(setlist.id, true);
-        if (!sharedSetlist.shareSlug) {
-          throw new Error("공유 링크 정보를 만들지 못했습니다.");
-        }
-        const url = `${window.location.origin}/s/${sharedSetlist.shareSlug}`;
-        setShareUrl(url);
-        setMessage("공유 링크를 만들었습니다.");
-        setError("");
+      if (!user || !isUuid(setlist.id)) {
+        setError("원본 수정이 계속 반영되는 공유 링크는 로그인 후 계정 클라우드에 저장된 콘티에서 만들 수 있습니다.");
+        setMessage("");
         return;
       }
 
-      const shareSlug = await publishSetlist(setlist);
-      const url = `${window.location.origin}/share/${shareSlug}`;
+      const sharedSetlist = await setCloudSetlistPublic(setlist.id, true);
+      if (!sharedSetlist.shareSlug) {
+        throw new Error("공유 링크 정보를 만들지 못했습니다.");
+      }
+      const url = `${window.location.origin}/s/${sharedSetlist.shareSlug}`;
       setShareUrl(url);
-      setMessage("공유 링크를 만들었습니다.");
+      setMessage("공유 링크를 만들었습니다. 원본을 수정하면 이 링크에도 최신 내용이 반영됩니다.");
       setError("");
     } catch (shareError) {
       setError(shareError instanceof Error ? shareError.message : "공유 링크 생성에 실패했습니다.");
@@ -148,8 +145,7 @@ export function ExportImportPanel({ setlist, onImported }: ExportImportPanelProp
       <div className="space-y-2">
         <h2 className="section-title">공유하기</h2>
         <p className="text-sm leading-6 text-slate-600">
-          팀원에게 보낼 수 있는 공유 링크를 만듭니다. 링크를 만든 뒤 복사하거나 모바일 공유 창에서 카카오톡으로
-          보낼 수 있습니다.
+          팀원에게 보낼 수 있는 공유 링크를 만듭니다. 원본 콘티를 수정하면 공유 링크에도 최신 내용이 반영됩니다.
         </p>
       </div>
 

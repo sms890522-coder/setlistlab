@@ -30,18 +30,28 @@ export default function SongPracticePage() {
   const [practiceCompleted, setPracticeCompletedState] = useState(false);
   const [initialPosition, setInitialPosition] = useState(0);
   const [storageMode, setStorageMode] = useState<"local" | "cloud">("local");
+  const [loadError, setLoadError] = useState("");
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const lastSavedPositionRef = useRef(0);
 
   useEffect(() => {
+    setLoadError("");
+
     async function loadSong() {
       let foundSetlist: Setlist | null = null;
 
       if (isSupabaseConfigured()) {
         const user = await getCurrentUser();
         if (user) {
-          foundSetlist = await getCloudSetlist(params.id);
-          if (foundSetlist) setStorageMode("cloud");
+          const cloudSetlist = await getCloudSetlist(params.id);
+          if (cloudSetlist) {
+            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
+              setLoadError("공유 받은 콘티의 원본 연습 화면은 공유 링크에서 열어 주세요. 수정하려면 내 연습실로 복사하면 됩니다.");
+            } else {
+              foundSetlist = cloudSetlist;
+              setStorageMode("cloud");
+            }
+          }
         }
       }
 
@@ -115,6 +125,7 @@ export default function SongPracticePage() {
       <div className="page-shell">
         <div className="card p-8 text-center">
           <h1 className="text-2xl font-black text-slate-950">곡을 찾을 수 없습니다</h1>
+          {loadError ? <p className="mt-3 text-sm leading-6 text-rose-700">{loadError}</p> : null}
           <Link href="/setlists" className="btn-primary mt-5">
             콘티 목록으로
           </Link>
