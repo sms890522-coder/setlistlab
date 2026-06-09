@@ -35,8 +35,18 @@ export async function getTeamMessages(teamId: string) {
     .limit(120)
     .returns<TeamChatMessageRow[]>();
 
-  if (error) throw new Error(error.message || "팀 채팅을 불러오지 못했습니다.");
-  return attachProfiles((data ?? []).map(rowToMessage));
+  if (error) {
+    console.error("getTeamMessages error", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+
+    throw new Error(error.message || "팀 채팅을 불러오지 못했습니다.");
+  }
+
+  return (data ?? []).map(rowToMessage);
 }
 
 export async function sendTeamMessage(teamId: string, message: string) {
