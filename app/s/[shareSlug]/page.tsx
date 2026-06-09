@@ -57,7 +57,7 @@ export default function PublicSetlistPage() {
       setCopyMessage("");
       setCopyError("");
 
-      const copiedSetlist = cloneSetlist(setlist);
+      const copiedSetlist = { ...cloneSetlist(setlist), teamId: undefined };
       const user = await getCurrentUser();
       const savedSetlist = user ? await createCloudSetlist(copiedSetlist) : saveSetlist(copiedSetlist);
 

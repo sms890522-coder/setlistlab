@@ -11,6 +11,7 @@ export type PracticePresence = {
   id: string;
   userId: string;
   setlistId: string;
+  teamId?: string;
   songId: string;
   songTitle: string;
   displayName: string;
@@ -23,6 +24,7 @@ export type PracticePresence = {
 type PracticePresenceRow = {
   id: string;
   user_id: string;
+  team_id: string | null;
   setlist_id: string;
   song_id: string;
   song_title: string;
@@ -40,7 +42,7 @@ export async function heartbeatPracticePresence(setlist: Setlist, song: Song) {
   if (!user) return false;
 
   const profile = await getMyProfile();
-  if (!profile || !canSharePracticePresence(profile)) {
+  if (!profile || !canSharePracticePresence(profile, setlist)) {
     await clearMyPracticePresence(setlist.id, song.id).catch(() => undefined);
     return false;
   }
@@ -50,13 +52,14 @@ export async function heartbeatPracticePresence(setlist: Setlist, song: Song) {
   const { error } = await supabase.from("practice_presence").upsert(
     {
       user_id: user.id,
+      team_id: setlist.teamId ?? null,
       setlist_id: setlist.id,
       song_id: song.id,
       song_title: song.title || "제목 없는 곡",
       display_name: profile.displayName || user.email?.split("@")[0] || "팀원",
       role: getPracticeRole(profile, setlist),
-      church_name: profile.churchName!,
-      praise_team_name: profile.praiseTeamName!,
+      church_name: profile.churchName ?? "",
+      praise_team_name: profile.praiseTeamName ?? "",
       last_seen_at: now,
       updated_at: now,
     },
@@ -102,8 +105,10 @@ export async function clearMyPracticePresence(setlistId: string, songId: string)
   await supabase.from("practice_presence").delete().eq("user_id", user.id).eq("setlist_id", setlistId).eq("song_id", songId);
 }
 
-function canSharePracticePresence(profile: Profile) {
-  return Boolean(profile.sharePracticePresence && profile.churchName?.trim() && profile.praiseTeamName?.trim());
+function canSharePracticePresence(profile: Profile, setlist: Setlist) {
+  if (!profile.sharePracticePresence) return false;
+  if (setlist.teamId) return true;
+  return Boolean(profile.churchName?.trim() && profile.praiseTeamName?.trim());
 }
 
 function getPracticeRole(profile: Profile, setlist: Setlist) {
@@ -119,6 +124,7 @@ function rowToPracticePresence(row: PracticePresenceRow): PracticePresence {
   return {
     id: row.id,
     userId: row.user_id,
+    teamId: row.team_id ?? undefined,
     setlistId: row.setlist_id,
     songId: row.song_id,
     songTitle: row.song_title,

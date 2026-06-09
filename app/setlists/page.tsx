@@ -10,6 +10,7 @@ import {
   getCloudSetlists,
   importLocalSetlistsToCloud,
 } from "@/lib/db/setlists";
+import { getApprovedMemberships, type TeamMembership } from "@/lib/db/teamMemberships";
 import { clearSetlists, deleteSetlist, duplicateSetlist, getSetlists, getStoredSetlists } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
@@ -29,6 +30,15 @@ export default function SetlistsPage() {
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState("");
   const [importing, setImporting] = useState(false);
+  const [memberships, setMemberships] = useState<TeamMembership[]>([]);
+  const [filter, setFilter] = useState("all");
+
+  const filteredSetlists = setlists.filter((setlist) => {
+    if (filter === "all") return true;
+    if (filter === "personal") return !setlist.teamId;
+    if (filter === "team") return Boolean(setlist.teamId);
+    return setlist.teamId === filter;
+  });
 
   useEffect(() => {
     async function loadSetlists() {
@@ -58,7 +68,9 @@ export default function SetlistsPage() {
         return;
       }
 
-      setSetlists(await getCloudSetlists());
+      const [cloudSetlists, approvedMemberships] = await Promise.all([getCloudSetlists(), getApprovedMemberships()]);
+      setSetlists(cloudSetlists);
+      setMemberships(approvedMemberships);
       setStorageMode("cloud");
       setLoaded(true);
     }
@@ -129,7 +141,7 @@ export default function SetlistsPage() {
               : "로그인 전에는 이 브라우저에만 임시 저장됩니다."}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
           <Link href="/setlists/new" className="btn-primary">
             새 콘티 만들기
           </Link>
@@ -157,9 +169,27 @@ export default function SetlistsPage() {
       {message ? <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
       {loadError ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{loadError}</p> : null}
 
+      {storageMode === "cloud" ? (
+        <section className="card p-4">
+          <label className="block space-y-1 sm:max-w-xs">
+            <span className="field-label">콘티 필터</span>
+            <select value={filter} onChange={(event) => setFilter(event.target.value)} className="field-input">
+              <option value="all">전체</option>
+              <option value="personal">개인 콘티</option>
+              <option value="team">팀 콘티</option>
+              {memberships.map((membership) => (
+                <option key={membership.teamId} value={membership.teamId}>
+                  {membership.team?.churchName} / {membership.team?.teamName}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
+      ) : null}
+
       {!loaded ? (
         <div className="card p-8 text-sm text-slate-500">콘티를 불러오는 중입니다.</div>
-      ) : setlists.length === 0 ? (
+      ) : filteredSetlists.length === 0 ? (
         <div className="card grid gap-4 p-8 text-center">
           <div>
             <h2 className="text-xl font-black text-slate-950">아직 콘티가 없습니다</h2>
@@ -175,7 +205,7 @@ export default function SetlistsPage() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {setlists.map((setlist) => (
+          {filteredSetlists.map((setlist) => (
             <SetlistCard
               key={setlist.id}
               setlist={setlist}

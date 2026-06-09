@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getCloudSetlist } from "@/lib/db/setlists";
+import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { getImagePreviewUrl } from "@/lib/images";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { getSetlist } from "@/lib/storage";
@@ -47,8 +48,10 @@ export default function SetlistPdfPage() {
         if (user) {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
-            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
-              setError("공유 받은 콘티의 PDF는 원본에서 바로 만들 수 없습니다. 공유 화면에서 내 연습실로 복사한 뒤 PDF를 만들어 주세요.");
+            const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
+            const canCreatePdf = cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "");
+            if (!canCreatePdf) {
+              setError("이 콘티의 PDF는 작성자 또는 팀 리더/관리자만 만들 수 있습니다. 개인적으로 출력하려면 콘티를 복제한 뒤 PDF를 만들어 주세요.");
               setSetlist(null);
               setLoaded(true);
               return;

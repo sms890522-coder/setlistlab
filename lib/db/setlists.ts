@@ -17,6 +17,7 @@ export type CloudSetlist = Setlist & {
 type SetlistRow = {
   id: string;
   user_id: string;
+  team_id: string | null;
   title: string;
   worship_date: string | null;
   service_name: string | null;
@@ -71,6 +72,7 @@ export async function createCloudSetlist(setlist: Setlist) {
     .from("setlists")
     .insert({
       user_id: user.id,
+      team_id: normalized.teamId || null,
       title: normalized.title,
       worship_date: normalized.worshipDate || null,
       service_name: normalized.serviceName || null,
@@ -101,6 +103,7 @@ export async function saveCloudSetlist(setlist: Setlist) {
     .from("setlists")
     .update({
       title: normalized.title,
+      team_id: normalized.teamId || null,
       worship_date: normalized.worshipDate || null,
       service_name: normalized.serviceName || null,
       description: normalized.description || null,
@@ -194,6 +197,7 @@ export async function getPublicSetlistBySlug(shareSlug: string) {
 function rowToSetlist(row: SetlistRow, teamAssignments: TeamAssignment[] = []): CloudSetlist {
   return {
     id: row.id,
+    teamId: row.team_id ?? undefined,
     title: row.title,
     worshipDate: row.worship_date ?? "",
     serviceName: row.service_name ?? "",
@@ -214,6 +218,7 @@ function normalizeSetlistForCloud(setlist: Setlist): Setlist {
   return {
     ...setlist,
     title: setlist.title ?? "",
+    teamId: setlist.teamId || undefined,
     worshipDate: setlist.worshipDate ?? "",
     serviceName: setlist.serviceName ?? "",
     description: setlist.description ?? "",

@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile } from "@/lib/db/profiles";
 import { getCloudSetlist, getCloudSetlists, saveCloudSetlist } from "@/lib/db/setlists";
 import { deleteCloudSongFromLibrary, getCloudSongLibrary } from "@/lib/db/savedSongs";
+import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { getTeamMembers, teamMemberToAssignment, type TeamMember } from "@/lib/db/teamMembers";
 import { cloneSong, createBlankSong } from "@/lib/factories";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
@@ -52,9 +53,11 @@ export default function SetlistEditPage() {
 
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
-            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
+            const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
+            const canEditCloudSetlist = cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "");
+            if (!canEditCloudSetlist) {
               setSetlist(null);
-              setSaveError("공유 받은 콘티의 원본은 만든 사람만 수정할 수 있습니다. 공유 화면에서 내 연습실로 복사한 뒤 수정해 주세요.");
+              setSaveError("이 콘티는 작성자 또는 팀 리더/관리자만 수정할 수 있습니다. 내 콘티로 따로 수정하려면 복제해서 사용해 주세요.");
               setLoaded(true);
               return;
             }

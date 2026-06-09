@@ -6,6 +6,7 @@ export function createBlankSetlist(): Setlist {
 
   return {
     id: createId("setlist"),
+    teamId: undefined,
     title: "",
     worshipDate: formatDateInput(new Date()),
     serviceName: "",

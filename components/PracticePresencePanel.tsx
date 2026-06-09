@@ -61,7 +61,7 @@ export function PracticePresencePanel({ setlist, song }: PracticePresencePanelPr
       <section className="card p-4">
         <h2 className="font-bold text-slate-950">연습중인 팀원</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          계정에서 연습중 표시 공유를 켜면 같은 찬양팀 팀원에게 현재 연습 중인 상태가 보입니다.
+          계정에서 연습중 표시 공유를 켜면 같은 팀 콘티를 보는 승인된 팀원에게 현재 연습 중인 상태가 보입니다.
         </p>
       </section>
     );
@@ -72,7 +72,7 @@ export function PracticePresencePanel({ setlist, song }: PracticePresencePanelPr
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-bold text-slate-950">연습중인 팀원</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">같은 교회와 찬양팀으로 설정한 팀원만 표시됩니다.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">같은 team_id의 승인된 팀원만 표시됩니다.</p>
         </div>
         <span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
           {presence.length}명 연습중

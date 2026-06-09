@@ -1,5 +1,6 @@
 export type Setlist = {
   id: string;
+  teamId?: string;
   title: string;
   worshipDate: string;
   serviceName: string;

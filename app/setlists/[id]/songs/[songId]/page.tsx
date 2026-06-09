@@ -8,6 +8,7 @@ import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { getCurrentUser } from "@/lib/auth";
 import { getCloudSetlist, saveCloudSetlist } from "@/lib/db/setlists";
+import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import {
   getPracticeCompletion,
   getPracticePosition,
@@ -31,6 +32,7 @@ export default function SongPracticePage() {
   const [initialPosition, setInitialPosition] = useState(0);
   const [storageMode, setStorageMode] = useState<"local" | "cloud">("local");
   const [loadError, setLoadError] = useState("");
+  const [canEdit, setCanEdit] = useState(true);
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const lastSavedPositionRef = useRef(0);
 
@@ -45,18 +47,17 @@ export default function SongPracticePage() {
         if (user) {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
-            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
-              setLoadError("공유 받은 콘티의 원본 연습 화면은 공유 링크에서 열어 주세요. 수정하려면 내 연습실로 복사하면 됩니다.");
-            } else {
-              foundSetlist = cloudSetlist;
-              setStorageMode("cloud");
-            }
+            const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
+            setCanEdit(Boolean(cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "")));
+            foundSetlist = cloudSetlist;
+            setStorageMode("cloud");
           }
         }
       }
 
       if (!foundSetlist) {
         foundSetlist = getSetlist(params.id) ?? null;
+        setCanEdit(true);
         setStorageMode("local");
       }
 
@@ -185,14 +186,14 @@ export default function SongPracticePage() {
       ) : null}
 
       {song.youtubeVideoId ? (
-        <YouTubePlayer
-          ref={playerRef}
-          videoId={song.youtubeVideoId}
-          sections={song.sections}
-          onSectionsChange={handleSectionsChange}
-          initialTime={initialPosition}
-          onTimeUpdate={handleTimeUpdate}
-        />
+          <YouTubePlayer
+            ref={playerRef}
+            videoId={song.youtubeVideoId}
+            sections={song.sections}
+            onSectionsChange={canEdit ? handleSectionsChange : undefined}
+            initialTime={initialPosition}
+            onTimeUpdate={handleTimeUpdate}
+          />
       ) : (
         <section className="card p-6 text-center">
           <h2 className="text-xl font-black text-slate-950">유튜브 링크가 필요합니다</h2>

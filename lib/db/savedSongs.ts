@@ -9,6 +9,7 @@ import { extractYouTubeVideoId } from "@/lib/youtube";
 type SavedSongRow = {
   id: string;
   user_id: string;
+  team_id: string | null;
   title: string;
   description: string | null;
   youtube_url: string | null;
@@ -63,6 +64,7 @@ export async function saveCloudSongToLibrary(song: Song, overwrite = false) {
   };
   const payload = {
     user_id: user.id,
+    team_id: null,
     title: cloudSong.title,
     description: cloudSong.description || null,
     youtube_url: cloudSong.youtubeUrl || null,

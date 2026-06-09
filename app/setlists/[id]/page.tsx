@@ -6,6 +6,7 @@ import { SongCard } from "@/components/SongCard";
 import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
 import { getCurrentUser } from "@/lib/auth";
 import { duplicateCloudSetlist, getCloudSetlist } from "@/lib/db/setlists";
+import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
@@ -22,6 +23,7 @@ export default function SetlistDetailPage() {
   const [completedSongs, setCompletedSongs] = useState<Record<string, boolean>>({});
   const [storageMode, setStorageMode] = useState<StorageMode>("local");
   const [loadError, setLoadError] = useState("");
+  const [canEdit, setCanEdit] = useState(true);
 
   useEffect(() => {
     setLoadError("");
@@ -32,19 +34,18 @@ export default function SetlistDetailPage() {
         if (user) {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
-            if (cloudSetlist.ownerId && cloudSetlist.ownerId !== user.id) {
-              setLoadError("공유 받은 콘티는 공유 링크에서 확인해 주세요. 수정하려면 공유 화면에서 내 연습실로 복사하면 됩니다.");
-            } else {
-              setSetlist(cloudSetlist);
-              setStorageMode("cloud");
-              setCompletedSongs(getPracticeCompletions(params.id));
-              setLoaded(true);
-              return;
-            }
+            const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
+            setCanEdit(Boolean(cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "")));
+            setSetlist(cloudSetlist);
+            setStorageMode("cloud");
+            setCompletedSongs(getPracticeCompletions(params.id));
+            setLoaded(true);
+            return;
           }
         }
       }
 
+      setCanEdit(true);
       setSetlist(getSetlist(params.id) ?? null);
       setStorageMode("local");
       setCompletedSongs(getPracticeCompletions(params.id));
@@ -119,12 +120,16 @@ export default function SetlistDetailPage() {
               <Link href={`/setlists/${setlist.id}/play`} className="btn-primary">
                 콘티 연속재생 시작
               </Link>
-              <Link href={`/setlists/${setlist.id}/pdf`} className="btn-secondary">
-                PDF 만들기
-              </Link>
-              <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
-                수정
-              </Link>
+              {canEdit ? (
+                <>
+                  <Link href={`/setlists/${setlist.id}/pdf`} className="btn-secondary">
+                    PDF 만들기
+                  </Link>
+                  <Link href={`/setlists/${setlist.id}/edit`} className="btn-secondary">
+                    수정
+                  </Link>
+                </>
+              ) : null}
               <button type="button" onClick={handleDuplicate} className="btn-secondary">
                 복제
               </button>

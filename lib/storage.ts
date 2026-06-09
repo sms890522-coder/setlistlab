@@ -281,6 +281,7 @@ function normalizeSetlist(value: unknown): Setlist {
   const now = new Date().toISOString();
   return {
     id: value.id,
+    teamId: optionalString(value.teamId),
     title: value.title,
     worshipDate: typeof value.worshipDate === "string" ? value.worshipDate : "",
     serviceName: typeof value.serviceName === "string" ? value.serviceName : "",

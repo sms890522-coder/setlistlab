@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile, PROFILE_UPDATED_EVENT } from "@/lib/db/profiles";
+import { getApprovedMemberships } from "@/lib/db/teamMemberships";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 
 export function AuthNav() {
   const [loaded, setLoaded] = useState(false);
   const [displayName, setDisplayName] = useState("");
+  const [chatHref, setChatHref] = useState("/teams");
 
   useEffect(() => {
     async function loadAuth() {
@@ -25,7 +27,9 @@ export function AuthNav() {
       }
 
       const profile = await getMyProfile().catch(() => null);
+      const memberships = await getApprovedMemberships().catch(() => []);
       setDisplayName(profile?.displayName || user.email?.split("@")[0] || "내 계정");
+      setChatHref(memberships[0]?.teamId ? `/teams/${memberships[0].teamId}/chat` : "/teams");
       setLoaded(true);
     }
 
@@ -62,16 +66,22 @@ export function AuthNav() {
         콘티
       </Link>
       <Link
-        href="/songs"
+        href="/teams"
         className="rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:px-3"
       >
-        곡
+        내 팀
       </Link>
       <Link
-        href="/team"
+        href={chatHref}
+        className="hidden rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 md:block sm:px-3"
+      >
+        팀 채팅
+      </Link>
+      <Link
+        href="/songs"
         className="hidden rounded-lg px-2.5 py-2 text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700 sm:block sm:px-3"
       >
-        팀
+        곡 보관함
       </Link>
       <Link
         href="/tools/tuner"

@@ -123,7 +123,7 @@ export default function OnboardingPage() {
                 placeholder="예: 주일 2부 찬양팀"
                 required
               />
-              <span className="field-help">교회 이름과 찬양팀 이름이 같은 사람을 한 팀으로 봅니다.</span>
+              <span className="field-help">교회 이름과 찬양팀 이름은 표시용입니다. 실제 팀은 초대코드로 참여하고 리더가 승인한 기준으로 구분됩니다.</span>
             </label>
             <label className="space-y-1">
               <span className="field-label">기본 예배 이름</span>
@@ -139,7 +139,7 @@ export default function OnboardingPage() {
               <span>
                 <span className="block text-sm font-bold text-blue-950">연습중 표시 공유</span>
                 <span className="mt-1 block text-xs leading-5 text-blue-800">
-                  같은 교회와 찬양팀으로 설정한 팀원에게 내가 어떤 곡을 연습 중인지 보여줍니다. 기본값은 공유입니다.
+                  내가 속한 승인된 팀의 팀원에게 어떤 곡을 연습 중인지 보여줍니다. 기본값은 공유입니다.
                 </span>
               </span>
             </label>
