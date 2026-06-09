@@ -84,8 +84,8 @@ export async function sendTeamMessage(teamId: string, message: string) {
   }
 
   if (error || !data) throw new Error(error?.message || "메시지를 보내지 못했습니다.");
-  const [nextMessage] = await attachProfiles([rowToMessage(data)]);
-  return nextMessage;
+  return rowToMessage(data);
+  
 }
 
 export async function markTeamMessagesRead(teamId: string) {
@@ -109,8 +109,7 @@ export function subscribeTeamMessages(teamId: string, callback: (message: TeamCh
       },
       async ({ new: row }) => {
         const message = rowToMessage(row as TeamChatMessageRow);
-        const [messageWithProfile] = await attachProfiles([message]);
-        callback(messageWithProfile, "INSERT");
+        callback(message, "INSERT");
       },
     )
     .on(
