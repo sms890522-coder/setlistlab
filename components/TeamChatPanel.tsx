@@ -45,24 +45,23 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
      let unsubscribe: (() => void) | undefined;
       
       try {
-        unsubscribe = subscribeTeamMessages(team.id, (message, event) => {
-        const currentUserId = currentUserIdRef.current;
-        const nextMessage =
-          event === "INSERT" && currentUserId && message.userId !== currentUserId ? markMessageReadLocally(message, currentUserId) : message;
-  
-        setMessages((current) => {
-          const existingIndex = current.findIndex((item) => item.id === nextMessage.id);
-          if (existingIndex >= 0) {
-            return current.map((item) => (item.id === nextMessage.id ? { ...item, ...nextMessage, profile: nextMessage.profile ?? item.profile } : item));
-          }
-  
-          return [...current, nextMessage].slice(-150);
-        });
-  
-        if (event === "INSERT" && currentUserId && message.userId !== currentUserId) {
-          void markTeamMessagesRead(team.id).catch(() => undefined);
+        unsubscribe = subscribeTeamMessages(
+        team.id,
+        (message, event) => {
+          // 기존 메시지 반영 로직
+        },
+        (status, realtimeError) => {
+          console.error("TeamChatPanel realtime status error", {
+            status,
+            realtimeError,
+            teamId: team.id,
+          });
+      
+          setError(
+            "실시간 연결이 일시적으로 끊겼습니다. 메시지는 보낼 수 있으며, 새 메시지는 새로고침 후 확인될 수 있습니다."
+          );
         }
-      });
+      );
     } catch (error) {
       console.error("TeamChatPanel subscribeTeamMessages error", error);
       setError("실시간 채팅 연결에 실패했습니다. 새로고침 후 다시 시도해 주세요.");
