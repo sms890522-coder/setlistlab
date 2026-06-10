@@ -98,18 +98,26 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
   }
 
   return (
-    <section className={compact ? "flex h-full flex-col bg-white" : "card flex min-h-[70vh] flex-col overflow-hidden"}>
-      <div className={compact ? "border-b border-slate-100 p-3" : "border-b border-slate-100 p-5"}>
-        <p className="text-xs font-black text-blue-700">팀 채팅</p>
-        <h2 className={compact ? "truncate font-black text-slate-950" : "mt-1 text-2xl font-black text-slate-950"}>{title}</h2>
-        <p className="mt-1 text-xs leading-5 text-slate-500">승인된 팀원만 이 채팅을 볼 수 있습니다.</p>
+    <section
+      className={
+        compact
+          ? "flex h-full min-h-0 flex-col overflow-hidden rounded-2xl bg-white"
+          : "mx-auto flex h-[calc(100dvh-120px)] min-h-[560px] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+      }
+    >
+      <div className="shrink-0 border-b border-slate-100 p-4">
+        <p className="text-sm font-semibold text-blue-600">팀 채팅</p>
+        <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          승인된 팀원만 이 채팅을 볼 수 있습니다.
+        </p>
       </div>
-
-      <div className={`flex-1 overflow-y-auto bg-slate-50 ${compact ? "p-3" : "p-4 sm:p-5"}`}>
+  
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {!loaded ? (
-          <p className="rounded-xl bg-white p-4 text-sm font-semibold text-slate-500">메시지를 불러오는 중입니다.</p>
+          <p className="text-sm text-slate-500">메시지를 불러오는 중입니다.</p>
         ) : messages.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-200 bg-white p-5 text-center text-sm text-slate-500">
+          <p className="text-sm text-slate-500">
             아직 메시지가 없습니다. 첫 인사를 남겨보세요.
           </p>
         ) : (
@@ -119,24 +127,30 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
               const name = message.profile?.displayName || "팀원";
               const isMine = message.userId === currentUserIdRef.current;
               const readCount = getReadCount(message);
+  
               return (
-                <div key={message.id} className={isMine ? "flex justify-end" : "flex justify-start"}>
-                  <article
+                <div
+                  key={message.id}
+                  className={isMine ? "flex justify-end" : "flex justify-start"}
+                >
+                  <div
                     className={
                       isMine
-                        ? "max-w-[88%] rounded-2xl bg-blue-600 px-4 py-3 text-white shadow-sm"
-                        : "max-w-[88%] rounded-2xl bg-white px-4 py-3 text-slate-800 shadow-sm"
+                        ? "max-w-[82%] rounded-2xl bg-blue-600 px-4 py-3 text-white"
+                        : "max-w-[82%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-900"
                     }
                   >
-                    <p className={isMine ? "text-xs font-black text-blue-100" : "text-xs font-black text-slate-600"}>
+                    <p className="mb-1 text-xs font-semibold opacity-80">
                       {formatMemberNameWithEmoji(role, name)}
                     </p>
-                    <p className="mt-1 whitespace-pre-line break-words text-sm leading-6">{message.message}</p>
-                    <p className={isMine ? "mt-1 text-right text-[11px] font-semibold text-blue-100" : "mt-1 text-right text-[11px] font-semibold text-slate-400"}>
+                    <p className="whitespace-pre-wrap break-words text-sm">
+                      {message.message}
+                    </p>
+                    <p className="mt-1 text-right text-[11px] opacity-70">
                       {formatChatTime(message.createdAt)}
                       {isMine ? ` · 읽음 ${readCount}` : ""}
                     </p>
-                  </article>
+                  </div>
                 </div>
               );
             })}
@@ -144,18 +158,30 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
           </div>
         )}
       </div>
-
-      <form onSubmit={handleSubmit} className="border-t border-slate-100 bg-white p-3">
-        {error ? <p className="mb-2 rounded-lg bg-rose-50 p-2 text-xs font-semibold text-rose-700">{error}</p> : null}
-        <div className="grid grid-cols-[1fr_auto] gap-2">
+  
+      {error ? (
+        <div className="shrink-0 border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+          {error}
+        </div>
+      ) : null}
+  
+      <form
+        onSubmit={handleSubmit}
+        className="shrink-0 border-t border-slate-100 bg-white p-3"
+      >
+        <div className="flex gap-2">
           <input
             value={messageText}
             onChange={(event) => setMessageText(event.target.value)}
-            className="field-input text-base"
+            className="field-input min-h-11 flex-1 text-base"
             maxLength={500}
             placeholder="메시지 입력"
           />
-          <button type="submit" disabled={!messageText.trim() || sending} className="btn-primary min-h-11 px-4">
+          <button
+            type="submit"
+            disabled={!messageText.trim() || sending}
+            className="btn-primary min-h-11 px-4"
+          >
             전송
           </button>
         </div>
