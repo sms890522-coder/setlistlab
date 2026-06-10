@@ -149,17 +149,17 @@ export function subscribeTeamMessages(
       }
     )
     .subscribe((status, error) => {
+      console.debug("team_chat_messages realtime status", {
+        status,
+        error,
+        teamId,
+      });
+
       if (
         status === "CHANNEL_ERROR" ||
         status === "TIMED_OUT" ||
         status === "CLOSED"
       ) {
-        console.error("team_chat_messages realtime subscribe status", {
-          status,
-          error,
-          teamId,
-        });
-
         onStatusChange?.(status, error);
       }
     });
