@@ -101,9 +101,9 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
     <section
       className={
         compact
-          ? "flex h-full min-h-0 flex-col overflow-hidden rounded-2xl bg-white"
-          : "mx-auto flex h-[calc(100dvh-120px)] min-h-[560px] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
-      }
+          ? "flex h-full min-h-0 flex-col overflow-hidden bg-white"
+          : "card flex h-[calc(100dvh-120px)] min-h-[520px] flex-col overflow-hidden"
+      }    
     >
       <div className="shrink-0 border-b border-slate-100 p-4">
         <p className="text-sm font-semibold text-blue-600">팀 채팅</p>
