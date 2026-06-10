@@ -69,7 +69,7 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
     }
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribe?.();
     };
   }, [team.id]);
 
