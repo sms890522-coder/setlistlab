@@ -108,8 +108,15 @@ export function subscribeTeamMessages(teamId: string, callback: (message: TeamCh
         filter: `team_id=eq.${teamId}`,
       },
       async ({ new: row }) => {
-        const message = rowToMessage(row as TeamChatMessageRow);
-        callback(message, "INSERT");
+        try {
+          const message = rowToMessage(row as TeamChatMessageRow);
+          callback(message, "INSERT");
+        } catch (error) {
+          console.error("team_chat_messages INSERT payload error", {
+            error,
+            row,
+          });
+        }
       },
     )
     .on(
@@ -121,9 +128,16 @@ export function subscribeTeamMessages(teamId: string, callback: (message: TeamCh
         filter: `team_id=eq.${teamId}`,
       },
       async ({ new: row }) => {
-        const message = rowToMessage(row as TeamChatMessageRow);
-        const [messageWithProfile] = await attachProfiles([message]);
-        callback(messageWithProfile, "UPDATE");
+        try {
+          const message = rowToMessage(row as TeamChatMessageRow);
+          const [messageWithProfile] = await attachProfiles([message]);
+          callback(messageWithProfile, "UPDATE");
+        } catch (error) {
+          console.error("team_chat_messages UPDATE payload error", {
+            error,
+            row,
+          });
+        }
       },
     )
     .subscribe();
