@@ -85,7 +85,8 @@ export async function sendTeamMessage(teamId: string, message: string) {
   }
 
   if (error || !data) throw new Error(error?.message || "메시지를 보내지 못했습니다.");
-  return rowToMessage(data);
+  const messageWithProfile = await attachProfiles([rowToMessage(data)]);
+  return messageWithProfile[0];  
   
 }
 
@@ -116,7 +117,8 @@ export function subscribeTeamMessages(
       async ({ new: row }) => {
         try {
           const message = rowToMessage(row as TeamChatMessageRow);
-          callback(message, "INSERT");
+          const [messageWithProfile] = await attachProfiles([message]);
+          callback(messageWithProfile, "INSERT");
         } catch (error) {
           console.error("team_chat_messages INSERT payload error", {
             error,
