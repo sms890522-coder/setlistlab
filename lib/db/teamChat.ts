@@ -95,8 +95,13 @@ export async function markTeamMessagesRead(teamId: string) {
   if (error) throw new Error(error.message || "채팅 읽음 처리를 하지 못했습니다.");
 }
 
-export function subscribeTeamMessages(teamId: string, callback: (message: TeamChatMessage, event: TeamChatMessageEvent) => void) {
+export function subscribeTeamMessages(
+  teamId: string,
+  callback: (message: TeamChatMessage, event: TeamChatMessageEvent) => void,
+  onStatusChange?: (status: string, error?: unknown) => void
+) {
   const supabase = getSupabaseBrowserClient();
+
   const channel = supabase
     .channel(`team-chat:${teamId}`)
     .on(
@@ -117,7 +122,7 @@ export function subscribeTeamMessages(teamId: string, callback: (message: TeamCh
             row,
           });
         }
-      },
+      }
     )
     .on(
       "postgres_changes",
@@ -138,9 +143,23 @@ export function subscribeTeamMessages(teamId: string, callback: (message: TeamCh
             row,
           });
         }
-      },
+      }
     )
-    .subscribe();
+    .subscribe((status, error) => {
+      if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT" ||
+        status === "CLOSED"
+      ) {
+        console.error("team_chat_messages realtime subscribe status", {
+          status,
+          error,
+          teamId,
+        });
+
+        onStatusChange?.(status, error);
+      }
+    });
 
   return () => {
     void supabase.removeChannel(channel);
