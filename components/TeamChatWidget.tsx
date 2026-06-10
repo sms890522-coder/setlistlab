@@ -77,23 +77,34 @@ export function TeamChatWidget() {
       setHasUnread(messages.some((message) => message.userId !== userId && Date.parse(message.createdAt) > lastSeenAt));
     }
 
-    checkInitialUnread().catch(() => undefined);
-
-    const unsubscribe = subscribeTeamMessages(team.id, (message, event) => {
-      if (event !== "INSERT" || message.userId === userId) return;
-
-      if (openRef.current) {
-        saveTeamChatSeenAt(team.id, message.createdAt);
+    checkInitialUnread().catch((error) => {
+      console.error("TeamChatWidget checkInitialUnread error", error);
+      if (!cancelled) {
         setHasUnread(false);
-        return;
       }
-
-      setHasUnread(true);
     });
-
+    
+    let unsubscribe: (() => void) | undefined;
+    
+    try {
+      unsubscribe = subscribeTeamMessages(team.id, (message, event) => {
+        if (event !== "INSERT" || message.userId === userId) return;
+    
+        if (openRef.current) {
+          saveTeamChatSeenAt(team.id, message.createdAt);
+          setHasUnread(false);
+          return;
+        }
+    
+        setHasUnread(true);
+      });
+    } catch (error) {
+      console.error("TeamChatWidget subscribeTeamMessages error", error);
+    }
+    
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribe?.();
     };
   }, [activeTeam, userId]);
 
