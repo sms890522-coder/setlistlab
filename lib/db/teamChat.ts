@@ -16,6 +16,13 @@ export type TeamChatMessage = {
 
 export type TeamChatMessageEvent = "INSERT" | "UPDATE";
 
+export type TeamChatPresence = {
+  userId: string;
+  displayName: string;
+  role: string;
+  onlineAt: string;
+};
+
 type TeamChatMessageRow = {
   id: string;
   team_id: string;
@@ -147,6 +154,39 @@ export function subscribeTeamMessages(
   }
 }
 
+export function subscribeTeamChatPresence(teamId: string, presence: TeamChatPresence, callback: (members: TeamChatPresence[]) => void) {
+  const supabase = getSupabaseBrowserClient();
+
+  try {
+    const channel = supabase.channel(`team-chat-presence:${teamId}`, {
+      config: {
+        presence: { key: presence.userId },
+      },
+    });
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        callback(readPresenceMembers(channel));
+      })
+      .subscribe(async (status) => {
+        if (status !== "SUBSCRIBED") return;
+
+        await channel.track({
+          ...presence,
+          onlineAt: new Date().toISOString(),
+        });
+        callback(readPresenceMembers(channel));
+      });
+
+    return () => {
+      void channel.untrack();
+      void supabase.removeChannel(channel);
+    };
+  } catch {
+    return () => undefined;
+  }
+}
+
 async function attachProfiles(messages: TeamChatMessage[]) {
   const profileByUserId = new Map<string, Profile | null>();
 
@@ -172,4 +212,24 @@ function rowToMessage(row: TeamChatMessageRow): TeamChatMessage {
 
 function isMissingReadByColumnError(message?: string) {
   return Boolean(message?.includes("read_by") || message?.toLowerCase().includes("schema cache"));
+}
+
+function readPresenceMembers(channel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>["channel"]>) {
+  const state = channel.presenceState() as Record<string, TeamChatPresence[]>;
+
+  return Object.values(state)
+    .flat()
+    .filter(isTeamChatPresence)
+    .sort((a, b) => {
+      const roleCompare = a.role.localeCompare(b.role, "ko-KR");
+      if (roleCompare !== 0) return roleCompare;
+      return a.displayName.localeCompare(b.displayName, "ko-KR");
+    });
+}
+
+function isTeamChatPresence(value: unknown): value is TeamChatPresence {
+  if (!value || typeof value !== "object") return false;
+
+  const presence = value as Partial<TeamChatPresence>;
+  return Boolean(presence.userId && presence.displayName && presence.role && presence.onlineAt);
 }

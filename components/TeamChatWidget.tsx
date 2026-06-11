@@ -94,8 +94,7 @@ export function TeamChatWidget() {
         <section className="team-chat-panel no-print fixed bottom-20 right-4 z-40 flex h-[min(78dvh,640px)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:bottom-24 sm:right-6">
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 p-4">
             <div>
-              <p className="text-xs font-black text-blue-700">팀 채팅</p>
-              <h2 className="mt-1 text-lg font-black text-slate-950">{activeTeam ? activeTeam.teamName : "팀 채팅"}</h2>
+              <h2 className="text-lg font-black text-slate-950">{activeTeam ? activeTeam.teamName : "팀 채팅"}</h2>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="btn-secondary min-h-9 px-3">
               닫기

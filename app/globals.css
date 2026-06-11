@@ -81,7 +81,7 @@ select {
   }
 
   .pdf-preview-shell {
-    @apply mx-auto w-full max-w-5xl px-2.5 py-2.5;
+    @apply mx-auto w-full max-w-5xl px-0 py-0 sm:px-2.5 sm:py-2.5;
   }
 
   .pdf-document {
@@ -90,7 +90,7 @@ select {
 
   .pdf-cover-page,
   .pdf-song-page {
-    @apply bg-white p-2.5;
+    @apply bg-white p-0 sm:p-2.5;
   }
 
   .pdf-cover-page {
@@ -98,7 +98,7 @@ select {
   }
 
   .pdf-cover-page-hidden {
-    @apply min-h-0 gap-2 p-2.5;
+    @apply min-h-0 gap-2 p-0 sm:p-2.5;
   }
 
   .pdf-song-page {

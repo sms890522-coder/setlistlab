@@ -24,7 +24,7 @@ const A4_HEIGHT_MM = 297;
 const PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT = 80;
 const PDF_IMAGE_HEIGHT_MAX_REFERENCE_PERCENT = 140;
 const PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE = 70;
-const PDF_IMAGE_DESKTOP_VERTICAL_SCALE_BONUS = 10;
+const PDF_IMAGE_DESKTOP_VERTICAL_SCALE_BONUS = 15;
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();

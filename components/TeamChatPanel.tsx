@@ -1,7 +1,16 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
-import { getTeamMessages, markTeamMessagesRead, sendTeamMessage, subscribeTeamMessages, type TeamChatMessage } from "@/lib/db/teamChat";
+import { getMyProfile, type Profile } from "@/lib/db/profiles";
+import {
+  getTeamMessages,
+  markTeamMessagesRead,
+  sendTeamMessage,
+  subscribeTeamChatPresence,
+  subscribeTeamMessages,
+  type TeamChatMessage,
+  type TeamChatPresence,
+} from "@/lib/db/teamChat";
 import type { Team } from "@/lib/db/teams";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +26,8 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
   const [loaded, setLoaded] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [onlineMembers, setOnlineMembers] = useState<TeamChatPresence[]>([]);
+  const [myPresence, setMyPresence] = useState<TeamChatPresence | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const currentUserIdRef = useRef<string | null>(null);
 
@@ -25,21 +36,42 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadMessages() {
-      const [nextMessages, currentUser] = await Promise.all([getTeamMessages(team.id), getCurrentUser()]);
+    async function loadMe() {
+      const [currentUser, profile] = await Promise.all([getCurrentUser(), getMyProfile().catch(() => null)]);
       if (cancelled) return;
 
       currentUserIdRef.current = currentUser?.id ?? null;
-      setMessages(currentUser ? markMessagesReadLocally(nextMessages, currentUser.id) : nextMessages);
+      if (!currentUser) {
+        setMyPresence(null);
+        setOnlineMembers([]);
+        return;
+      }
+
+      const presence = {
+        userId: currentUser.id,
+        displayName: profile?.displayName || currentUser.email?.split("@")[0] || "팀원",
+        role: getProfileRole(profile),
+        onlineAt: new Date().toISOString(),
+      };
+      setMyPresence(presence);
+      setOnlineMembers((current) => (current.length === 0 ? [presence] : current));
+    }
+
+    async function loadMessages() {
+      const nextMessages = await getTeamMessages(team.id);
+      if (cancelled) return;
+
+      const currentUserId = currentUserIdRef.current;
+      setMessages(currentUserId ? markMessagesReadLocally(nextMessages, currentUserId) : nextMessages);
       setLoaded(true);
       setError("");
 
-      if (currentUser) {
+      if (currentUserId) {
         void markTeamMessagesRead(team.id).catch(() => undefined);
       }
     }
 
-    loadMessages().catch((loadError) => {
+    void loadMe().then(() => loadMessages()).catch((loadError) => {
       if (cancelled) return;
       setError(loadError instanceof Error ? loadError.message : "팀 채팅을 불러오지 못했습니다.");
       setLoaded(true);
@@ -80,6 +112,19 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
   }, [team.id]);
 
   useEffect(() => {
+    if (!myPresence) return;
+
+    setOnlineMembers((current) => (current.some((member) => member.userId === myPresence.userId) ? current : [myPresence, ...current]));
+    const unsubscribe = subscribeTeamChatPresence(team.id, myPresence, (members) => {
+      setOnlineMembers(members.some((member) => member.userId === myPresence.userId) ? members : [myPresence, ...members]);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [myPresence, team.id]);
+
+  useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
@@ -113,9 +158,29 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
       }
     >
       <div className="shrink-0 border-b border-slate-100 p-4">
-        <p className="text-sm font-semibold text-blue-600">팀 채팅</p>
-        <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-        <p className="mt-1 text-xs text-slate-500">승인된 팀원만 이 채팅을 볼 수 있습니다.</p>
+        {!compact ? (
+          <>
+            <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+            <p className="mt-1 text-xs text-slate-500">승인된 팀원만 이 채팅을 볼 수 있습니다.</p>
+          </>
+        ) : null}
+        <div className={compact ? "" : "mt-3"}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-black text-slate-500">온라인 팀원</p>
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">{onlineMembers.length}명</span>
+          </div>
+          <div className="mt-2 flex max-h-14 flex-wrap gap-1.5 overflow-y-auto">
+            {onlineMembers.length === 0 ? (
+              <span className="text-xs font-semibold text-slate-400">온라인 상태를 확인하는 중입니다.</span>
+            ) : (
+              onlineMembers.map((member) => (
+                <span key={member.userId} className="rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-800">
+                  {formatMemberNameWithEmoji(member.role, member.displayName)}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -144,7 +209,7 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
                     <p className="whitespace-pre-wrap break-words text-sm">{message.message}</p>
                     <p className="mt-1 text-right text-[11px] opacity-70">
                       {formatChatTime(message.createdAt)}
-                      {isMine ? ` · 읽음 ${readCount}` : ""}
+                      {` · 읽음 ${readCount}`}
                     </p>
                   </div>
                 </div>
@@ -177,6 +242,12 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
 
 function getRole(message: TeamChatMessage) {
   const profile = message.profile;
+  if (!profile) return "팀원";
+  if (profile.role === "기타" && profile.customRole) return profile.customRole;
+  return profile.role || "팀원";
+}
+
+function getProfileRole(profile: Profile | null) {
   if (!profile) return "팀원";
   if (profile.role === "기타" && profile.customRole) return profile.customRole;
   return profile.role || "팀원";
