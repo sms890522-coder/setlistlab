@@ -1,9 +1,9 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
-import { sendTeamMessage, subscribeTeamMessages, getTeamMessages, markTeamMessagesRead, type TeamChatMessage } from "@/lib/db/teamChat";
-import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
+import { getTeamMessages, markTeamMessagesRead, sendTeamMessage, subscribeTeamMessages, type TeamChatMessage } from "@/lib/db/teamChat";
 import type { Team } from "@/lib/db/teams";
+import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type TeamChatPanelProps = {
@@ -28,9 +28,12 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
     async function loadMessages() {
       const [nextMessages, currentUser] = await Promise.all([getTeamMessages(team.id), getCurrentUser()]);
       if (cancelled) return;
+
       currentUserIdRef.current = currentUser?.id ?? null;
       setMessages(currentUser ? markMessagesReadLocally(nextMessages, currentUser.id) : nextMessages);
       setLoaded(true);
+      setError("");
+
       if (currentUser) {
         void markTeamMessagesRead(team.id).catch(() => undefined);
       }
@@ -42,33 +45,37 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
       setLoaded(true);
     });
 
-     let unsubscribe: (() => void) | undefined;
-      
-      try {
-        unsubscribe = subscribeTeamMessages(
-        team.id,
-        (message, event) => {
-          // 기존 메시지 반영 로직
-        },
-        (status, realtimeError) => {
-          console.error("TeamChatPanel realtime status error", {
-            status,
-            realtimeError,
-            teamId: team.id,
-          });
-      
-          setError(
-            "실시간 연결이 일시적으로 끊겼습니다. 메시지는 보낼 수 있으며, 새 메시지는 새로고침 후 확인될 수 있습니다."
-          );
+    const unsubscribe = subscribeTeamMessages(
+      team.id,
+      (message, event) => {
+        const currentUserId = currentUserIdRef.current;
+        const nextMessage =
+          event === "INSERT" && currentUserId && message.userId !== currentUserId ? markMessageReadLocally(message, currentUserId) : message;
+
+        setMessages((current) => {
+          const existingIndex = current.findIndex((item) => item.id === nextMessage.id);
+          if (existingIndex >= 0) {
+            return current.map((item) => (item.id === nextMessage.id ? { ...item, ...nextMessage, profile: nextMessage.profile ?? item.profile } : item));
+          }
+
+          return [...current, nextMessage].slice(-150);
+        });
+
+        if (event === "INSERT" && currentUserId && message.userId !== currentUserId) {
+          void markTeamMessagesRead(team.id).catch(() => undefined);
         }
-      );
-    } catch (error) {
-      console.error("TeamChatPanel subscribeTeamMessages error", error);
-      setError("실시간 채팅 연결에 실패했습니다. 새로고침 후 다시 시도해 주세요.");
-    }
+      },
+      () => undefined,
+    );
+
+    const pollingId = window.setInterval(() => {
+      loadMessages().catch(() => undefined);
+    }, 10000);
+
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      window.clearInterval(pollingId);
+      unsubscribe();
     };
   }, [team.id]);
 
@@ -103,23 +110,19 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
         compact
           ? "flex h-full min-h-0 flex-col overflow-hidden bg-white"
           : "card flex h-[calc(100dvh-120px)] min-h-[520px] flex-col overflow-hidden"
-      }    
+      }
     >
       <div className="shrink-0 border-b border-slate-100 p-4">
         <p className="text-sm font-semibold text-blue-600">팀 채팅</p>
         <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          승인된 팀원만 이 채팅을 볼 수 있습니다.
-        </p>
+        <p className="mt-1 text-xs text-slate-500">승인된 팀원만 이 채팅을 볼 수 있습니다.</p>
       </div>
-  
+
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {!loaded ? (
           <p className="text-sm text-slate-500">메시지를 불러오는 중입니다.</p>
         ) : messages.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            아직 메시지가 없습니다. 첫 인사를 남겨보세요.
-          </p>
+          <p className="text-sm text-slate-500">아직 메시지가 없습니다. 첫 인사를 남겨보세요.</p>
         ) : (
           <div className="space-y-3">
             {messages.map((message) => {
@@ -127,12 +130,9 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
               const name = message.profile?.displayName || "팀원";
               const isMine = message.userId === currentUserIdRef.current;
               const readCount = getReadCount(message);
-  
+
               return (
-                <div
-                  key={message.id}
-                  className={isMine ? "flex justify-end" : "flex justify-start"}
-                >
+                <div key={message.id} className={isMine ? "flex justify-end" : "flex justify-start"}>
                   <div
                     className={
                       isMine
@@ -140,12 +140,8 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
                         : "max-w-[82%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-900"
                     }
                   >
-                    <p className="mb-1 text-xs font-semibold opacity-80">
-                      {formatMemberNameWithEmoji(role, name)}
-                    </p>
-                    <p className="whitespace-pre-wrap break-words text-sm">
-                      {message.message}
-                    </p>
+                    <p className="mb-1 text-xs font-semibold opacity-80">{formatMemberNameWithEmoji(role, name)}</p>
+                    <p className="whitespace-pre-wrap break-words text-sm">{message.message}</p>
                     <p className="mt-1 text-right text-[11px] opacity-70">
                       {formatChatTime(message.createdAt)}
                       {isMine ? ` · 읽음 ${readCount}` : ""}
@@ -158,17 +154,10 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
           </div>
         )}
       </div>
-  
-      {error ? (
-        <div className="shrink-0 border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-700">
-          {error}
-        </div>
-      ) : null}
-  
-      <form
-        onSubmit={handleSubmit}
-        className="shrink-0 border-t border-slate-100 bg-white p-3"
-      >
+
+      {error ? <div className="shrink-0 border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-700">{error}</div> : null}
+
+      <form onSubmit={handleSubmit} className="shrink-0 border-t border-slate-100 bg-white p-3">
         <div className="flex gap-2">
           <input
             value={messageText}
@@ -177,11 +166,7 @@ export function TeamChatPanel({ team, compact = false }: TeamChatPanelProps) {
             maxLength={500}
             placeholder="메시지 입력"
           />
-          <button
-            type="submit"
-            disabled={!messageText.trim() || sending}
-            className="btn-primary min-h-11 px-4"
-          >
+          <button type="submit" disabled={!messageText.trim() || sending} className="btn-primary min-h-11 px-4">
             전송
           </button>
         </div>

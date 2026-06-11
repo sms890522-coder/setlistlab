@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { TeamChatPanel } from "@/components/TeamChatPanel";
 import { getCurrentUser } from "@/lib/auth";
-import { getTeamMessages, subscribeTeamMessages } from "@/lib/db/teamChat";
+import { getTeamMessages } from "@/lib/db/teamChat";
 import { getApprovedMemberships, type TeamMembership } from "@/lib/db/teamMemberships";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -55,7 +55,7 @@ export function TeamChatWidget() {
   }, [open]);
 
   useEffect(() => {
-    if (!activeTeam || !userId) {
+    if (!activeTeam || !userId || open) {
       setHasUnread(false);
       return;
     }
@@ -63,7 +63,7 @@ export function TeamChatWidget() {
     const team = activeTeam;
     let cancelled = false;
 
-    async function checkInitialUnread() {
+    async function checkUnread() {
       if (openRef.current) {
         saveTeamChatSeenAt(team.id);
         setHasUnread(false);
@@ -77,36 +77,16 @@ export function TeamChatWidget() {
       setHasUnread(messages.some((message) => message.userId !== userId && Date.parse(message.createdAt) > lastSeenAt));
     }
 
-    checkInitialUnread().catch((error) => {
-      console.error("TeamChatWidget checkInitialUnread error", error);
-      if (!cancelled) {
-        setHasUnread(false);
-      }
-    });
-    
-    let unsubscribe: (() => void) | undefined;
-    
-    try {
-      unsubscribe = subscribeTeamMessages(team.id, (message, event) => {
-        if (event !== "INSERT" || message.userId === userId) return;
-    
-        if (openRef.current) {
-          saveTeamChatSeenAt(team.id, message.createdAt);
-          setHasUnread(false);
-          return;
-        }
-    
-        setHasUnread(true);
-      });
-    } catch (error) {
-      console.error("TeamChatWidget subscribeTeamMessages error", error);
-    }
-    
+    checkUnread().catch(() => undefined);
+    const intervalId = window.setInterval(() => {
+      checkUnread().catch(() => undefined);
+    }, 30000);
+
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      window.clearInterval(intervalId);
     };
-  }, [activeTeam, userId]);
+  }, [activeTeam, open, userId]);
 
   return (
     <>
@@ -146,9 +126,7 @@ export function TeamChatWidget() {
         className="team-chat-widget no-print fixed bottom-4 right-4 z-50 flex size-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:bottom-6 sm:right-6"
         aria-label="팀 채팅 열기"
       >
-        {hasUnread && !open ? (
-          <span className="absolute left-0 top-0 size-3 rounded-full border-2 border-white bg-rose-500" aria-hidden="true" />
-        ) : null}
+        {hasUnread && !open ? <span className="absolute left-0 top-0 size-3 rounded-full border-2 border-white bg-rose-500" aria-hidden="true" /> : null}
         <svg aria-hidden="true" viewBox="0 0 24 24" className="size-7" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M5 6.5A4.5 4.5 0 0 1 9.5 2h5A4.5 4.5 0 0 1 19 6.5v4A4.5 4.5 0 0 1 14.5 15H12l-4 3v-3.25A4.5 4.5 0 0 1 5 10.5v-4Z" />
           <path d="M9 7h6M9 10h4" />

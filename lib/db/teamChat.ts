@@ -21,7 +21,7 @@ type TeamChatMessageRow = {
   team_id: string;
   user_id: string;
   message: string;
-  read_by: string[] | null;
+  read_by?: string[] | null;
   created_at: string;
 };
 
@@ -35,19 +35,9 @@ export async function getTeamMessages(teamId: string) {
     .limit(120)
     .returns<TeamChatMessageRow[]>();
 
-  if (error) {
-    console.error("getTeamMessages error", {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
+  if (error) throw new Error(error.message || "팀 채팅을 불러오지 못했습니다.");
 
-    throw new Error(error.message || "팀 채팅을 불러오지 못했습니다.");
-  }
-
-  const messages = (data ?? []).map(rowToMessage);
-  return attachProfiles(messages);
+  return attachProfiles((data ?? []).map(rowToMessage));
 }
 
 export async function sendTeamMessage(teamId: string, message: string) {
@@ -85,9 +75,8 @@ export async function sendTeamMessage(teamId: string, message: string) {
   }
 
   if (error || !data) throw new Error(error?.message || "메시지를 보내지 못했습니다.");
-  const messageWithProfile = await attachProfiles([rowToMessage(data)]);
-  return messageWithProfile[0];  
-  
+  const [nextMessage] = await attachProfiles([rowToMessage(data)]);
+  return nextMessage;
 }
 
 export async function markTeamMessagesRead(teamId: string) {
@@ -100,73 +89,62 @@ export async function markTeamMessagesRead(teamId: string) {
 export function subscribeTeamMessages(
   teamId: string,
   callback: (message: TeamChatMessage, event: TeamChatMessageEvent) => void,
-  onStatusChange?: (status: string, error?: unknown) => void
+  onStatusChange?: (status: string, error?: unknown) => void,
 ) {
   const supabase = getSupabaseBrowserClient();
 
-  const channel = supabase
-    .channel(`team-chat:${teamId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "team_chat_messages",
-        filter: `team_id=eq.${teamId}`,
-      },
-      async ({ new: row }) => {
-        try {
-          const message = rowToMessage(row as TeamChatMessageRow);
-          const [messageWithProfile] = await attachProfiles([message]);
-          callback(messageWithProfile, "INSERT");
-        } catch (error) {
-          console.error("team_chat_messages INSERT payload error", {
-            error,
-            row,
-          });
+  try {
+    const channel = supabase
+      .channel(`team-chat:${teamId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "team_chat_messages",
+          filter: `team_id=eq.${teamId}`,
+        },
+        async ({ new: row }) => {
+          try {
+            const message = rowToMessage(row as TeamChatMessageRow);
+            const [messageWithProfile] = await attachProfiles([message]);
+            callback(messageWithProfile, "INSERT");
+          } catch {
+            // Polling in the UI keeps chat usable if realtime enrichment fails.
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "team_chat_messages",
+          filter: `team_id=eq.${teamId}`,
+        },
+        async ({ new: row }) => {
+          try {
+            const message = rowToMessage(row as TeamChatMessageRow);
+            const [messageWithProfile] = await attachProfiles([message]);
+            callback(messageWithProfile, "UPDATE");
+          } catch {
+            // Polling in the UI repairs missed read-count updates.
+          }
+        },
+      )
+      .subscribe((status, error) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          onStatusChange?.(status, error);
         }
-      }
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "team_chat_messages",
-        filter: `team_id=eq.${teamId}`,
-      },
-      async ({ new: row }) => {
-        try {
-          const message = rowToMessage(row as TeamChatMessageRow);
-          const [messageWithProfile] = await attachProfiles([message]);
-          callback(messageWithProfile, "UPDATE");
-        } catch (error) {
-          console.error("team_chat_messages UPDATE payload error", {
-            error,
-            row,
-          });
-        }
-      }
-    )
-    .subscribe((status, error) => {
-      console.debug("team_chat_messages realtime status", {
-        status,
-        error,
-        teamId,
       });
 
-      if (
-        status === "CHANNEL_ERROR" ||
-        status === "TIMED_OUT" ||
-        status === "CLOSED"
-      ) {
-        onStatusChange?.(status, error);
-      }
-    });
-
-  return () => {
-    void supabase.removeChannel(channel);
-  };
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  } catch (error) {
+    onStatusChange?.("CHANNEL_ERROR", error);
+    return () => undefined;
+  }
 }
 
 async function attachProfiles(messages: TeamChatMessage[]) {
