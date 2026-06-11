@@ -94,7 +94,7 @@ select {
   }
 
   .pdf-cover-page {
-    @apply flex min-h-[42rem] flex-col;
+    @apply flex flex-col;
   }
 
   .pdf-cover-page-hidden {
@@ -110,15 +110,19 @@ select {
   }
 
   .pdf-title {
-    @apply mt-2 text-2xl font-black leading-tight text-slate-950 sm:text-3xl;
+    @apply mt-0.5 text-2xl font-black leading-tight text-slate-950 sm:text-3xl;
   }
 
   .pdf-title-block {
-    @apply mt-1;
+    @apply mt-0;
   }
 
   .pdf-info-block {
-    @apply mt-3;
+    @apply mt-1;
+  }
+
+  .pdf-team-block {
+    @apply mt-1;
   }
 
   .pdf-info-line {
@@ -346,12 +350,12 @@ select {
   }
 
   .pdf-cover-page {
-    min-height: 297mm;
+    min-height: 0;
   }
 
   .pdf-cover-page-with-songs {
-    break-after: page;
-    page-break-after: always;
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .pdf-song-page {

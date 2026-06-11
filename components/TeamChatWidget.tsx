@@ -20,6 +20,7 @@ export function TeamChatWidget() {
 
   const activeMembership = useMemo(() => memberships.find((membership) => membership.team), [memberships]);
   const activeTeam = activeMembership?.team;
+  const canShowChatPanel = loaded && isSupabaseConfigured() && signedIn && !error && Boolean(activeTeam);
 
   useEffect(() => {
     openRef.current = open;
@@ -92,30 +93,34 @@ export function TeamChatWidget() {
     <>
       {open ? (
         <section className="team-chat-panel no-print fixed bottom-20 right-4 z-40 flex h-[min(78dvh,640px)] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:bottom-24 sm:right-6">
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 p-4">
-            <div>
-              <h2 className="text-lg font-black text-slate-950">{activeTeam ? activeTeam.teamName : "팀 채팅"}</h2>
-            </div>
-            <button type="button" onClick={() => setOpen(false)} className="btn-secondary min-h-9 px-3">
-              닫기
-            </button>
-          </div>
+          {canShowChatPanel && activeTeam ? (
+            <TeamChatPanel team={activeTeam} compact compactTitle={activeTeam.teamName} onClose={() => setOpen(false)} />
+          ) : (
+            <>
+              <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 p-4">
+                <div>
+                  <h2 className="text-lg font-black text-slate-950">{activeTeam ? activeTeam.teamName : "팀 채팅"}</h2>
+                </div>
+                <button type="button" onClick={() => setOpen(false)} className="btn-secondary min-h-9 px-3">
+                  닫기
+                </button>
+              </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {!loaded ? (
-              <div className="p-4 text-sm font-semibold text-slate-500">팀 채팅을 준비하는 중입니다.</div>
-            ) : !isSupabaseConfigured() ? (
-              <WidgetNotice message="계정 저장 기능이 준비되면 팀 채팅을 사용할 수 있습니다." />
-            ) : !signedIn ? (
-              <WidgetNotice message="로그인하면 승인된 팀 채팅을 사용할 수 있습니다." href="/login" action="로그인" />
-            ) : error ? (
-              <WidgetNotice message={error} href="/teams" action="내 팀" />
-            ) : activeTeam ? (
-              <TeamChatPanel team={activeTeam} compact />
-            ) : (
-              <WidgetNotice message="승인된 팀이 없습니다. 팀을 만들거나 초대코드로 참여 요청을 보내 주세요." href="/teams" action="내 팀" />
-            )}
-          </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {!loaded ? (
+                  <div className="p-4 text-sm font-semibold text-slate-500">팀 채팅을 준비하는 중입니다.</div>
+                ) : !isSupabaseConfigured() ? (
+                  <WidgetNotice message="계정 저장 기능이 준비되면 팀 채팅을 사용할 수 있습니다." />
+                ) : !signedIn ? (
+                  <WidgetNotice message="로그인하면 승인된 팀 채팅을 사용할 수 있습니다." href="/login" action="로그인" />
+                ) : error ? (
+                  <WidgetNotice message={error} href="/teams" action="내 팀" />
+                ) : (
+                  <WidgetNotice message="승인된 팀이 없습니다. 팀을 만들거나 초대코드로 참여 요청을 보내 주세요." href="/teams" action="내 팀" />
+                )}
+              </div>
+            </>
+          )}
         </section>
       ) : null}
 

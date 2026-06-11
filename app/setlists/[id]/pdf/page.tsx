@@ -235,10 +235,11 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
           {teamGroups.length > 0 ? (
             <PdfToggleBlock
               label="이번 주 팀원"
+              className="pdf-team-block"
               excluded={Boolean(coverExcluded.team)}
               onExcludedChange={(excluded) => setCoverItemExcluded("team", excluded)}
             >
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="mt-1 grid gap-1 sm:grid-cols-2">
                 {teamGroups.map(({ part, members }) => (
                   <p key={part} className="pdf-team-line">
                     <strong>{part}</strong>: {members.map((member) => formatMemberNameWithEmoji(part, member.name)).join(", ")}
