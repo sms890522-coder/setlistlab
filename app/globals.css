@@ -110,7 +110,8 @@ select {
   }
 
   .pdf-title {
-    @apply mt-0.5 text-2xl font-black leading-tight text-slate-950 sm:text-3xl;
+    @apply mt-0.5 text-sm font-black text-slate-950 sm:text-base;
+    line-height: 1.15;
   }
 
   .pdf-title-block {
@@ -380,8 +381,8 @@ select {
   }
 
   .pdf-title {
-    font-size: 20pt !important;
-    line-height: 1.2 !important;
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
   }
 
   .pdf-song-title {
