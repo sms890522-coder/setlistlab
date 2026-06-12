@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { getCurrentSession, getCurrentUser } from "@/lib/auth";
 import { getSharedSetlistCount } from "@/lib/supabase";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
+
+type AuthStatus = "loading" | "signedIn" | "signedOut";
 
 export default function HomePage() {
   const [sharedCount, setSharedCount] = useState(0);
   const [countLoaded, setCountLoaded] = useState(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
 
   useEffect(() => {
     let cancelled = false;
@@ -28,6 +33,49 @@ export default function HomePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAuth() {
+      if (!isSupabaseConfigured()) {
+        setAuthStatus("signedOut");
+        return;
+      }
+
+      const session = await getCurrentSession();
+      const user = session?.user ?? (await getCurrentUser());
+      if (!cancelled) {
+        setAuthStatus(user ? "signedIn" : "signedOut");
+      }
+    }
+
+    loadAuth();
+
+    if (!isSupabaseConfigured()) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthStatus(session?.user ? "signedIn" : "signedOut");
+    });
+
+    return () => {
+      cancelled = true;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  const signedIn = authStatus === "signedIn";
+  const storageMessage =
+    authStatus === "loading"
+      ? "계정 저장 상태를 확인하는 중입니다."
+      : signedIn
+        ? "계정 클라우드에 콘티와 곡 보관함, 팀원 목록을 저장해서 다른 기기에서도 이어서 사용할 수 있습니다."
+        : "로그인 전에는 이 브라우저에 임시 저장되고, 로그인하면 계정 클라우드에 콘티와 곡 보관함, 팀원 목록을 저장합니다.";
 
   return (
     <div className="page-shell">
@@ -64,15 +112,21 @@ export default function HomePage() {
             <Link href="/setlists" className="btn-secondary">
               샘플 콘티 보기
             </Link>
-            <Link href="/login" className="btn-secondary">
-              로그인하고 저장하기
-            </Link>
+            {authStatus === "loading" ? null : signedIn ? (
+              <Link href="/account" className="btn-secondary">
+                내 계정
+              </Link>
+            ) : (
+              <Link href="/login" className="btn-secondary">
+                로그인하고 저장하기
+              </Link>
+            )}
             <Link href="/tools/tuner" className="btn-secondary">
               튜너 열기
             </Link>
           </div>
           <p className="max-w-xl rounded-xl border border-blue-100 bg-white/75 p-4 text-sm leading-6 text-slate-600">
-            로그인 전에는 이 브라우저에 임시 저장되고, 로그인하면 계정 클라우드에 콘티와 곡 보관함, 팀원 목록을 저장합니다.
+            {storageMessage}
           </p>
           <div className="w-fit rounded-2xl border border-blue-100 bg-white/85 px-5 py-4 shadow-sm">
             <p className="text-sm font-bold text-slate-500">현재까지 공유된 콘티</p>
