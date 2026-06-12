@@ -347,7 +347,7 @@ select {
 
   .pdf-cover-page,
   .pdf-song-page {
-    padding: 0 !important;
+    padding: var(--pdf-print-page-padding, 0px) !important;
   }
 
   .pdf-cover-page {
@@ -498,12 +498,5 @@ select {
     font-weight: 700;
     line-height: 1;
     color: #cbd5e1;
-  }
-}
-
-@media print and (min-width: 768px) {
-  .pdf-cover-page,
-  .pdf-song-page {
-    padding: 20px !important;
   }
 }

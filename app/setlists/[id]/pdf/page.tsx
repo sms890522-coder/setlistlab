@@ -25,6 +25,8 @@ const PDF_IMAGE_HEIGHT_THRESHOLD_PERCENT = 80;
 const PDF_IMAGE_HEIGHT_MAX_REFERENCE_PERCENT = 140;
 const PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE = 70;
 const PDF_IMAGE_DESKTOP_VERTICAL_SCALE_BONUS = 15;
+const PDF_DESKTOP_PRINT_PADDING = "20px";
+const PDF_MOBILE_PRINT_PADDING = "0px";
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -37,6 +39,27 @@ export default function SetlistPdfPage() {
 
     return () => {
       document.body.classList.remove("pdf-preview-mode");
+    };
+  }, []);
+
+  useEffect(() => {
+    function updatePrintPadding() {
+      const isDesktopLike =
+        window.innerWidth >= 768 || window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+      document.documentElement.style.setProperty(
+        "--pdf-print-page-padding",
+        isDesktopLike ? PDF_DESKTOP_PRINT_PADDING : PDF_MOBILE_PRINT_PADDING,
+      );
+    }
+
+    updatePrintPadding();
+    window.addEventListener("resize", updatePrintPadding);
+    window.addEventListener("beforeprint", updatePrintPadding);
+
+    return () => {
+      window.removeEventListener("resize", updatePrintPadding);
+      window.removeEventListener("beforeprint", updatePrintPadding);
+      document.documentElement.style.removeProperty("--pdf-print-page-padding");
     };
   }, []);
 
