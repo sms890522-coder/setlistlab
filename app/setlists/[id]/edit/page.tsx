@@ -9,17 +9,26 @@ import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile } from "@/lib/db/profiles";
 import { getCloudSetlist, getCloudSetlists, saveCloudSetlist } from "@/lib/db/setlists";
 import { deleteCloudSongFromLibrary, getCloudSongLibrary } from "@/lib/db/savedSongs";
-import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
-import { getTeamMembers, teamMemberToAssignment, type TeamMember } from "@/lib/db/teamMembers";
+import {
+  getMyRoleInTeam,
+  getTeamMembers as getApprovedTeamMembers,
+  type TeamMembership,
+} from "@/lib/db/teamMemberships";
+import {
+  getTeamMembers as getPersonalTeamMembers,
+  teamMemberToAssignment,
+  type TeamMember,
+} from "@/lib/db/teamMembers";
 import { cloneSong, createBlankSong } from "@/lib/factories";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { deleteSongFromLibrary, getSetlists, getSongLibrary, saveSetlist } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import type { SavedSong, Setlist, Song, TeamAssignment } from "@/lib/types";
+import { DEFAULT_TEAM_PARTS, type SavedSong, type Setlist, type Song, type TeamAssignment } from "@/lib/types";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 type StorageMode = "local" | "cloud";
+type AssignmentMode = "team" | "personal" | "local";
 
 export default function SetlistEditPage() {
   const params = useParams<{ id: string }>();
@@ -32,7 +41,8 @@ export default function SetlistEditPage() {
   const [libraryMessage, setLibraryMessage] = useState("");
   const [previousSetlists, setPreviousSetlists] = useState<Setlist[]>([]);
   const [storageMode, setStorageMode] = useState<StorageMode>("local");
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [personalTeamMembers, setPersonalTeamMembers] = useState<TeamMember[]>([]);
+  const [approvedTeamMembers, setApprovedTeamMembers] = useState<TeamMembership[]>([]);
   const saveRequestIdRef = useRef(0);
 
   useEffect(() => {
@@ -62,15 +72,20 @@ export default function SetlistEditPage() {
               return;
             }
 
-            const [cloudSetlists, cloudLibrary, savedTeamMembers] = await Promise.all([
+            const isTeamSetlist = Boolean(cloudSetlist.teamId);
+            const [cloudSetlists, cloudLibrary, savedTeamMembers, actualTeamMembers] = await Promise.all([
               getCloudSetlists(),
               getCloudSongLibrary(),
-              getTeamMembers(),
+              isTeamSetlist ? Promise.resolve([]) : getPersonalTeamMembers(),
+              isTeamSetlist && cloudSetlist.teamId ? getApprovedTeamMembers(cloudSetlist.teamId) : Promise.resolve([]),
             ]);
             setSetlist(cloudSetlist);
-            setPreviousSetlists(cloudSetlists.filter((item) => item.id !== params.id));
+            setPreviousSetlists(
+              cloudSetlists.filter((item) => item.id !== params.id && item.teamId === cloudSetlist.teamId),
+            );
             setLibrary(cloudLibrary);
-            setTeamMembers(savedTeamMembers);
+            setPersonalTeamMembers(savedTeamMembers);
+            setApprovedTeamMembers(actualTeamMembers);
             setStorageMode("cloud");
             setLoaded(true);
             return;
@@ -81,6 +96,8 @@ export default function SetlistEditPage() {
       setSetlist(localSetlists.find((item) => item.id === params.id) ?? null);
       setPreviousSetlists(localSetlists.filter((item) => item.id !== params.id));
       setLibrary(getSongLibrary());
+      setPersonalTeamMembers([]);
+      setApprovedTeamMembers([]);
       setStorageMode("local");
       setLoaded(true);
     }
@@ -90,6 +107,8 @@ export default function SetlistEditPage() {
       setSetlist(allSetlists.find((item) => item.id === params.id) ?? null);
       setPreviousSetlists(allSetlists.filter((item) => item.id !== params.id));
       setLibrary(getSongLibrary());
+      setPersonalTeamMembers([]);
+      setApprovedTeamMembers([]);
       setStorageMode("local");
       setSaveError(loadError instanceof Error ? loadError.message : "콘티를 불러오지 못했습니다.");
       setLoaded(true);
@@ -193,9 +212,8 @@ export default function SetlistEditPage() {
     setLibraryMessage("팀원 파트 배정을 불러왔습니다.");
   }
 
-  function addTeamMemberToSetlist(member: TeamMember) {
+  function addAssignmentToSetlist(assignment: TeamAssignment, sourceLabel: string) {
     if (!setlist) return;
-    const assignment = teamMemberToAssignment(member);
     const exists = setlist.teamAssignments.some(
       (item) => item.id === assignment.id || (item.name === assignment.name && item.part === assignment.part),
     );
@@ -204,7 +222,7 @@ export default function SetlistEditPage() {
       return;
     }
     persist({ ...setlist, teamAssignments: [...setlist.teamAssignments, assignment] });
-    setLibraryMessage(`${assignment.part}: ${assignment.name}을 이번 주 팀원에 추가했습니다.`);
+    setLibraryMessage(`${sourceLabel}에서 ${assignment.part}: ${assignment.name}을 이번 주 팀원에 추가했습니다.`);
   }
 
   if (!loaded) {
@@ -228,6 +246,15 @@ export default function SetlistEditPage() {
       </div>
     );
   }
+
+  const assignmentMode = getAssignmentMode(storageMode, setlist);
+  const assignmentSuggestions =
+    assignmentMode === "team"
+      ? approvedTeamMembers.map(teamMembershipToAssignment)
+      : assignmentMode === "personal"
+        ? personalTeamMembers.map(teamMemberToAssignment)
+        : [];
+  const assignmentSuggestionCopy = getAssignmentSuggestionCopy(assignmentMode, setlist);
 
   return (
     <div className="page-shell space-y-6 pb-20">
@@ -303,25 +330,41 @@ export default function SetlistEditPage() {
 
       <TeamAssignmentsEditor
         assignments={setlist.teamAssignments}
+        mode={assignmentMode}
         onChange={(teamAssignments) => updateSetlist({ teamAssignments })}
       />
 
-      {storageMode === "cloud" && teamMembers.length > 0 ? (
+      {assignmentMode !== "local" ? (
         <section className="card p-5">
-          <h2 className="section-title">저장된 팀원 불러오기</h2>
-          <p className="field-help">팀원 관리에 저장된 사람을 이번 주 콘티 파트 배정에 추가합니다.</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {teamMembers.map((member) => (
-              <button
-                key={member.id}
-                type="button"
-                onClick={() => addTeamMemberToSetlist(member)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
-              >
-                <span className="text-blue-700">{member.role}</span>: {formatMemberNameWithEmoji(member.role, member.name)}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="section-title">{assignmentSuggestionCopy.title}</h2>
+              <p className="field-help">{assignmentSuggestionCopy.help}</p>
+            </div>
+            {assignmentMode === "personal" ? (
+              <Link href="/team" className="btn-secondary min-h-10 px-3">
+                임의 팀원 관리
+              </Link>
+            ) : null}
           </div>
+          {assignmentSuggestions.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">
+              {assignmentSuggestionCopy.empty}
+            </p>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {assignmentSuggestions.map((assignment) => (
+                <button
+                  key={assignment.id}
+                  type="button"
+                  onClick={() => addAssignmentToSetlist(assignment, assignmentSuggestionCopy.sourceLabel)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
+                >
+                  <span className="text-blue-700">{assignment.part}</span>: {formatMemberNameWithEmoji(assignment.part, assignment.name)}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
 
@@ -392,3 +435,72 @@ export default function SetlistEditPage() {
     </div>
   );
 }
+
+function getAssignmentMode(storageMode: StorageMode, setlist: Setlist): AssignmentMode {
+  if (storageMode === "cloud" && setlist.teamId) return "team";
+  if (storageMode === "cloud") return "personal";
+  return "local";
+}
+
+function getAssignmentSuggestionCopy(mode: AssignmentMode, setlist: Setlist) {
+  if (mode === "team") {
+    return {
+      title: "가입한 팀원 불러오기",
+      help: "이 팀 콘티는 승인된 실제 팀원 목록을 기준으로 배정합니다.",
+      empty: "아직 승인된 팀원이 없습니다. 팀 대시보드에서 초대코드로 팀원을 승인한 뒤 사용할 수 있습니다.",
+      sourceLabel: "가입한 팀원",
+    };
+  }
+
+  if (mode === "personal") {
+    return {
+      title: "임의 저장한 팀원 불러오기",
+      help: "개인 콘티는 실제 팀 멤버십과 분리된 내 계정의 임의 팀원 목록을 사용합니다.",
+      empty: "아직 임의 저장한 팀원이 없습니다. 팀원 관리에서 자주 쓰는 이름과 파트를 저장해둘 수 있습니다.",
+      sourceLabel: "임의 저장 팀원",
+    };
+  }
+
+  return {
+    title: "임의 팀원 직접 입력",
+    help: "이 콘티는 로그인 없이 이 브라우저에만 저장됩니다.",
+    empty: "위 입력칸에서 필요한 팀원을 직접 추가해 주세요.",
+    sourceLabel: setlist.title || "임시 콘티",
+  };
+}
+
+function teamMembershipToAssignment(member: TeamMembership): TeamAssignment {
+  const rawPart = member.position || getMembershipProfileRole(member) || "팀원";
+  const part = normalizeAssignmentPart(rawPart);
+  const name = member.profile?.displayName || "팀원";
+  return {
+    id: member.id,
+    name,
+    part,
+    note: getMembershipNote(member),
+  };
+}
+
+function getMembershipProfileRole(member: TeamMembership) {
+  if (!member.profile) return "";
+  if (member.profile.role === "기타" && member.profile.customRole) return member.profile.customRole;
+  return member.profile.role || "";
+}
+
+function getMembershipNote(member: TeamMembership) {
+  if (member.role === "owner") return "팀 리더";
+  if (member.role === "admin") return "팀 관리자";
+  return undefined;
+}
+
+function normalizeAssignmentPart(part: string) {
+  const mapped = ROLE_TO_ASSIGNMENT_PART[part] ?? part;
+  return DEFAULT_TEAM_PARTS.includes(mapped as (typeof DEFAULT_TEAM_PARTS)[number]) ? mapped : "기타";
+}
+
+const ROLE_TO_ASSIGNMENT_PART: Record<string, string> = {
+  찬양인도자: "인도자",
+  일렉기타: "일렉",
+  어쿠스틱기타: "어쿠스틱",
+  미디어: "방송",
+};

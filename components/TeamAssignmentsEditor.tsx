@@ -10,15 +10,17 @@ import { createPortal } from "react-dom";
 type TeamAssignmentsEditorProps = {
   assignments: TeamAssignment[];
   onChange: (assignments: TeamAssignment[]) => void;
+  mode?: "team" | "personal" | "local";
 };
 
-export function TeamAssignmentsEditor({ assignments, onChange }: TeamAssignmentsEditorProps) {
+export function TeamAssignmentsEditor({ assignments, onChange, mode = "local" }: TeamAssignmentsEditorProps) {
   const [deleteTarget, setDeleteTarget] = useState<TeamAssignment | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TeamAssignment>(() => createBlankTeamAssignment());
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const sortedAssignments = sortTeamAssignments(assignments);
+  const copy = getEditorCopy(mode);
 
   function resetForm() {
     setEditingId(null);
@@ -61,8 +63,11 @@ export function TeamAssignmentsEditor({ assignments, onChange }: TeamAssignments
   return (
     <section className="card p-5">
       <div>
-        <h2 className="section-title">팀원 파트 배정</h2>
-        <p className="field-help">한 명씩 추가하고, 아래 배정 버튼을 눌러 수정하세요.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="section-title">팀원 파트 배정</h2>
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{copy.badge}</span>
+        </div>
+        <p className="field-help">{copy.help}</p>
       </div>
 
       <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
@@ -202,4 +207,25 @@ export function TeamAssignmentsEditor({ assignments, onChange }: TeamAssignments
         : null}
     </section>
   );
+}
+
+function getEditorCopy(mode: NonNullable<TeamAssignmentsEditorProps["mode"]>) {
+  if (mode === "team") {
+    return {
+      badge: "팀 콘티 · 실제 팀원",
+      help: "승인된 실제 팀원을 불러와 배정하거나, 필요하면 예외 인원을 직접 추가하세요.",
+    };
+  }
+
+  if (mode === "personal") {
+    return {
+      badge: "개인 콘티 · 임의 팀원",
+      help: "내 계정에 임의 저장한 팀원을 불러오거나, 필요한 팀원을 직접 입력해 배정하세요.",
+    };
+  }
+
+  return {
+    badge: "임시 콘티 · 임의 팀원",
+    help: "로그인 없이 이 브라우저에만 저장되는 임의 팀원을 직접 입력해 배정하세요.",
+  };
 }
