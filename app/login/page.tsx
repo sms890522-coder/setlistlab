@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { getMyProfile } from "@/lib/db/profiles";
+import { sanitizeRedirectPath } from "@/lib/routes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { signInWithEmail, signInWithGoogle } from "@/lib/auth";
 import { useRouter } from "next/navigation";
@@ -16,7 +17,7 @@ export default function LoginPage() {
 
   function getRedirectPath() {
     if (typeof window === "undefined") return "/setlists";
-    return new URLSearchParams(window.location.search).get("redirect") || "/setlists";
+    return sanitizeRedirectPath(new URLSearchParams(window.location.search).get("redirect"));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

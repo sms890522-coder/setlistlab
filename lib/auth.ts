@@ -1,6 +1,7 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
+import { sanitizeRedirectPath } from "./routes";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "./supabase/client";
 
 export const USER_ROLES = [
@@ -66,10 +67,11 @@ export async function signUpWithEmail(email: string, password: string) {
 export async function signInWithGoogle(redirectTo = "/onboarding") {
   const supabase = getSupabaseBrowserClient();
   const redirectOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const safeRedirectTo = sanitizeRedirectPath(redirectTo, "/onboarding");
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${redirectOrigin}${redirectTo}`,
+      redirectTo: `${redirectOrigin}${safeRedirectTo}`,
     },
   });
 

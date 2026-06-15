@@ -2,6 +2,7 @@
 
 import { USER_ROLES, getCurrentUser } from "@/lib/auth";
 import { getMyProfile, upsertMyProfile } from "@/lib/db/profiles";
+import { sanitizeRedirectPath } from "@/lib/routes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
@@ -56,7 +57,7 @@ export default function OnboardingPage() {
 
   function getRedirectPath() {
     if (typeof window === "undefined") return "/setlists";
-    return new URLSearchParams(window.location.search).get("redirect") || "/setlists";
+    return sanitizeRedirectPath(new URLSearchParams(window.location.search).get("redirect"));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
