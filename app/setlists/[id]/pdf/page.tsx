@@ -27,6 +27,8 @@ const PDF_IMAGE_MIN_AUTO_VERTICAL_SCALE = 70;
 const PDF_IMAGE_DESKTOP_VERTICAL_SCALE_BONUS = 15;
 const PDF_DESKTOP_PRINT_PADDING = "20px";
 const PDF_MOBILE_PRINT_PADDING = "0px";
+const PRINT_PREPARE_TIMEOUT_MS = 6000;
+const PRINT_LAYOUT_SETTLE_MS = 120;
 
 export default function SetlistPdfPage() {
   const params = useParams<{ id: string }>();
@@ -43,22 +45,13 @@ export default function SetlistPdfPage() {
   }, []);
 
   useEffect(() => {
-    function updatePrintPadding() {
-      const isDesktopLike =
-        window.innerWidth >= 768 || window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-      document.documentElement.style.setProperty(
-        "--pdf-print-page-padding",
-        isDesktopLike ? PDF_DESKTOP_PRINT_PADDING : PDF_MOBILE_PRINT_PADDING,
-      );
-    }
-
-    updatePrintPadding();
-    window.addEventListener("resize", updatePrintPadding);
-    window.addEventListener("beforeprint", updatePrintPadding);
+    updatePdfPrintPadding();
+    window.addEventListener("resize", updatePdfPrintPadding);
+    window.addEventListener("beforeprint", updatePdfPrintPadding);
 
     return () => {
-      window.removeEventListener("resize", updatePrintPadding);
-      window.removeEventListener("beforeprint", updatePrintPadding);
+      window.removeEventListener("resize", updatePdfPrintPadding);
+      window.removeEventListener("beforeprint", updatePdfPrintPadding);
       document.documentElement.style.removeProperty("--pdf-print-page-padding");
     };
   }, []);
@@ -129,6 +122,8 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
   const [coverExcluded, setCoverExcluded] = useState<Record<string, boolean>>({});
   const [printMessage, setPrintMessage] = useState("");
   const [printError, setPrintError] = useState("");
+  const [printReady, setPrintReady] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const coverItems = [
     { key: "title", exists: true },
     { key: "service", exists: true },
@@ -154,22 +149,43 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
     };
   }, [setlist.id, setlist.title]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setPrintReady(false);
+
+    waitForPdfDocumentReady()
+      .then(() => {
+        if (!cancelled) setPrintReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setPrintReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setlist.id]);
+
   function handlePrint() {
+    if (printing || !printReady) return;
     setPrintError("");
+    setPrinting(true);
+    setPrintMessage("");
 
     if (typeof window.print !== "function") {
       setPrintMessage("");
       setPrintError("이 브라우저에서는 인쇄창을 바로 열 수 없습니다. 브라우저 메뉴의 인쇄 기능을 사용해 주세요.");
+      setPrinting(false);
       return;
     }
 
     try {
       document.title = getPdfDocumentTitle(setlist);
+      document.body.classList.add("pdf-preview-mode");
+      updatePdfPrintPadding();
       window.focus();
       window.print();
-      window.setTimeout(() => {
-        setPrintMessage(`인쇄창이 열리지 않으면 브라우저 메뉴의 인쇄 또는 Ctrl/Cmd+P를 사용해 주세요. ${PRINT_HEADER_FOOTER_HELP}`);
-      }, 250);
+      setPrintMessage(`인쇄창이 열리지 않으면 브라우저 메뉴의 인쇄 또는 Ctrl/Cmd+P를 사용해 주세요. ${PRINT_HEADER_FOOTER_HELP}`);
     } catch (printError) {
       setPrintMessage("");
       setPrintError(
@@ -177,6 +193,10 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
           ? `인쇄창을 열지 못했습니다. ${printError.message}`
           : "인쇄창을 열지 못했습니다. 브라우저 메뉴의 인쇄 기능을 사용해 주세요.",
       );
+    } finally {
+      window.setTimeout(() => {
+        setPrinting(false);
+      }, 300);
     }
   }
 
@@ -188,14 +208,19 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
           <h1 className="mt-1 text-2xl font-black text-slate-950">{setlist.title || "제목 없는 콘티"}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handlePrint} className="btn-primary">
-            PDF로 저장/인쇄
+          <button type="button" onClick={handlePrint} disabled={printing || !printReady} className="btn-primary">
+            {printing ? "인쇄 준비 중" : printReady ? "PDF로 저장/인쇄" : "미리보기 준비 중"}
           </button>
           <Link href={`/setlists/${setlist.id}`} className="btn-secondary">
             콘티로 돌아가기
           </Link>
         </div>
       </div>
+      {!printReady && !printing ? (
+        <p className="no-print mb-4 rounded-lg border border-slate-100 bg-white px-4 py-3 text-sm font-semibold leading-6 text-slate-600">
+          악보 이미지와 인쇄 레이아웃을 준비하고 있습니다. 잠시 후 저장/인쇄 버튼이 활성화됩니다.
+        </p>
+      ) : null}
       {printMessage ? (
         <p className="no-print mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-6 text-blue-800">
           {printMessage}
@@ -669,4 +694,82 @@ function getDefaultPdfImageLayout(
 function clampToStep(value: number, min: number, max: number, step: number) {
   const stepped = Math.round(value / step) * step;
   return Math.min(max, Math.max(min, stepped));
+}
+
+function updatePdfPrintPadding() {
+  const isDesktopLike = window.innerWidth >= 768 || window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  document.documentElement.style.setProperty(
+    "--pdf-print-page-padding",
+    isDesktopLike ? PDF_DESKTOP_PRINT_PADDING : PDF_MOBILE_PRINT_PADDING,
+  );
+}
+
+async function waitForPdfDocumentReady() {
+  await waitForDocumentComplete();
+  await waitForFontsReady();
+  await waitForPdfImagesReady();
+  await waitForNextPaint();
+  await wait(PRINT_LAYOUT_SETTLE_MS);
+}
+
+function waitForDocumentComplete() {
+  if (document.readyState === "complete") return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    const timeoutId = window.setTimeout(finish, PRINT_PREPARE_TIMEOUT_MS);
+
+    function finish() {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("load", finish);
+      resolve();
+    }
+
+    window.addEventListener("load", finish, { once: true });
+  });
+}
+
+async function waitForFontsReady() {
+  try {
+    await document.fonts?.ready;
+  } catch {
+    // Font loading should not block the user from opening the print dialog.
+  }
+}
+
+async function waitForPdfImagesReady() {
+  const images = Array.from(document.querySelectorAll<HTMLImageElement>(".pdf-document img"));
+  await Promise.all(images.map((image) => waitForImageReady(image)));
+}
+
+function waitForImageReady(image: HTMLImageElement) {
+  if (image.complete) return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    const timeoutId = window.setTimeout(finish, PRINT_PREPARE_TIMEOUT_MS);
+
+    function finish() {
+      window.clearTimeout(timeoutId);
+      image.removeEventListener("load", finish);
+      image.removeEventListener("error", finish);
+      resolve();
+    }
+
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
+  });
+}
+
+async function waitForNextPaint() {
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
