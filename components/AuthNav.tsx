@@ -70,6 +70,7 @@ export function AuthNav() {
     { href: chatHref, label: "팀 채팅" },
     { href: "/songs", label: "곡 보관함" },
     { href: "/tools/tuner", label: "튜너" },
+    { href: "/contact", label: "문의" },
   ];
   const accountLabel = loaded && displayName ? displayName : "로그인";
   const accountHref = loaded && displayName ? "/account" : "/login";

@@ -52,7 +52,11 @@ export default function RootLayout({
             className="font-semibold text-slate-500 transition hover:text-blue-600"
           >
             미션랩
-          </a>
+          </a>{" "}
+          ·{" "}
+          <Link href="/contact" className="font-semibold text-slate-500 transition hover:text-blue-600">
+            문의/피드백
+          </Link>
         </footer>
       </body>
     </html>
