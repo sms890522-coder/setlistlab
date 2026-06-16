@@ -2,9 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { createTeamChatMessageNotifications } from "./notifications";
 import { getProfile, type Profile } from "./profiles";
-import { dispatchPushEvent } from "./pushEvents";
 
 export type TeamChatMessage = {
   id: string;
@@ -57,35 +55,24 @@ export async function sendTeamMessage(teamId: string, message: string) {
   if (!trimmedMessage) throw new Error("메시지를 입력해 주세요.");
 
   const supabase = getSupabaseBrowserClient();
-  let { data, error } = await supabase
-    .from("team_chat_messages")
-    .insert({
-      team_id: teamId,
-      user_id: user.id,
-      message: trimmedMessage.slice(0, 500),
-      read_by: [user.id],
-    })
-    .select("*")
-    .single<TeamChatMessageRow>();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("로그인이 필요합니다.");
 
-  if (error && isMissingReadByColumnError(error.message)) {
-    const retryResult = await supabase
-      .from("team_chat_messages")
-      .insert({
-        team_id: teamId,
-        user_id: user.id,
-        message: trimmedMessage.slice(0, 500),
-      })
-      .select("*")
-      .single<TeamChatMessageRow>();
+  const response = await fetch("/api/team-chat/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ teamId, message: trimmedMessage }),
+  });
+  const result = (await response.json().catch(() => ({}))) as { message?: TeamChatMessageRow; error?: string };
 
-    data = retryResult.data;
-    error = retryResult.error;
-  }
-
-  if (error || !data) throw new Error(error?.message || "메시지를 보내지 못했습니다.");
-  await createTeamChatMessageNotifications(data.id).catch(() => undefined);
-  void dispatchPushEvent({ eventType: "team_chat_message", messageId: data.id });
+  if (!response.ok || !result.message) throw new Error(result.error || "메시지를 보내지 못했습니다.");
+  const data = result.message;
   const [nextMessage] = await attachProfiles([rowToMessage(data)]);
   return nextMessage;
 }
@@ -212,10 +199,6 @@ function rowToMessage(row: TeamChatMessageRow): TeamChatMessage {
     readBy: row.read_by ?? [],
     createdAt: row.created_at,
   };
-}
-
-function isMissingReadByColumnError(message?: string) {
-  return Boolean(message?.includes("read_by") || message?.toLowerCase().includes("schema cache"));
 }
 
 function readPresenceMembers(channel: ReturnType<ReturnType<typeof getSupabaseBrowserClient>["channel"]>) {
