@@ -32,7 +32,7 @@ export function isWebPushConfigured() {
 
 export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
   const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
-  if (uniqueUserIds.length === 0) return { sent: 0, failed: 0, removed: 0 };
+  if (uniqueUserIds.length === 0) return { sent: 0, failed: 0, removed: 0, subscriptions: 0 };
 
   configureWebPush();
 
@@ -48,6 +48,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
   let sent = 0;
   let failed = 0;
   let removed = 0;
+  const subscriptions = data?.length ?? 0;
 
   await Promise.all(
     (data ?? []).map(async (subscriptionRow) => {
@@ -82,7 +83,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
     }),
   );
 
-  return { sent, failed, removed };
+  return { sent, failed, removed, subscriptions };
 }
 
 function configureWebPush() {

@@ -9,6 +9,7 @@ import {
   subscribeBrowserPush,
   type PushSupportStatus,
 } from "@/lib/push";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 import { AddToHomeScreenGuide } from "./AddToHomeScreenGuide";
 
@@ -21,6 +22,7 @@ export function PushNotificationManager() {
   const [permission, setPermission] = useState<PermissionState>("unsupported");
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -119,6 +121,42 @@ export function PushNotificationManager() {
     }
   }
 
+  async function handleSendTest() {
+    setTesting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      if (!isLoggedIn || !isSupabaseConfigured()) throw new Error("로그인 후 테스트 알림을 보낼 수 있습니다.");
+      if (!subscribed) throw new Error("휴대폰 알림을 먼저 켜 주세요.");
+
+      const supabase = getSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("로그인이 필요합니다.");
+
+      const response = await fetch("/api/push/test", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const result = (await response.json().catch(() => ({}))) as { error?: string; sent?: number };
+
+      if (!response.ok) {
+        throw new Error(result.error || "테스트 알림을 보내지 못했습니다.");
+      }
+
+      setMessage("테스트 알림을 보냈습니다. 잠금 화면이나 알림 센터를 확인해 주세요.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "테스트 알림을 보내지 못했습니다.");
+    } finally {
+      setTesting(false);
+    }
+  }
+
   if (!loaded) {
     return (
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -164,6 +202,14 @@ export function PushNotificationManager() {
           className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:text-slate-300"
         >
           알림 구독 해제
+        </button>
+        <button
+          type="button"
+          onClick={handleSendTest}
+          disabled={busy || testing || !subscribed}
+          className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 px-4 text-sm font-black text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300"
+        >
+          {testing ? "테스트 전송 중..." : "테스트 알림 보내기"}
         </button>
       </div>
     </section>
