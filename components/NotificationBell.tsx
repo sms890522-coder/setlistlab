@@ -7,6 +7,7 @@ import {
   getUnreadNotificationCount,
   markAllNotificationsRead,
   markNotificationRead,
+  NOTIFICATIONS_UPDATED_EVENT,
   subscribeNotifications,
   type AppNotification,
 } from "@/lib/db/notifications";
@@ -25,7 +26,10 @@ export function NotificationBell() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
-  const recentNotifications = useMemo(() => notifications.slice(0, 12), [notifications]);
+  const recentNotifications = useMemo(
+    () => notifications.filter((notification) => !(notification.type === "team_chat_message" && notification.readAt)).slice(0, 12),
+    [notifications],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +71,26 @@ export function NotificationBell() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    async function refreshNotifications() {
+      try {
+        const [nextNotifications, nextUnreadCount] = await Promise.all([getNotifications(20), getUnreadNotificationCount()]);
+        setNotifications(nextNotifications);
+        setUnreadCount(nextUnreadCount);
+      } catch {
+        // The next realtime event or menu open can recover the notification state.
+      }
+    }
+
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, refreshNotifications);
+
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, refreshNotifications);
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return undefined;
@@ -156,7 +180,7 @@ export function NotificationBell() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-12 z-[70] w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="fixed left-3 right-3 top-[4.5rem] z-[70] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl md:absolute md:left-auto md:right-0 md:top-12 md:w-[min(22rem,calc(100vw-2rem))]">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
             <div>
               <p className="text-sm font-black text-slate-950">알림</p>
@@ -167,7 +191,7 @@ export function NotificationBell() {
             </button>
           </div>
 
-          <div className="max-h-[24rem] overflow-y-auto p-2">
+          <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 md:max-h-[24rem]">
             {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
             {!error && recentNotifications.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-500">

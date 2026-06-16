@@ -1,6 +1,7 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { markTeamChatNotificationsRead } from "@/lib/db/notifications";
 import { getMyProfile, type Profile } from "@/lib/db/profiles";
 import {
   getTeamMessages,
@@ -70,6 +71,7 @@ export function TeamChatPanel({ team, compact = false, compactTitle, onClose }: 
 
       if (currentUserId) {
         void markTeamMessagesRead(team.id).catch(() => undefined);
+        void markTeamChatNotificationsRead(team.id).catch(() => undefined);
       }
     }
 
@@ -97,6 +99,7 @@ export function TeamChatPanel({ team, compact = false, compactTitle, onClose }: 
 
         if (event === "INSERT" && currentUserId && message.userId !== currentUserId) {
           void markTeamMessagesRead(team.id).catch(() => undefined);
+          void markTeamChatNotificationsRead(team.id).catch(() => undefined);
         }
       },
       () => undefined,

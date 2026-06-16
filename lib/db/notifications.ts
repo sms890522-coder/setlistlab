@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { sanitizeRedirectPath } from "@/lib/routes";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
+export const NOTIFICATIONS_UPDATED_EVENT = "setlistlab:notifications-updated";
+
 export type NotificationType =
   | "team_chat_message"
   | "team_setlist_created"
@@ -72,6 +74,7 @@ export async function markNotificationRead(notificationId: string) {
     .single<NotificationRow>();
 
   if (error) throw new Error(error.message || "알림을 읽음 처리하지 못했습니다.");
+  dispatchNotificationsUpdated();
   return rowToNotification(data);
 }
 
@@ -81,7 +84,26 @@ export async function markAllNotificationsRead() {
   const { error } = await supabase.from("notifications").update({ read_at: now }).is("read_at", null);
 
   if (error) throw new Error(error.message || "알림을 모두 읽음 처리하지 못했습니다.");
+  dispatchNotificationsUpdated();
   return now;
+}
+
+export async function markTeamChatNotificationsRead(teamId: string) {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("team_id", teamId)
+    .eq("type", "team_chat_message")
+    .is("read_at", null)
+    .select("id")
+    .returns<Array<{ id: string }>>();
+
+  if (error) throw new Error(error.message || "채팅 알림을 읽음 처리하지 못했습니다.");
+  dispatchNotificationsUpdated();
+  return data ?? [];
 }
 
 export async function createTeamChatMessageNotifications(messageId: string) {
@@ -168,4 +190,9 @@ function rowToNotification(row: NotificationRow): AppNotification {
     readAt: row.read_at ?? undefined,
     createdAt: row.created_at,
   };
+}
+
+function dispatchNotificationsUpdated() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(NOTIFICATIONS_UPDATED_EVENT));
 }
