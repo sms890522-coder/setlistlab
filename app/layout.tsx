@@ -17,6 +17,9 @@ export const metadata: Metadata = {
     title: "콘티연습실",
     statusBarStyle: "default",
   },
+  other: {
+    "naver-site-verification": "003a0e7d523a14ff4046dfc9eac90734535bcc9e",
+  },
 };
 
 export const viewport: Viewport = {
