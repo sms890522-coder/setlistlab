@@ -7,8 +7,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "콘티연습실",
   description: "찬양팀을 위한 유튜브 구간반복 콘티 공유 도구",
+  manifest: "/manifest.json",
   icons: {
     icon: [{ url: "/favicon.png", type: "image/png" }],
+    apple: [{ url: "/icons/icon-192.png", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "콘티연습실",
+    statusBarStyle: "default",
   },
 };
 

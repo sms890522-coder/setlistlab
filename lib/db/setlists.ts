@@ -8,6 +8,7 @@ import type { Setlist, Song, TeamAssignment } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
 import { getAssignmentsForSetlists, getSetlistAssignments, replaceSetlistAssignments } from "./assignments";
 import { createTeamSetlistCreatedNotifications } from "./notifications";
+import { dispatchPushEvent } from "./pushEvents";
 
 export type CloudSetlist = Setlist & {
   ownerId?: string;
@@ -92,6 +93,7 @@ export async function createCloudSetlist(setlist: Setlist) {
   const assignments = await replaceSetlistAssignments(data.id, normalized.teamAssignments);
   if (normalized.teamId) {
     await createTeamSetlistCreatedNotifications(data.id).catch(() => undefined);
+    void dispatchPushEvent({ eventType: "team_setlist_created", setlistId: data.id });
   }
   return rowToSetlist(data, assignments);
 }
@@ -179,6 +181,7 @@ export async function setCloudSetlistPublic(id: string, isPublic: boolean) {
   const assignments = await getSetlistAssignments(id);
   if (isPublic && source.teamId && !source.isPublic) {
     await createTeamSetlistCreatedNotifications(id).catch(() => undefined);
+    void dispatchPushEvent({ eventType: "team_setlist_created", setlistId: id });
   }
   return rowToSetlist(data, assignments);
 }

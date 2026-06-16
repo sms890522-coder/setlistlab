@@ -6,6 +6,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createTeamInviteApprovedNotification } from "./notifications";
 import { getTeamsByIds, type Team } from "./teams";
 import { getProfile, type Profile } from "./profiles";
+import { dispatchPushEvent } from "./pushEvents";
 
 export type TeamMembershipStatus = "pending" | "approved" | "rejected" | "removed";
 export type TeamMembershipRole = "owner" | "admin" | "member";
@@ -53,6 +54,7 @@ export async function requestJoinTeam(inviteCode: string, requestedMessage?: str
     .single<TeamMembershipRow>();
 
   if (error) throw new Error(error.message || "팀 참여 요청을 보내지 못했습니다.");
+  void dispatchPushEvent({ eventType: "team_invite_requested", membershipId: data.id });
   return rowToMembership(data);
 }
 
@@ -107,6 +109,7 @@ export async function approveJoinRequest(membershipId: string) {
 
   if (error) throw new Error(error.message || "팀원으로 승인하지 못했습니다.");
   await createTeamInviteApprovedNotification(data.id).catch(() => undefined);
+  void dispatchPushEvent({ eventType: "team_invite_approved", membershipId: data.id });
   return rowToMembership(data);
 }
 

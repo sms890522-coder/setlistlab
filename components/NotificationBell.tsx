@@ -12,6 +12,7 @@ import {
   type AppNotification,
 } from "@/lib/db/notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -224,6 +225,15 @@ export function NotificationBell() {
                 </button>
               );
             })}
+          </div>
+          <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
+            <Link
+              href="/settings/notifications"
+              onClick={() => setOpen(false)}
+              className="block rounded-xl px-3 py-2 text-center text-xs font-black text-blue-700 transition hover:bg-blue-50"
+            >
+              알림 설정
+            </Link>
           </div>
         </div>
       ) : null}

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createTeamChatMessageNotifications } from "./notifications";
 import { getProfile, type Profile } from "./profiles";
+import { dispatchPushEvent } from "./pushEvents";
 
 export type TeamChatMessage = {
   id: string;
@@ -84,6 +85,7 @@ export async function sendTeamMessage(teamId: string, message: string) {
 
   if (error || !data) throw new Error(error?.message || "메시지를 보내지 못했습니다.");
   await createTeamChatMessageNotifications(data.id).catch(() => undefined);
+  void dispatchPushEvent({ eventType: "team_chat_message", messageId: data.id });
   const [nextMessage] = await attachProfiles([rowToMessage(data)]);
   return nextMessage;
 }

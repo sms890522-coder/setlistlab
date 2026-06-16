@@ -23,9 +23,10 @@ npm run dev
 - 게스트 localStorage 임시 저장
 - Supabase Auth 로그인 저장
 - Supabase 기반 콘티, 곡 보관함, 팀원 관리
+- 팀 초대코드와 승인제 기반 팀 채팅
+- 앱 안 알림과 Web Push 휴대폰 알림
 - 공개 공유 링크 `/s/[shareSlug]`
-- 같은 교회/찬양팀 기준 연습중인 팀원 표시
-- 같은 교회/찬양팀 기준 접속중 팀 채팅
+- 승인된 팀 기준 연습중인 팀원 표시
 - JSON 가져오기
 
 ## Supabase 설정
@@ -37,8 +38,14 @@ npm run dev
 ```txt
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=
 NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=
+NEXT_PUBLIC_KAKAO_CHANNEL_CHAT_URL=
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:operator@example.com
+INTERNAL_API_SECRET=
 ```
 
 4. Supabase Auth에서 이메일 로그인 또는 구글 OAuth를 켭니다.
@@ -60,8 +67,28 @@ NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=
 - `saved_songs`: 곡 보관함
 - `setlists`: 콘티 본문과 곡 목록 JSON
 - `setlist_assignments`: 콘티별 이번 주 팀원 배정
-- `practice_presence`: 같은 교회/찬양팀 팀원끼리 보이는 연습중 상태
+- `teams`: 초대코드가 있는 팀 정보
+- `team_memberships`: 팀 참여 요청, 승인 상태, 역할
+- `team_chat_messages`: 팀 ID 기준 채팅 메시지
+- `notifications`: 앱 안 알림
+- `push_subscriptions`: 휴대폰 Web Push 구독 정보
+- `practice_presence`: 승인된 팀원끼리 보이는 연습중 상태
 - `shared_setlists`: 기존 MVP 공유 링크 호환용
+
+## 휴대폰 푸시 알림 설정
+
+1. `supabase/schema.sql`을 Supabase SQL Editor에서 다시 실행해 `push_subscriptions` 테이블과 RLS 정책을 적용합니다.
+2. VAPID 키를 생성합니다.
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+3. Vercel 환경변수에 `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `SUPABASE_SERVICE_ROLE_KEY`, `INTERNAL_API_SECRET`을 넣고 다시 배포합니다.
+4. 사용자는 앱의 `알림 설정` 화면에서 `휴대폰 알림 켜기`를 누릅니다.
+5. iPhone은 Safari에서 사이트를 홈 화면에 추가한 뒤 홈 화면 앱에서 알림을 허용해야 합니다. Android Chrome은 권한 허용 후 바로 사용할 수 있습니다.
+
+`SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `INTERNAL_API_SECRET`은 서버 전용 값입니다. 브라우저 코드나 공개 저장소에 실제 값을 넣지 마세요.
 
 ## 이미지 업로드 설정
 
