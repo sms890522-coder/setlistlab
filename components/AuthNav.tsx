@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { NotificationBell } from "@/components/NotificationBell";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile, PROFILE_UPDATED_EVENT } from "@/lib/db/profiles";
 import { getApprovedMemberships } from "@/lib/db/teamMemberships";
@@ -76,7 +77,8 @@ export function AuthNav() {
   const accountHref = loaded && displayName ? "/account" : "/login";
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-2">
+      {loaded && displayName ? <NotificationBell /> : null}
       <button
         type="button"
         onClick={() => setMenuOpen((value) => !value)}

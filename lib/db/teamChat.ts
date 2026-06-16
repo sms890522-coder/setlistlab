@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createTeamChatMessageNotifications } from "./notifications";
 import { getProfile, type Profile } from "./profiles";
 
 export type TeamChatMessage = {
@@ -82,6 +83,7 @@ export async function sendTeamMessage(teamId: string, message: string) {
   }
 
   if (error || !data) throw new Error(error?.message || "메시지를 보내지 못했습니다.");
+  await createTeamChatMessageNotifications(data.id).catch(() => undefined);
   const [nextMessage] = await attachProfiles([rowToMessage(data)]);
   return nextMessage;
 }

@@ -3,6 +3,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { normalizeInviteCode } from "@/lib/inviteCode";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createTeamInviteApprovedNotification } from "./notifications";
 import { getTeamsByIds, type Team } from "./teams";
 import { getProfile, type Profile } from "./profiles";
 
@@ -105,6 +106,7 @@ export async function approveJoinRequest(membershipId: string) {
     .single<TeamMembershipRow>();
 
   if (error) throw new Error(error.message || "팀원으로 승인하지 못했습니다.");
+  await createTeamInviteApprovedNotification(data.id).catch(() => undefined);
   return rowToMembership(data);
 }
 

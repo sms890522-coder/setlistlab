@@ -243,6 +243,47 @@ create table if not exists public.shared_setlists (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  team_id uuid references public.teams(id) on delete cascade,
+  type text not null,
+  title text not null,
+  body text,
+  link_url text,
+  read_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint notifications_type_check check (
+    type in (
+      'team_chat_message',
+      'team_setlist_created',
+      'team_invite_requested',
+      'team_invite_approved'
+    )
+  )
+);
+
+create index if not exists notifications_user_created_idx
+on public.notifications (user_id, created_at desc);
+
+create index if not exists notifications_user_unread_idx
+on public.notifications (user_id, created_at desc)
+where read_at is null;
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'notifications'
+     ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
+end $$;
+
 create table if not exists public.practice_presence (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -287,6 +328,7 @@ alter table public.saved_songs enable row level security;
 alter table public.setlists enable row level security;
 alter table public.setlist_assignments enable row level security;
 alter table public.shared_setlists enable row level security;
+alter table public.notifications enable row level security;
 alter table public.practice_presence enable row level security;
 
 create or replace function public.is_team_approved_member(p_team_id uuid, p_user_id uuid default auth.uid())
@@ -343,6 +385,179 @@ begin
   set read_by = array_append(read_by, auth.uid())
   where team_id = p_team_id
     and not (auth.uid() = any(read_by));
+end;
+$$;
+
+create or replace function public.create_team_chat_message_notifications(p_message_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_message public.team_chat_messages;
+  v_sender_name text;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_message
+  from public.team_chat_messages
+  where id = p_message_id;
+
+  if v_message.id is null then
+    raise exception '채팅 메시지를 찾을 수 없습니다.';
+  end if;
+
+  if v_message.user_id <> auth.uid() then
+    raise exception '본인이 보낸 채팅만 알림을 만들 수 있습니다.';
+  end if;
+
+  if not public.is_team_approved_member(v_message.team_id, auth.uid()) then
+    raise exception '이 팀 채팅에 접근할 권한이 없습니다.';
+  end if;
+
+  select nullif(trim(display_name), '')
+  into v_sender_name
+  from public.profiles
+  where id = auth.uid();
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    v_message.team_id,
+    'team_chat_message',
+    '새 팀 채팅 메시지',
+    left(coalesce(v_sender_name, '팀원') || ': ' || v_message.message, 180),
+    '/teams/' || v_message.team_id::text || '/chat'
+  from public.team_memberships memberships
+  where memberships.team_id = v_message.team_id
+    and memberships.status = 'approved'
+    and memberships.removed_at is null
+    and memberships.user_id <> auth.uid();
+end;
+$$;
+
+create or replace function public.create_team_setlist_created_notifications(p_setlist_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_setlist public.setlists;
+  v_body text;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_setlist
+  from public.setlists
+  where id = p_setlist_id;
+
+  if v_setlist.id is null then
+    raise exception '콘티를 찾을 수 없습니다.';
+  end if;
+
+  if v_setlist.team_id is null then
+    return;
+  end if;
+
+  if v_setlist.user_id <> auth.uid() and not public.is_team_admin(v_setlist.team_id, auth.uid()) then
+    raise exception '이 작업을 수행할 권한이 없습니다.';
+  end if;
+
+  v_body := coalesce(nullif(trim(v_setlist.title), ''), '제목 없는 콘티');
+  if v_setlist.worship_date is not null then
+    v_body := v_body || ' · ' || v_setlist.worship_date::text;
+  end if;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    v_setlist.team_id,
+    'team_setlist_created',
+    '새 팀 콘티가 공유되었습니다',
+    v_body,
+    '/setlists/' || v_setlist.id::text
+  from public.team_memberships memberships
+  where memberships.team_id = v_setlist.team_id
+    and memberships.status = 'approved'
+    and memberships.removed_at is null
+    and memberships.user_id <> auth.uid();
+end;
+$$;
+
+create or replace function public.create_team_invite_approved_notification(p_membership_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_membership public.team_memberships;
+  v_team public.teams;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_membership
+  from public.team_memberships
+  where id = p_membership_id;
+
+  if v_membership.id is null then
+    raise exception '팀 참여 정보를 찾을 수 없습니다.';
+  end if;
+
+  if not public.is_team_admin(v_membership.team_id, auth.uid()) then
+    raise exception '이 작업을 수행할 권한이 없습니다.';
+  end if;
+
+  if v_membership.status <> 'approved' then
+    return;
+  end if;
+
+  select *
+  into v_team
+  from public.teams
+  where id = v_membership.team_id;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  values (
+    v_membership.user_id,
+    v_membership.team_id,
+    'team_invite_approved',
+    '팀 참여가 승인되었습니다',
+    coalesce(v_team.church_name, '') || case when v_team.team_name is not null then ' · ' || v_team.team_name else '' end,
+    '/teams/' || v_membership.team_id::text
+  );
 end;
 $$;
 
@@ -437,6 +652,28 @@ begin
     where id = v_existing.id
     returning * into v_membership;
 
+    insert into public.notifications (
+      user_id,
+      team_id,
+      type,
+      title,
+      body,
+      link_url
+    )
+    select
+      memberships.user_id,
+      v_team.id,
+      'team_invite_requested',
+      '새로운 팀 참여 요청이 있습니다',
+      coalesce(nullif(trim(p_position), ''), '팀원') || ' 참여 요청',
+      '/teams/' || v_team.id::text
+    from public.team_memberships memberships
+    where memberships.team_id = v_team.id
+      and memberships.status = 'approved'
+      and memberships.role in ('owner', 'admin')
+      and memberships.removed_at is null
+      and memberships.user_id <> auth.uid();
+
     return v_membership;
   end if;
 
@@ -457,6 +694,28 @@ begin
     nullif(trim(coalesce(p_requested_message, '')), '')
   )
   returning * into v_membership;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    v_team.id,
+    'team_invite_requested',
+    '새로운 팀 참여 요청이 있습니다',
+    coalesce(nullif(trim(p_position), ''), '팀원') || ' 참여 요청',
+    '/teams/' || v_team.id::text
+  from public.team_memberships memberships
+  where memberships.team_id = v_team.id
+    and memberships.status = 'approved'
+    and memberships.role in ('owner', 'admin')
+    and memberships.removed_at is null
+    and memberships.user_id <> auth.uid();
 
   return v_membership;
 end;
@@ -811,6 +1070,25 @@ create policy "shared_setlists_insert_public"
 on public.shared_setlists
 for insert
 with check (true);
+
+drop policy if exists "notifications_select_own" on public.notifications;
+create policy "notifications_select_own"
+on public.notifications
+for select
+using (auth.uid() = user_id);
+
+drop policy if exists "notifications_insert_own" on public.notifications;
+create policy "notifications_insert_own"
+on public.notifications
+for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "notifications_update_own" on public.notifications;
+create policy "notifications_update_own"
+on public.notifications
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 
 drop policy if exists "practice_presence_select_same_team" on public.practice_presence;
 drop policy if exists "practice_presence_select_team_id" on public.practice_presence;
