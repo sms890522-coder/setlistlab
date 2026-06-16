@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-const DEFAULT_KAKAO_CHANNEL_CHAT_URL = "http://pf.kakao.com/_rqEsX";
-
 export const metadata: Metadata = {
   title: "문의/피드백 | 콘티연습실",
   description: "콘티연습실 문의와 피드백을 카카오톡 채널로 보내주세요.",
 };
 
 export default function ContactPage() {
-  const kakaoChatUrl = process.env.NEXT_PUBLIC_KAKAO_CHANNEL_CHAT_URL || DEFAULT_KAKAO_CHANNEL_CHAT_URL;
+  const kakaoChatUrl = process.env.NEXT_PUBLIC_KAKAO_CHANNEL_CHAT_URL;
   const hasContactLink = Boolean(kakaoChatUrl);
 
   return (
@@ -49,7 +47,7 @@ export default function ContactPage() {
                   문의 채널 준비 중입니다
                 </button>
                 <p className="text-xs leading-5 text-slate-500">
-                  문의 링크가 아직 설정되지 않았습니다. 잠시 후 다시 확인해 주세요.
+                  문의 링크가 아직 설정되지 않았습니다. 관리자에게 문의 채널 설정을 요청해 주세요.
                 </p>
               </div>
             )}

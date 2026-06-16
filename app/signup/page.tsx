@@ -45,7 +45,8 @@ export default function SignupPage() {
         <p className="text-sm font-bold text-blue-700">계정</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">회원가입</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          찬양팀 콘티와 곡 보관함을 계정에 저장하려면 이메일 계정을 만들어 주세요.
+          회원가입하면 콘티와 곡 보관함을 저장하고, 팀 초대, 팀 채팅, 알림 기능을 함께 사용할 수 있습니다.
+          PC와 휴대폰에서 같은 계정으로 예배 준비를 이어가세요.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

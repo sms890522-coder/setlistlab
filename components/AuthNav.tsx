@@ -68,11 +68,11 @@ export function AuthNav() {
   const navItems = [
     { href: "/setlists", label: "콘티" },
     { href: "/teams", label: "내 팀" },
-    { href: chatHref, label: "팀 채팅" },
+    { href: chatHref, label: "내 팀 채팅" },
     { href: "/songs", label: "곡 보관함" },
     { href: "/tools/tuner", label: "튜너" },
     { href: "/settings/notifications", label: "알림 설정" },
-    { href: "/contact", label: "문의" },
+    { href: "/contact", label: "문의/피드백" },
   ];
   const accountLabel = loaded && displayName ? displayName : "로그인";
   const accountHref = loaded && displayName ? "/account" : "/login";

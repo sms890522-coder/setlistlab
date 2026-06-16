@@ -56,7 +56,7 @@ export default function LoginPage() {
         <p className="text-sm font-bold text-blue-700">계정</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">로그인</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          로그인하면 콘티, 곡 보관함, 팀원 목록을 계정 클라우드에 저장해서 다른 기기에서도 이어서 볼 수 있습니다.
+          로그인하면 콘티, 곡 보관함, 팀 정보, 채팅과 알림을 계정에 저장하고 PC와 휴대폰에서 이어서 사용할 수 있습니다.
         </p>
 
         {!isSupabaseConfigured() ? (

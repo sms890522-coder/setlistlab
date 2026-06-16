@@ -74,8 +74,27 @@ export default function HomePage() {
     authStatus === "loading"
       ? "계정 저장 상태를 확인하는 중입니다."
       : signedIn
-        ? "계정 클라우드에 콘티와 곡 보관함, 팀원 목록을 저장해서 다른 기기에서도 이어서 사용할 수 있습니다."
-        : "로그인 전에는 이 브라우저에 임시 저장되고, 로그인하면 계정 클라우드에 콘티와 곡 보관함, 팀원 목록을 저장합니다.";
+        ? "계정 클라우드에 콘티, 곡 보관함, 팀 정보와 알림 설정을 저장해서 다른 기기에서도 이어서 사용할 수 있습니다."
+        : "로그인 전에는 이 브라우저에 임시 저장되고, 로그인하면 계정 클라우드에 콘티, 곡 보관함, 팀 정보와 알림 설정을 저장합니다.";
+
+  const featureCards = [
+    {
+      title: "팀 초대",
+      description: "초대코드로 팀원을 초대하고 리더가 승인할 수 있어요.",
+    },
+    {
+      title: "팀 채팅",
+      description: "콘티 공지와 연습 포인트를 팀 안에서 바로 나눌 수 있어요.",
+    },
+    {
+      title: "PDF 만들기",
+      description: "곡 순서, 송폼, 악보 이미지까지 PDF로 정리할 수 있어요.",
+    },
+    {
+      title: "휴대폰 사용",
+      description: "PC에서 만든 콘티를 모바일에서도 바로 확인할 수 있어요.",
+    },
+  ];
 
   return (
     <div className="page-shell">
@@ -99,10 +118,11 @@ export default function HomePage() {
               </h1>
             </div>
             <p className="max-w-2xl text-2xl font-bold leading-snug text-slate-800 sm:text-3xl">
-              찬양팀을 위한 유튜브 구간반복 콘티 공유 도구
+              찬양팀을 위한 콘티 작성 · 연습 · 팀 공유 도구
             </p>
             <p className="max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
-              이번 주 콘티곡을 등록하고, 곡별 구성과 강조사항을 팀원들과 공유하세요.
+              이번 주 콘티를 만들고, 곡별 구성과 악보, 팀 채팅, PDF 공유까지 한 곳에서 준비하세요.
+              PC와 휴대폰 어디서든 예배 준비를 이어갈 수 있습니다.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -165,6 +185,15 @@ export default function HomePage() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-3 pb-16 sm:grid-cols-2 lg:grid-cols-4">
+        {featureCards.map((feature) => (
+          <article key={feature.title} className="rounded-2xl border border-slate-200 bg-white/85 p-5 shadow-sm">
+            <h2 className="text-base font-black text-slate-950">{feature.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{feature.description}</p>
+          </article>
+        ))}
       </section>
     </div>
   );

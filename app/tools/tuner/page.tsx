@@ -176,6 +176,7 @@ export default function TunerPage() {
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">튜너</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             마이크 입력을 브라우저 안에서 분석해 현재 음, 주파수, 센트 오차를 확인합니다.
+            휴대폰에서는 기기 마이크를 악기 가까이에 두면 더 안정적으로 감지됩니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -198,6 +199,9 @@ export default function TunerPage() {
         <p className="mt-1 text-xs font-semibold text-blue-700">
           브라우저 주소창에 자물쇠 표시가 있는 페이지에서 마이크 권한을 허용해 주세요.
         </p>
+        <p className="mt-1 text-xs font-semibold text-blue-700">
+          모바일에서는 휴대폰을 악기 가까이에 두고 사용해 주세요. 블루투스나 이어폰 마이크를 쓰면 감지 결과가 달라질 수 있습니다.
+        </p>
       </section>
 
       <TuningModeSelector presets={TUNING_PRESETS} selectedId={modeId} onChange={handleModeChange} />
@@ -217,6 +221,8 @@ export default function TunerPage() {
         <div className="mt-3 space-y-2 text-xs leading-5 text-slate-500">
           <p>마이크 입력은 브라우저 안에서만 분석되며 서버로 업로드되지 않습니다.</p>
           <p>주변 소음이 적은 환경에서 사용하면 더 정확합니다.</p>
+          <p>휴대폰 마이크를 기타 사운드홀이나 악기 소리가 나는 쪽에 가까이 두면 감지가 더 안정적입니다.</p>
+          <p>블루투스 이어폰, 유선 이어폰, 외장 마이크 환경에서는 입력 장치가 달라져 감지 결과가 달라질 수 있습니다.</p>
           <p>튜너 정확도는 기기 마이크와 브라우저 환경에 따라 달라질 수 있습니다.</p>
           <p>녹음 파일 저장, 음성 업로드, 외부 오디오 API 전송은 하지 않습니다.</p>
         </div>
