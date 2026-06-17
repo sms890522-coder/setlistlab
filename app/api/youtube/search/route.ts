@@ -28,6 +28,24 @@ type YouTubeSearchResponse = {
   };
 };
 
+function getRequestReferer(request: Request) {
+  const requestUrl = new URL(request.url);
+  const configuredSiteUrl =
+    process.env.YOUTUBE_API_REFERER ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  const origin =
+    configuredSiteUrl ||
+    request.headers.get("origin") ||
+    requestUrl.origin;
+
+  if (!origin.startsWith("http://") && !origin.startsWith("https://")) {
+    return undefined;
+  }
+
+  return origin.endsWith("/") ? origin : `${origin}/`;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim();
@@ -54,6 +72,9 @@ export async function GET(request: Request) {
 
   const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${youtubeParams.toString()}`, {
     cache: "no-store",
+    headers: {
+      Referer: getRequestReferer(request) ?? "",
+    },
   });
   const data = (await response.json().catch(() => ({}))) as YouTubeSearchResponse;
 
