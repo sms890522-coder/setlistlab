@@ -6,6 +6,7 @@ import { CapoTransposeHelper } from "@/components/CapoTransposeHelper";
 import { ChordMemoEditor } from "@/components/ChordMemoEditor";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
+import { YouTubeSearchPicker } from "@/components/YouTubeSearchPicker";
 import type { SavedSong, Song } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
 import { useState } from "react";
@@ -102,6 +103,13 @@ export function SongForm({
                 {youtubeMessage}
               </span>
             ) : null}
+            <YouTubeSearchPicker
+              songTitle={song.title}
+              onSelect={(youtubeUrl) => {
+                updateSong({ youtubeUrl, youtubeVideoId: extractYouTubeVideoId(youtubeUrl) });
+                setYoutubeMessage("검색 결과를 유튜브 링크에 넣었습니다. 저장 버튼을 눌러 콘티에 반영해 주세요.");
+              }}
+            />
           </div>
           {song.youtubeVideoId ? (
             <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 lg:col-span-2">
