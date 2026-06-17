@@ -1,5 +1,6 @@
 "use client";
 
+import { SheetMusicSearchHelper } from "@/components/SheetMusicSearchHelper";
 import { SongLinksEditor } from "@/components/SongLinksEditor";
 import type { Song } from "@/lib/types";
 
@@ -24,6 +25,9 @@ export function ChordMemoEditor({ song, onChange }: ChordMemoEditorProps) {
         </label>
         <SongLinksEditor links={song.sheetLinks ?? []} onChange={(sheetLinks) => onChange({ sheetLinks })} />
         <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+          <div className="mb-4">
+            <SheetMusicSearchHelper songTitle={song.title} />
+          </div>
           <SongLinksEditor
             links={song.imageLinks ?? []}
             onChange={(imageLinks) => onChange({ imageLinks })}
