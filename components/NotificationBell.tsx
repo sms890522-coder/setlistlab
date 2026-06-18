@@ -185,7 +185,7 @@ export function NotificationBell() {
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-violet-50 px-4 py-3">
             <div>
               <p className="text-sm font-black text-slate-950">알림</p>
-              <p className="text-xs font-semibold text-slate-500">팀 채팅과 콘티 소식</p>
+              <p className="text-xs font-semibold text-slate-500">팀 채팅, 1:1 대화와 콘티 소식</p>
             </div>
             <button type="button" onClick={handleMarkAllRead} disabled={unreadCount === 0} className="text-xs font-black text-blue-700 disabled:text-slate-400">
               모두 읽음

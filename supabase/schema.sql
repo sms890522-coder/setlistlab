@@ -134,6 +134,119 @@ alter column read_by set not null;
 create index if not exists team_chat_messages_team_created_idx
 on public.team_chat_messages (team_id, created_at desc);
 
+create table if not exists public.team_direct_threads (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams(id) on delete cascade,
+  user_a_id uuid not null references auth.users(id) on delete cascade,
+  user_b_id uuid not null references auth.users(id) on delete cascade,
+  created_by uuid references auth.users(id) on delete set null,
+  last_message text,
+  last_message_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_direct_threads_different_users_check check (user_a_id <> user_b_id)
+);
+
+create unique index if not exists team_direct_threads_team_pair_unique_idx
+on public.team_direct_threads (
+  team_id,
+  least(user_a_id, user_b_id),
+  greatest(user_a_id, user_b_id)
+);
+
+create index if not exists team_direct_threads_team_idx
+on public.team_direct_threads (team_id);
+
+create index if not exists team_direct_threads_user_a_idx
+on public.team_direct_threads (user_a_id);
+
+create index if not exists team_direct_threads_user_b_idx
+on public.team_direct_threads (user_b_id);
+
+create index if not exists team_direct_threads_last_message_idx
+on public.team_direct_threads (last_message_at desc);
+
+drop trigger if exists team_direct_threads_set_updated_at on public.team_direct_threads;
+create trigger team_direct_threads_set_updated_at
+before update on public.team_direct_threads
+for each row
+execute function public.set_updated_at();
+
+create or replace function public.protect_team_direct_thread_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.team_id <> new.team_id
+     or old.user_a_id <> new.user_a_id
+     or old.user_b_id <> new.user_b_id
+     or old.created_by is distinct from new.created_by
+     or old.created_at <> new.created_at then
+    raise exception '1:1 대화방 참여자 정보는 변경할 수 없습니다.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists team_direct_threads_protect_update on public.team_direct_threads;
+create trigger team_direct_threads_protect_update
+before update on public.team_direct_threads
+for each row
+execute function public.protect_team_direct_thread_update();
+
+create table if not exists public.team_direct_messages (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.team_direct_threads(id) on delete cascade,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  sender_id uuid not null references auth.users(id) on delete cascade,
+  message text not null,
+  read_by uuid[] not null default '{}'::uuid[],
+  created_at timestamptz not null default now()
+);
+
+alter table public.team_direct_messages
+add column if not exists read_by uuid[] not null default '{}'::uuid[];
+
+alter table public.team_direct_messages
+alter column read_by set default '{}'::uuid[];
+
+update public.team_direct_messages
+set read_by = '{}'::uuid[]
+where read_by is null;
+
+alter table public.team_direct_messages
+alter column read_by set not null;
+
+create index if not exists team_direct_messages_thread_created_idx
+on public.team_direct_messages (thread_id, created_at);
+
+create index if not exists team_direct_messages_team_created_idx
+on public.team_direct_messages (team_id, created_at);
+
+create or replace function public.protect_team_direct_message_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.thread_id <> new.thread_id
+     or old.team_id <> new.team_id
+     or old.sender_id <> new.sender_id
+     or old.message <> new.message
+     or old.created_at <> new.created_at then
+    raise exception '1:1 메시지는 읽음 상태만 변경할 수 있습니다.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists team_direct_messages_protect_update on public.team_direct_messages;
+create trigger team_direct_messages_protect_update
+before update on public.team_direct_messages
+for each row
+execute function public.protect_team_direct_message_update();
+
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
@@ -145,6 +258,31 @@ begin
          and tablename = 'team_chat_messages'
      ) then
     alter publication supabase_realtime add table public.team_chat_messages;
+  end if;
+end $$;
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'team_direct_threads'
+     ) then
+    alter publication supabase_realtime add table public.team_direct_threads;
+  end if;
+
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'team_direct_messages'
+     ) then
+    alter publication supabase_realtime add table public.team_direct_messages;
   end if;
 end $$;
 
@@ -270,6 +408,20 @@ create index if not exists notifications_user_unread_idx
 on public.notifications (user_id, created_at desc)
 where read_at is null;
 
+alter table public.notifications
+drop constraint if exists notifications_type_check;
+
+alter table public.notifications
+add constraint notifications_type_check check (
+  type in (
+    'team_chat_message',
+    'team_direct_message',
+    'team_setlist_created',
+    'team_invite_requested',
+    'team_invite_approved'
+  )
+);
+
 create table if not exists public.push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -345,6 +497,8 @@ alter table public.team_members enable row level security;
 alter table public.teams enable row level security;
 alter table public.team_memberships enable row level security;
 alter table public.team_chat_messages enable row level security;
+alter table public.team_direct_threads enable row level security;
+alter table public.team_direct_messages enable row level security;
 alter table public.saved_songs enable row level security;
 alter table public.setlists enable row level security;
 alter table public.setlist_assignments enable row level security;
@@ -466,6 +620,127 @@ begin
     and memberships.status = 'approved'
     and memberships.removed_at is null
     and memberships.user_id <> auth.uid();
+end;
+$$;
+
+create or replace function public.get_or_create_team_direct_thread(
+  p_team_id uuid,
+  p_other_user_id uuid
+)
+returns public.team_direct_threads
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_current_user_id uuid := auth.uid();
+  v_user_a_id uuid;
+  v_user_b_id uuid;
+  v_thread public.team_direct_threads;
+begin
+  if v_current_user_id is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  if p_other_user_id is null then
+    raise exception '대화할 팀원이 필요합니다.';
+  end if;
+
+  if v_current_user_id = p_other_user_id then
+    raise exception '자기 자신과는 1:1 대화를 만들 수 없습니다.';
+  end if;
+
+  if not public.is_team_approved_member(p_team_id, v_current_user_id) then
+    raise exception '이 팀에 접근할 권한이 없습니다.';
+  end if;
+
+  if not public.is_team_approved_member(p_team_id, p_other_user_id) then
+    raise exception '승인된 팀원과만 1:1 대화를 시작할 수 있습니다.';
+  end if;
+
+  if v_current_user_id < p_other_user_id then
+    v_user_a_id := v_current_user_id;
+    v_user_b_id := p_other_user_id;
+  else
+    v_user_a_id := p_other_user_id;
+    v_user_b_id := v_current_user_id;
+  end if;
+
+  select *
+  into v_thread
+  from public.team_direct_threads
+  where team_id = p_team_id
+    and user_a_id = v_user_a_id
+    and user_b_id = v_user_b_id
+  limit 1;
+
+  if v_thread.id is not null then
+    return v_thread;
+  end if;
+
+  begin
+    insert into public.team_direct_threads (
+      team_id,
+      user_a_id,
+      user_b_id,
+      created_by
+    )
+    values (
+      p_team_id,
+      v_user_a_id,
+      v_user_b_id,
+      v_current_user_id
+    )
+    returning * into v_thread;
+  exception
+    when unique_violation then
+      select *
+      into v_thread
+      from public.team_direct_threads
+      where team_id = p_team_id
+        and user_a_id = v_user_a_id
+        and user_b_id = v_user_b_id
+      limit 1;
+  end;
+
+  return v_thread;
+end;
+$$;
+
+create or replace function public.mark_team_direct_messages_read(p_thread_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_thread public.team_direct_threads;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_thread
+  from public.team_direct_threads
+  where id = p_thread_id;
+
+  if v_thread.id is null then
+    raise exception '1:1 대화방을 찾을 수 없습니다.';
+  end if;
+
+  if auth.uid() not in (v_thread.user_a_id, v_thread.user_b_id) then
+    raise exception '이 1:1 대화에 접근할 권한이 없습니다.';
+  end if;
+
+  if not public.is_team_approved_member(v_thread.team_id, auth.uid()) then
+    raise exception '이 팀에 접근할 권한이 없습니다.';
+  end if;
+
+  update public.team_direct_messages
+  set read_by = array_append(read_by, auth.uid())
+  where thread_id = p_thread_id
+    and not (auth.uid() = any(read_by));
 end;
 $$;
 
@@ -912,6 +1187,108 @@ using (
   auth.uid() = user_id
   or public.is_team_admin(team_id, auth.uid())
 );
+
+drop policy if exists "team_direct_threads_select_participant" on public.team_direct_threads;
+create policy "team_direct_threads_select_participant"
+on public.team_direct_threads
+for select
+using (
+  auth.uid() in (user_a_id, user_b_id)
+  and public.is_team_approved_member(team_id, auth.uid())
+);
+
+drop policy if exists "team_direct_threads_insert_participant" on public.team_direct_threads;
+create policy "team_direct_threads_insert_participant"
+on public.team_direct_threads
+for insert
+with check (
+  auth.uid() = created_by
+  and auth.uid() in (user_a_id, user_b_id)
+  and user_a_id <> user_b_id
+  and public.is_team_approved_member(team_id, user_a_id)
+  and public.is_team_approved_member(team_id, user_b_id)
+);
+
+drop policy if exists "team_direct_threads_update_participant" on public.team_direct_threads;
+create policy "team_direct_threads_update_participant"
+on public.team_direct_threads
+for update
+using (
+  auth.uid() in (user_a_id, user_b_id)
+  and public.is_team_approved_member(team_id, auth.uid())
+)
+with check (
+  auth.uid() in (user_a_id, user_b_id)
+  and public.is_team_approved_member(team_id, auth.uid())
+);
+
+drop policy if exists "team_direct_threads_delete_admin" on public.team_direct_threads;
+create policy "team_direct_threads_delete_admin"
+on public.team_direct_threads
+for delete
+using (public.is_team_admin(team_id, auth.uid()));
+
+drop policy if exists "team_direct_messages_select_participant" on public.team_direct_messages;
+create policy "team_direct_messages_select_participant"
+on public.team_direct_messages
+for select
+using (
+  public.is_team_approved_member(team_id, auth.uid())
+  and exists (
+    select 1
+    from public.team_direct_threads threads
+    where threads.id = public.team_direct_messages.thread_id
+      and threads.team_id = public.team_direct_messages.team_id
+      and auth.uid() in (threads.user_a_id, threads.user_b_id)
+  )
+);
+
+drop policy if exists "team_direct_messages_insert_participant" on public.team_direct_messages;
+create policy "team_direct_messages_insert_participant"
+on public.team_direct_messages
+for insert
+with check (
+  auth.uid() = sender_id
+  and public.is_team_approved_member(team_id, auth.uid())
+  and exists (
+    select 1
+    from public.team_direct_threads threads
+    where threads.id = thread_id
+      and threads.team_id = team_id
+      and auth.uid() in (threads.user_a_id, threads.user_b_id)
+  )
+);
+
+drop policy if exists "team_direct_messages_update_read_participant" on public.team_direct_messages;
+create policy "team_direct_messages_update_read_participant"
+on public.team_direct_messages
+for update
+using (
+  public.is_team_approved_member(team_id, auth.uid())
+  and exists (
+    select 1
+    from public.team_direct_threads threads
+    where threads.id = public.team_direct_messages.thread_id
+      and threads.team_id = public.team_direct_messages.team_id
+      and auth.uid() in (threads.user_a_id, threads.user_b_id)
+  )
+)
+with check (
+  public.is_team_approved_member(team_id, auth.uid())
+  and exists (
+    select 1
+    from public.team_direct_threads threads
+    where threads.id = public.team_direct_messages.thread_id
+      and threads.team_id = public.team_direct_messages.team_id
+      and auth.uid() in (threads.user_a_id, threads.user_b_id)
+  )
+);
+
+drop policy if exists "team_direct_messages_delete_admin" on public.team_direct_messages;
+create policy "team_direct_messages_delete_admin"
+on public.team_direct_messages
+for delete
+using (public.is_team_admin(team_id, auth.uid()));
 
 drop policy if exists "saved_songs_select_own" on public.saved_songs;
 create policy "saved_songs_select_own"

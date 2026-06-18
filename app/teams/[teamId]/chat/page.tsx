@@ -59,6 +59,7 @@ export default function TeamChatPage() {
     <div className="page-shell space-y-4 pb-24">
       <div className="flex items-center justify-between gap-3">
         <Link href={`/teams/${team.id}`} className="btn-secondary min-h-10 px-3">팀으로</Link>
+        <Link href={`/teams/${team.id}/direct`} className="btn-secondary min-h-10 px-3">1:1 대화</Link>
       </div>
       <TeamChatPanel team={team} />
     </div>

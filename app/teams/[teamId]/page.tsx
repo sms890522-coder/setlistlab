@@ -189,6 +189,7 @@ export default function TeamDashboardPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href={`/teams/${team.id}/chat`} className="btn-primary">팀 채팅</Link>
+              <Link href={`/teams/${team.id}/direct`} className="btn-secondary">1:1 대화</Link>
               <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary">팀 콘티 만들기</Link>
               {canManage ? <button type="button" onClick={() => setEditing((value) => !value)} className="btn-secondary">팀 정보 수정</button> : null}
             </div>

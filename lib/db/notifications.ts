@@ -8,6 +8,7 @@ export const NOTIFICATIONS_UPDATED_EVENT = "setlistlab:notifications-updated";
 
 export type NotificationType =
   | "team_chat_message"
+  | "team_direct_message"
   | "team_setlist_created"
   | "team_invite_requested"
   | "team_invite_approved";
@@ -102,6 +103,25 @@ export async function markTeamChatNotificationsRead(teamId: string) {
     .returns<Array<{ id: string }>>();
 
   if (error) throw new Error(error.message || "채팅 알림을 읽음 처리하지 못했습니다.");
+  dispatchNotificationsUpdated();
+  return data ?? [];
+}
+
+export async function markTeamDirectNotificationsRead(threadId: string) {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("type", "team_direct_message")
+    .like("link_url", `%/direct/${threadId}`)
+    .is("read_at", null)
+    .select("id")
+    .returns<Array<{ id: string }>>();
+
+  if (error) throw new Error(error.message || "1:1 대화 알림을 읽음 처리하지 못했습니다.");
+
   dispatchNotificationsUpdated();
   return data ?? [];
 }
