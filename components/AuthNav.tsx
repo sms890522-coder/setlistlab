@@ -70,7 +70,7 @@ export function AuthNav() {
     { href: "/teams", label: "내 팀" },
     { href: chatHref, label: "내 팀 채팅" },
     { href: "/songs", label: "곡 보관함" },
-    { href: "/tools/tuner", label: "튜너" },
+    { href: "/tools/tuner", label: "튜너/메트로놈" },
     { href: "/settings/notifications", label: "알림 설정" },
     { href: "/contact", label: "문의/피드백" },
   ];

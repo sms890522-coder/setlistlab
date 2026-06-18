@@ -91,6 +91,10 @@ export default function HomePage() {
       description: "곡 순서, 송폼, 악보 이미지까지 PDF로 정리할 수 있어요.",
     },
     {
+      title: "튜너 & 메트로놈",
+      description: "악기 튜닝과 BPM 박자 연습을 한 페이지에서 바로 사용할 수 있어요.",
+    },
+    {
       title: "휴대폰 사용",
       description: "PC에서 만든 콘티를 모바일에서도 바로 확인할 수 있어요.",
     },
@@ -142,7 +146,7 @@ export default function HomePage() {
               </Link>
             )}
             <Link href="/tools/tuner" className="btn-secondary">
-              튜너 열기
+              튜너 & 메트로놈 열기
             </Link>
           </div>
           <p className="max-w-xl rounded-xl border border-blue-100 bg-white/75 p-4 text-sm leading-6 text-slate-600">
@@ -187,7 +191,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="grid gap-3 pb-16 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 pb-16 sm:grid-cols-2 lg:grid-cols-5">
         {featureCards.map((feature) => (
           <article key={feature.title} className="rounded-2xl border border-slate-200 bg-white/85 p-5 shadow-sm">
             <h2 className="text-base font-black text-slate-950">{feature.title}</h2>
