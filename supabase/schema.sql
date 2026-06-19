@@ -325,6 +325,9 @@ create table if not exists public.setlists (
   description text,
   global_notes text,
   songs jsonb not null default '[]'::jsonb,
+  status text not null default 'draft',
+  published_at timestamptz,
+  notification_sent_at timestamptz,
   is_public boolean not null default false,
   share_slug text unique,
   created_at timestamptz not null default now(),
@@ -334,11 +337,42 @@ create table if not exists public.setlists (
 alter table public.setlists
 add column if not exists team_id uuid references public.teams(id) on delete set null;
 
+alter table public.setlists
+add column if not exists status text not null default 'draft';
+
+alter table public.setlists
+add column if not exists published_at timestamptz;
+
+alter table public.setlists
+add column if not exists notification_sent_at timestamptz;
+
+alter table public.setlists
+drop constraint if exists setlists_status_check;
+
+alter table public.setlists
+add constraint setlists_status_check check (status in ('draft', 'published'));
+
+update public.setlists
+set
+  status = 'published',
+  published_at = coalesce(published_at, created_at),
+  notification_sent_at = coalesce(notification_sent_at, created_at)
+where status = 'draft'
+  and (
+    is_public = true
+    or team_id is not null
+    or coalesce(jsonb_array_length(case when jsonb_typeof(songs) = 'array' then songs else '[]'::jsonb end), 0) > 0
+  );
+
 create index if not exists setlists_user_updated_idx
 on public.setlists (user_id, updated_at desc);
 
 create index if not exists setlists_team_updated_idx
 on public.setlists (team_id, updated_at desc)
+where team_id is not null;
+
+create index if not exists setlists_team_status_updated_idx
+on public.setlists (team_id, status, updated_at desc)
 where team_id is not null;
 
 create index if not exists setlists_share_slug_idx
@@ -744,8 +778,10 @@ begin
 end;
 $$;
 
-create or replace function public.create_team_setlist_created_notifications(p_setlist_id uuid)
-returns void
+drop function if exists public.create_team_setlist_created_notifications(uuid);
+
+create function public.create_team_setlist_created_notifications(p_setlist_id uuid)
+returns boolean
 language plpgsql
 security definer
 set search_path = public
@@ -753,6 +789,7 @@ as $$
 declare
   v_setlist public.setlists;
   v_body text;
+  v_sent_at timestamptz := now();
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다.';
@@ -761,24 +798,36 @@ begin
   select *
   into v_setlist
   from public.setlists
-  where id = p_setlist_id;
+  where id = p_setlist_id
+  for update;
 
   if v_setlist.id is null then
     raise exception '콘티를 찾을 수 없습니다.';
   end if;
 
   if v_setlist.team_id is null then
-    return;
+    return false;
   end if;
 
   if v_setlist.user_id <> auth.uid() and not public.is_team_admin(v_setlist.team_id, auth.uid()) then
     raise exception '이 작업을 수행할 권한이 없습니다.';
   end if;
 
+  if v_setlist.status <> 'published' or v_setlist.notification_sent_at is not null then
+    return false;
+  end if;
+
+  if nullif(trim(v_setlist.title), '') is null
+     and v_setlist.worship_date is null
+     and coalesce(jsonb_array_length(case when jsonb_typeof(v_setlist.songs) = 'array' then v_setlist.songs else '[]'::jsonb end), 0) = 0 then
+    return false;
+  end if;
+
   v_body := coalesce(nullif(trim(v_setlist.title), ''), '제목 없는 콘티');
   if v_setlist.worship_date is not null then
     v_body := v_body || ' · ' || v_setlist.worship_date::text;
   end if;
+  v_body := v_body || ' 콘티가 공유되었습니다.';
 
   insert into public.notifications (
     user_id,
@@ -800,6 +849,15 @@ begin
     and memberships.status = 'approved'
     and memberships.removed_at is null
     and memberships.user_id <> auth.uid();
+
+  update public.setlists
+  set
+    published_at = coalesce(published_at, v_sent_at),
+    notification_sent_at = v_sent_at,
+    updated_at = v_sent_at
+  where id = v_setlist.id;
+
+  return true;
 end;
 $$;
 
@@ -1340,7 +1398,15 @@ for select
 using (
   is_public = true
   or (team_id is null and auth.uid() = user_id)
-  or (team_id is not null and public.is_team_approved_member(team_id, auth.uid()))
+  or (
+    team_id is not null
+    and public.is_team_approved_member(team_id, auth.uid())
+    and (
+      status = 'published'
+      or auth.uid() = user_id
+      or public.is_team_admin(team_id, auth.uid())
+    )
+  )
 );
 
 drop policy if exists "setlists_insert_own" on public.setlists;
@@ -1393,6 +1459,11 @@ using (
         or (
           public.setlists.team_id is not null
           and public.is_team_approved_member(public.setlists.team_id, auth.uid())
+          and (
+            public.setlists.status = 'published'
+            or public.setlists.user_id = auth.uid()
+            or public.is_team_admin(public.setlists.team_id, auth.uid())
+          )
         )
       )
   )

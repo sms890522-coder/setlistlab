@@ -1,6 +1,11 @@
+export type SetlistStatus = "draft" | "published";
+
 export type Setlist = {
   id: string;
   teamId?: string;
+  status?: SetlistStatus;
+  publishedAt?: string;
+  notificationSentAt?: string;
   title: string;
   worshipDate: string;
   serviceName: string;

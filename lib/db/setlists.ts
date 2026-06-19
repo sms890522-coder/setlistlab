@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { cloneSetlist } from "@/lib/factories";
 import { createId } from "@/lib/id";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { Setlist, Song, TeamAssignment } from "@/lib/types";
+import type { Setlist, SetlistStatus, Song, TeamAssignment } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
 import { getAssignmentsForSetlists, getSetlistAssignments, replaceSetlistAssignments } from "./assignments";
 import { createTeamSetlistCreatedNotifications } from "./notifications";
@@ -26,6 +26,9 @@ type SetlistRow = {
   description: string | null;
   global_notes: string | null;
   songs: Song[] | null;
+  status: SetlistStatus | null;
+  published_at: string | null;
+  notification_sent_at: string | null;
   is_public: boolean;
   share_slug: string | null;
   created_at: string;
@@ -81,6 +84,9 @@ export async function createCloudSetlist(setlist: Setlist) {
       description: normalized.description || null,
       global_notes: normalized.globalNotes || null,
       songs: normalized.songs,
+      status: "draft",
+      published_at: null,
+      notification_sent_at: null,
       is_public: false,
     })
     .select("*")
@@ -91,10 +97,6 @@ export async function createCloudSetlist(setlist: Setlist) {
   }
 
   const assignments = await replaceSetlistAssignments(data.id, normalized.teamAssignments);
-  if (normalized.teamId) {
-    await createTeamSetlistCreatedNotifications(data.id).catch(() => undefined);
-    void dispatchPushEvent({ eventType: "team_setlist_created", setlistId: data.id });
-  }
   return rowToSetlist(data, assignments);
 }
 
@@ -127,6 +129,39 @@ export async function saveCloudSetlist(setlist: Setlist) {
 
   const assignments = await replaceSetlistAssignments(data.id, normalized.teamAssignments);
   return rowToSetlist(data, assignments);
+}
+
+export async function publishCloudSetlist(setlist: Setlist) {
+  const saved = await saveCloudSetlist(setlist);
+  const supabase = getSupabaseBrowserClient();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("setlists")
+    .update({
+      status: "published",
+      published_at: saved.publishedAt ?? now,
+      updated_at: now,
+    })
+    .eq("id", saved.id)
+    .select("*")
+    .single<SetlistRow>();
+
+  if (error) {
+    throw new Error(error.message || "콘티를 저장하지 못했습니다.");
+  }
+
+  const assignments = await getSetlistAssignments(data.id);
+  let published = rowToSetlist(data, assignments);
+
+  if (published.teamId && !published.notificationSentAt) {
+    const notified = await createTeamSetlistCreatedNotifications(published.id).catch(() => false);
+    if (notified) {
+      void dispatchPushEvent({ eventType: "team_setlist_created", setlistId: published.id });
+      published = (await getCloudSetlist(published.id)) ?? published;
+    }
+  }
+
+  return published;
 }
 
 export async function deleteCloudSetlist(id: string) {
@@ -179,10 +214,6 @@ export async function setCloudSetlistPublic(id: string, isPublic: boolean) {
   }
 
   const assignments = await getSetlistAssignments(id);
-  if (isPublic && source.teamId && !source.isPublic) {
-    await createTeamSetlistCreatedNotifications(id).catch(() => undefined);
-    void dispatchPushEvent({ eventType: "team_setlist_created", setlistId: id });
-  }
   return rowToSetlist(data, assignments);
 }
 
@@ -208,6 +239,9 @@ function rowToSetlist(row: SetlistRow, teamAssignments: TeamAssignment[] = []): 
   return {
     id: row.id,
     teamId: row.team_id ?? undefined,
+    status: normalizeSetlistStatus(row.status),
+    publishedAt: row.published_at ?? undefined,
+    notificationSentAt: row.notification_sent_at ?? undefined,
     title: row.title,
     worshipDate: row.worship_date ?? "",
     serviceName: row.service_name ?? "",
@@ -227,6 +261,9 @@ function normalizeSetlistForCloud(setlist: Setlist): Setlist {
   const now = new Date().toISOString();
   return {
     ...setlist,
+    status: normalizeSetlistStatus(setlist.status),
+    publishedAt: setlist.publishedAt,
+    notificationSentAt: setlist.notificationSentAt,
     title: setlist.title ?? "",
     teamId: setlist.teamId || undefined,
     worshipDate: setlist.worshipDate ?? "",
@@ -238,6 +275,10 @@ function normalizeSetlistForCloud(setlist: Setlist): Setlist {
     createdAt: setlist.createdAt || now,
     updatedAt: now,
   };
+}
+
+function normalizeSetlistStatus(status?: SetlistStatus | null): SetlistStatus {
+  return status === "published" ? "published" : "draft";
 }
 
 function normalizeSongForCloud(song: Song): Song {

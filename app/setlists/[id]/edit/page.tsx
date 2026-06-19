@@ -7,7 +7,7 @@ import { SongForm } from "@/components/SongForm";
 import { TeamAssignmentsEditor } from "@/components/TeamAssignmentsEditor";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile } from "@/lib/db/profiles";
-import { getCloudSetlist, getCloudSetlists, saveCloudSetlist } from "@/lib/db/setlists";
+import { getCloudSetlist, getCloudSetlists, publishCloudSetlist, saveCloudSetlist } from "@/lib/db/setlists";
 import { deleteCloudSongFromLibrary, getCloudSongLibrary } from "@/lib/db/savedSongs";
 import {
   getMyRoleInTeam,
@@ -36,6 +36,8 @@ export default function SetlistEditPage() {
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [publishing, setPublishing] = useState(false);
   const [library, setLibrary] = useState<SavedSong[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryMessage, setLibraryMessage] = useState("");
@@ -118,6 +120,7 @@ export default function SetlistEditPage() {
   function persist(next: Setlist) {
     const optimistic = { ...next, updatedAt: new Date().toISOString() };
     setSetlist(optimistic);
+    setSaveMessage("");
 
     try {
       if (storageMode === "cloud") {
@@ -132,7 +135,7 @@ export default function SetlistEditPage() {
           })
           .catch((error) => {
             if (saveRequestId !== saveRequestIdRef.current) return;
-            setSaveError(error instanceof Error ? error.message : "계정 저장소 자동 저장에 실패했습니다.");
+            setSaveError(error instanceof Error ? error.message : "계정 저장소 임시저장에 실패했습니다.");
           });
         return;
       }
@@ -142,7 +145,51 @@ export default function SetlistEditPage() {
       setSaveError("");
       setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     } catch {
-      setSaveError("자동 저장에 실패했습니다. 브라우저 저장 공간과 권한을 확인해 주세요.");
+      setSaveError("저장에 실패했습니다. 브라우저 저장 공간과 권한을 확인해 주세요.");
+    }
+  }
+
+  async function handleExplicitSave() {
+    if (!setlist || publishing) return;
+
+    const hasMinimumInfo = Boolean(setlist.title.trim() || setlist.worshipDate.trim());
+    if (!hasMinimumInfo) {
+      setSaveError("콘티 제목 또는 예배 날짜를 먼저 입력해 주세요.");
+      setSaveMessage("");
+      return;
+    }
+
+    const isFirstTeamPublish = storageMode === "cloud" && Boolean(setlist.teamId) && setlist.status !== "published";
+    if (isFirstTeamPublish && setlist.songs.length === 0) {
+      const shouldSave = window.confirm("아직 곡이 없습니다. 그래도 팀에 저장할까요?");
+      if (!shouldSave) return;
+    }
+
+    try {
+      setPublishing(true);
+      setSaveError("");
+      const optimistic = { ...setlist, updatedAt: new Date().toISOString() };
+      let saved: Setlist;
+
+      if (storageMode === "cloud") {
+        saveRequestIdRef.current += 1;
+        saved = await publishCloudSetlist(optimistic);
+      } else {
+        saved = saveSetlist({ ...optimistic, status: "published", publishedAt: optimistic.publishedAt ?? new Date().toISOString() });
+      }
+
+      setSetlist(saved);
+      setSavedAt(new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      setSaveMessage(
+        isFirstTeamPublish
+          ? "콘티가 팀에 저장되었습니다. 팀원들에게 새 콘티 알림을 보냈습니다."
+          : "콘티가 저장되었습니다.",
+      );
+    } catch (saveError) {
+      setSaveError(saveError instanceof Error ? saveError.message : "콘티를 저장하지 못했습니다.");
+      setSaveMessage("");
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -255,20 +302,37 @@ export default function SetlistEditPage() {
         ? personalTeamMembers.map(teamMemberToAssignment)
         : [];
   const assignmentSuggestionCopy = getAssignmentSuggestionCopy(assignmentMode, setlist);
+  const isTeamCloudSetlist = storageMode === "cloud" && Boolean(setlist.teamId);
+  const isDraftSetlist = setlist.status !== "published";
+  const saveStatusText = saveError
+    ? saveError
+    : saveMessage || `${isDraftSetlist ? "임시저장" : "저장됨"} ${savedAt ? `· ${savedAt}` : "대기 중"}`;
+  const explicitSaveLabel = isTeamCloudSetlist ? "팀에 저장" : "콘티 저장";
 
   return (
     <div className="page-shell space-y-6 pb-20">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className={`text-sm font-bold ${saveError ? "text-rose-700" : "text-blue-700"}`}>
-            {saveError || `자동 저장 ${savedAt ? `· ${savedAt}` : "대기 중"}`}
+            {saveStatusText}
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">콘티 수정</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            입력한 내용은 {storageMode === "cloud" ? "계정 클라우드" : "이 브라우저"}에 자동 저장됩니다.
+            입력 중 변경사항은 {storageMode === "cloud" ? "계정 클라우드" : "이 브라우저"}에 임시저장됩니다.
+            {isTeamCloudSetlist && isDraftSetlist ? " 저장 버튼을 누르기 전까지 팀원들에게 알림이 가지 않습니다." : ""}
           </p>
+          {isTeamCloudSetlist ? (
+            <p className="mt-2 text-xs font-semibold text-slate-500">
+              {isDraftSetlist
+                ? "팀에 저장하면 팀원들에게 새 콘티 알림이 한 번 전송됩니다."
+                : "이미 팀에 저장된 콘티입니다. 수정 저장은 새 콘티 알림을 다시 보내지 않습니다."}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleExplicitSave} disabled={publishing} className="btn-primary">
+            {publishing ? "저장 중" : explicitSaveLabel}
+          </button>
           <Link href={`/setlists/${setlist.id}`} className="btn-primary">
             콘티 보기
           </Link>

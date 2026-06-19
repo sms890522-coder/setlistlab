@@ -282,6 +282,9 @@ function normalizeSetlist(value: unknown): Setlist {
   return {
     id: value.id,
     teamId: optionalString(value.teamId),
+    status: normalizeSetlistStatus(value.status),
+    publishedAt: optionalString(value.publishedAt),
+    notificationSentAt: optionalString(value.notificationSentAt),
     title: value.title,
     worshipDate: typeof value.worshipDate === "string" ? value.worshipDate : "",
     serviceName: typeof value.serviceName === "string" ? value.serviceName : "",
@@ -409,6 +412,10 @@ function optionalString(value: unknown) {
 
 function optionalNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeSetlistStatus(value: unknown) {
+  return value === "published" ? "published" : "draft";
 }
 
 function normalizeSongTitle(title: string) {

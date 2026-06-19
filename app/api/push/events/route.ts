@@ -24,6 +24,8 @@ type SetlistRow = {
   user_id: string;
   title: string;
   worship_date: string | null;
+  status: "draft" | "published";
+  notification_sent_at: string | null;
 };
 
 type MembershipRow = {
@@ -137,12 +139,13 @@ async function buildSetlistCreatedPush(setlistId: string | undefined, actorUserI
   const supabase = getSupabaseAdminClient();
   const { data: setlist, error } = await supabase
     .from("setlists")
-    .select("id,team_id,user_id,title,worship_date")
+    .select("id,team_id,user_id,title,worship_date,status,notification_sent_at")
     .eq("id", setlistId)
     .maybeSingle<SetlistRow>();
 
   if (error || !setlist) throw new Error(error?.message || "콘티를 찾을 수 없습니다.");
   if (!setlist.team_id) return null;
+  if (setlist.status !== "published" || !setlist.notification_sent_at) return null;
 
   const canSend = setlist.user_id === actorUserId || (await isTeamAdmin(setlist.team_id, actorUserId));
   if (!canSend) throw new Error("이 팀 콘티 알림을 보낼 권한이 없습니다.");

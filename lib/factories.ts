@@ -7,6 +7,9 @@ export function createBlankSetlist(): Setlist {
   return {
     id: createId("setlist"),
     teamId: undefined,
+    status: "draft",
+    publishedAt: undefined,
+    notificationSentAt: undefined,
     title: "",
     worshipDate: formatDateInput(new Date()),
     serviceName: "",
@@ -62,6 +65,9 @@ export function cloneSetlist(setlist: Setlist): Setlist {
   return {
     ...setlist,
     id: createId("setlist"),
+    status: "draft",
+    publishedAt: undefined,
+    notificationSentAt: undefined,
     title: `${setlist.title || "제목 없는 콘티"} 복사본`,
     songs: setlist.songs.map(cloneSong),
     teamAssignments: setlist.teamAssignments.map((assignment) => ({ ...assignment, id: createId("assignment") })),

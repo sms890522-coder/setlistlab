@@ -91,7 +91,9 @@ export function NewSetlistCreator() {
       <section>
         <p className="text-sm font-bold text-blue-700">새 콘티</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">새 콘티 만들기</h1>
-        <p className="mt-3 text-sm leading-7 text-slate-600">개인 콘티로 저장하거나, 승인된 팀이 있다면 팀 콘티로 저장할 수 있습니다.</p>
+        <p className="mt-3 text-sm leading-7 text-slate-600">
+          개인 콘티로 시작하거나, 승인된 팀이 있다면 팀 콘티 초안으로 시작할 수 있습니다.
+        </p>
       </section>
 
       {!loaded ? (
@@ -121,11 +123,19 @@ export function NewSetlistCreator() {
             <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
               아직 승인된 팀이 없습니다. 팀 콘티를 만들려면 <Link href="/teams" className="font-black text-blue-700 underline">내 팀</Link>에서 팀을 만들거나 참여해 주세요.
             </p>
-          ) : null}
+          ) : target === "personal" ? (
+            <p className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+              먼저 개인 콘티 초안을 만들고, 편집 화면에서 저장 버튼으로 확정합니다.
+            </p>
+          ) : (
+            <p className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+              지금은 팀 콘티 초안만 만들어집니다. 편집 화면에서 “팀에 저장”을 누르기 전까지 팀원들에게 알림이 가지 않습니다.
+            </p>
+          )}
           {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
           <div className="flex flex-wrap gap-2">
             <button type="submit" disabled={creating} className="btn-primary">
-              {creating ? "만드는 중" : "콘티 만들기"}
+              {creating ? "만드는 중" : "콘티 초안 만들기"}
             </button>
             <Link href="/setlists" className="btn-secondary">취소</Link>
           </div>

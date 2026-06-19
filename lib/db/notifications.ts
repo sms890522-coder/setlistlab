@@ -134,8 +134,9 @@ export async function createTeamChatMessageNotifications(messageId: string) {
 
 export async function createTeamSetlistCreatedNotifications(setlistId: string) {
   const supabase = getSupabaseBrowserClient();
-  const { error } = await supabase.rpc("create_team_setlist_created_notifications", { p_setlist_id: setlistId });
+  const { data, error } = await supabase.rpc("create_team_setlist_created_notifications", { p_setlist_id: setlistId });
   if (error) throw new Error(error.message || "팀 콘티 알림을 만들지 못했습니다.");
+  return Boolean(data);
 }
 
 export async function createTeamInviteApprovedNotification(membershipId: string) {
