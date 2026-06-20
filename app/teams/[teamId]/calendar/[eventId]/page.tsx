@@ -101,7 +101,11 @@ export default function TeamCalendarEventDetailPage() {
   }
 
   async function handleDelete() {
-    if (!event || !team || !window.confirm("이 팀 일정을 삭제할까요?")) return;
+    if (!event || !team) return;
+    const confirmMessage = event.recurringGroupId
+      ? "이 일정은 반복 일정으로 생성되었습니다. 이 일정만 삭제됩니다."
+      : "이 팀 일정을 삭제할까요?";
+    if (!window.confirm(confirmMessage)) return;
 
     try {
       await deleteTeamCalendarEvent(event.id);
@@ -164,6 +168,14 @@ export default function TeamCalendarEventDetailPage() {
             <Link href={`/setlists/${event.setlist.id}`} className="btn-primary mt-5">
               연결된 콘티 보기
             </Link>
+          ) : null}
+          {event.recurringGroupId ? (
+            <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-800">
+              {/* TODO: 반복 그룹 전체 삭제, 이 일정 이후 모두 수정, 전체 반복 일정 수정을 지원한다. */}
+              이 일정은 반복 일정으로 생성되었습니다. 현재는 이 일정만 개별 수정됩니다.
+              <br />
+              삭제 시에도 이 일정만 삭제됩니다.
+            </div>
           ) : null}
         </div>
       </section>

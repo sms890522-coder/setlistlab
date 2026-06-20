@@ -275,17 +275,35 @@ create table if not exists public.team_calendar_events (
   gathering_time time,
   location text,
   memo text,
+  recurring_group_id uuid,
+  recurring_rule text,
+  recurring_index integer,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint team_calendar_events_type_check check (event_type in ('worship', 'practice', 'event', 'etc'))
 );
 
+alter table public.team_calendar_events
+add column if not exists recurring_group_id uuid;
+
+alter table public.team_calendar_events
+add column if not exists recurring_rule text;
+
+alter table public.team_calendar_events
+add column if not exists recurring_index integer;
+
 create index if not exists team_calendar_events_team_date_idx
 on public.team_calendar_events (team_id, event_date);
 
 create index if not exists team_calendar_events_team_date_desc_idx
 on public.team_calendar_events (team_id, event_date desc);
+
+create index if not exists team_calendar_events_recurring_group_idx
+on public.team_calendar_events (recurring_group_id);
+
+create index if not exists team_calendar_events_team_recurring_group_idx
+on public.team_calendar_events (team_id, recurring_group_id);
 
 drop trigger if exists team_calendar_events_set_updated_at on public.team_calendar_events;
 create trigger team_calendar_events_set_updated_at
@@ -562,6 +580,7 @@ create table if not exists public.notifications (
       'team_calendar_event_created',
       'team_calendar_event_updated',
       'team_calendar_availability_reminder',
+      'team_calendar_recurring_events_created',
       'team_notice_created',
       'team_notice_updated',
       'team_setlist_created',
@@ -589,6 +608,7 @@ add constraint notifications_type_check check (
     'team_calendar_event_created',
     'team_calendar_event_updated',
     'team_calendar_availability_reminder',
+    'team_calendar_recurring_events_created',
     'team_notice_created',
     'team_notice_updated',
     'team_setlist_created',
@@ -932,6 +952,68 @@ begin
     '/teams/' || v_event.team_id::text || '/calendar/' || v_event.id::text
   from public.team_memberships memberships
   where memberships.team_id = v_event.team_id
+    and memberships.status = 'approved'
+    and memberships.removed_at is null
+    and memberships.user_id <> auth.uid();
+
+  return true;
+end;
+$$;
+
+drop function if exists public.create_team_calendar_recurring_events_notifications(uuid);
+
+create function public.create_team_calendar_recurring_events_notifications(p_recurring_group_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_first_event public.team_calendar_events;
+  v_count integer;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_first_event
+  from public.team_calendar_events
+  where recurring_group_id = p_recurring_group_id
+  order by recurring_index nulls last, event_date asc
+  limit 1;
+
+  if v_first_event.id is null then
+    raise exception '반복 일정을 찾을 수 없습니다.';
+  end if;
+
+  if not public.is_team_admin(v_first_event.team_id, auth.uid()) then
+    raise exception '이 작업을 수행할 권한이 없습니다.';
+  end if;
+
+  select count(*)
+  into v_count
+  from public.team_calendar_events
+  where recurring_group_id = p_recurring_group_id
+    and team_id = v_first_event.team_id;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    v_first_event.team_id,
+    'team_calendar_recurring_events_created',
+    '팀 반복 일정이 등록되었습니다',
+    v_first_event.title || ' 일정이 ' || v_count::text || '개 등록되었습니다.',
+    '/teams/' || v_first_event.team_id::text || '/calendar'
+  from public.team_memberships memberships
+  where memberships.team_id = v_first_event.team_id
     and memberships.status = 'approved'
     and memberships.removed_at is null
     and memberships.user_id <> auth.uid();

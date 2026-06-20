@@ -1,6 +1,7 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { generateRecurringDates, type RecurrenceType } from "@/lib/calendar/recurrence";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
 import { dispatchPushEvent } from "./pushEvents";
@@ -20,6 +21,9 @@ export type TeamCalendarEvent = {
   gatheringTime?: string;
   location?: string;
   memo?: string;
+  recurringGroupId?: string;
+  recurringRule?: string;
+  recurringIndex?: number;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -62,6 +66,20 @@ export type TeamCalendarEventInput = {
   notifyMembers?: boolean;
 };
 
+export type RecurringTeamCalendarEventInput = TeamCalendarEventInput & {
+  recurrenceType: Exclude<RecurrenceType, "none">;
+  recurrenceEndDate?: string;
+  recurrenceCount?: number;
+};
+
+export type RecurringTeamCalendarEventResult = {
+  totalCount: number;
+  createdCount: number;
+  skippedCount: number;
+  createdEvents: TeamCalendarEventWithAvailability[];
+  skippedDates: string[];
+};
+
 type TeamCalendarEventRow = {
   id: string;
   team_id: string;
@@ -73,6 +91,9 @@ type TeamCalendarEventRow = {
   gathering_time: string | null;
   location: string | null;
   memo: string | null;
+  recurring_group_id: string | null;
+  recurring_rule: string | null;
+  recurring_index: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -177,6 +198,86 @@ export async function createTeamCalendarEvent(input: TeamCalendarEventInput) {
 
   const [event] = await attachAvailability(data.team_id, [data]);
   return event;
+}
+
+export async function createRecurringTeamCalendarEvents(
+  input: RecurringTeamCalendarEventInput,
+): Promise<RecurringTeamCalendarEventResult> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("로그인이 필요합니다.");
+
+  const payload = normalizeEventInput(input);
+  const dates = generateRecurringDates({
+    startDate: payload.eventDate,
+    recurrenceType: input.recurrenceType,
+    endDate: input.recurrenceEndDate,
+    count: input.recurrenceCount,
+    maxCount: 61,
+  });
+
+  if (dates.length === 0) throw new Error("생성할 반복 일정 날짜가 없습니다.");
+  if (dates.length > 60) throw new Error("한 번에 최대 60개의 반복 일정만 만들 수 있습니다.");
+
+  const supabase = getSupabaseBrowserClient();
+  const { data: duplicates, error: duplicateError } = await supabase
+    .from("team_calendar_events")
+    .select("event_date")
+    .eq("team_id", payload.teamId)
+    .eq("title", payload.title)
+    .eq("event_type", payload.eventType)
+    .in("event_date", dates)
+    .returns<Array<{ event_date: string }>>();
+
+  if (duplicateError) throw new Error(duplicateError.message || "기존 일정을 확인하지 못했습니다.");
+
+  const duplicatedDates = new Set((duplicates ?? []).map((row) => row.event_date));
+  const recurringGroupId = createRecurringGroupId();
+  const rows = dates
+    .map((date, index) => ({ date, index }))
+    .filter(({ date }) => !duplicatedDates.has(date))
+    .map(({ date, index }) => ({
+      team_id: payload.teamId,
+      setlist_id: null,
+      title: payload.title,
+      event_type: payload.eventType,
+      event_date: date,
+      start_time: payload.startTime || null,
+      gathering_time: payload.gatheringTime || null,
+      location: payload.location || null,
+      memo: payload.memo || null,
+      recurring_group_id: recurringGroupId,
+      recurring_rule: input.recurrenceType,
+      recurring_index: index + 1,
+      created_by: user.id,
+    }));
+
+  if (rows.length === 0) {
+    return {
+      totalCount: dates.length,
+      createdCount: 0,
+      skippedCount: dates.length,
+      createdEvents: [],
+      skippedDates: dates,
+    };
+  }
+
+  const { data, error } = await supabase.from("team_calendar_events").insert(rows).select("*").returns<TeamCalendarEventRow[]>();
+  if (error) throw new Error(error.message || "반복 일정을 생성하지 못했습니다.");
+
+  if (payload.notifyMembers) {
+    const notified = await createTeamCalendarRecurringNotifications(recurringGroupId).catch(() => false);
+    if (notified) {
+      void dispatchPushEvent({ eventType: "team_calendar_recurring_events_created", recurringGroupId });
+    }
+  }
+
+  return {
+    totalCount: dates.length,
+    createdCount: data?.length ?? 0,
+    skippedCount: dates.length - (data?.length ?? 0),
+    createdEvents: await attachAvailability(payload.teamId, data ?? []),
+    skippedDates: dates.filter((date) => duplicatedDates.has(date)),
+  };
 }
 
 export async function updateTeamCalendarEvent(eventId: string, input: TeamCalendarEventInput) {
@@ -414,6 +515,16 @@ async function createTeamCalendarReminderNotifications(eventId: string) {
   return Boolean(data);
 }
 
+async function createTeamCalendarRecurringNotifications(recurringGroupId: string) {
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc("create_team_calendar_recurring_events_notifications", {
+    p_recurring_group_id: recurringGroupId,
+  });
+
+  if (error) throw new Error(error.message || "반복 일정 알림을 만들지 못했습니다.");
+  return Boolean(data);
+}
+
 function createSummary(members: TeamMembership[], availabilities: TeamEventAvailability[]): AvailabilitySummary {
   const summary: AvailabilitySummary = {
     available: 0,
@@ -482,10 +593,24 @@ function rowToEvent(row: TeamCalendarEventRow): TeamCalendarEvent {
     gatheringTime: row.gathering_time?.slice(0, 5) ?? undefined,
     location: row.location ?? undefined,
     memo: row.memo ?? undefined,
+    recurringGroupId: row.recurring_group_id ?? undefined,
+    recurringRule: row.recurring_rule ?? undefined,
+    recurringIndex: row.recurring_index ?? undefined,
     createdBy: row.created_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function createRecurringGroupId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  const template = "10000000-1000-4000-8000-100000000000";
+  return template.replace(/[018]/g, (char) =>
+    (Number(char) ^ (Math.random() * 16) >> (Number(char) / 4)).toString(16),
+  );
 }
 
 function rowToAvailability(row: TeamEventAvailabilityRow): TeamEventAvailability {

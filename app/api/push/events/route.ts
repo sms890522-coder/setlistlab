@@ -7,6 +7,7 @@ type PushEventType =
   | "team_calendar_event_created"
   | "team_calendar_event_updated"
   | "team_calendar_availability_reminder"
+  | "team_calendar_recurring_events_created"
   | "team_notice_created"
   | "team_notice_updated"
   | "team_setlist_created"
@@ -17,6 +18,7 @@ type PushEventRequest = {
   eventType?: PushEventType;
   messageId?: string;
   eventId?: string;
+  recurringGroupId?: string;
   postId?: string;
   setlistId?: string;
   membershipId?: string;
@@ -51,6 +53,7 @@ type TeamCalendarEventRow = {
   team_id: string;
   title: string;
   event_date: string;
+  recurring_group_id?: string | null;
 };
 
 type MembershipRow = {
@@ -126,6 +129,8 @@ async function buildPushEvent(body: PushEventRequest, actorUserId: string) {
       return buildTeamCalendarPush(body.eventId, actorUserId, "updated");
     case "team_calendar_availability_reminder":
       return buildTeamCalendarReminderPush(body.eventId, actorUserId);
+    case "team_calendar_recurring_events_created":
+      return buildTeamCalendarRecurringPush(body.recurringGroupId, actorUserId);
     case "team_notice_created":
       return buildTeamNoticePush(body.postId, actorUserId, "created");
     case "team_notice_updated":
@@ -173,6 +178,38 @@ async function buildTeamCalendarReminderPush(eventId: string | undefined, actorU
       body: `${truncateText(calendarEvent.title, 50)} 일정에 참여 가능 여부를 체크해 주세요.`,
       url: `/teams/${calendarEvent.team_id}/calendar/${calendarEvent.id}`,
       tag: `team-calendar-reminder-${calendarEvent.id}`,
+    } satisfies PushPayload,
+  };
+}
+
+async function buildTeamCalendarRecurringPush(recurringGroupId: string | undefined, actorUserId: string) {
+  if (!recurringGroupId) throw new Error("반복 일정 정보가 필요합니다.");
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("team_calendar_events")
+    .select("id,team_id,title,event_date,recurring_group_id")
+    .eq("recurring_group_id", recurringGroupId)
+    .order("recurring_index", { ascending: true, nullsFirst: false })
+    .order("event_date", { ascending: true })
+    .returns<TeamCalendarEventRow[]>();
+
+  if (error) throw new Error(error.message || "반복 일정을 찾을 수 없습니다.");
+  const events = data ?? [];
+  const firstEvent = events[0];
+  if (!firstEvent) throw new Error("반복 일정을 찾을 수 없습니다.");
+
+  if (!(await isTeamAdmin(firstEvent.team_id, actorUserId))) {
+    throw new Error("이 팀 반복 일정 알림을 보낼 권한이 없습니다.");
+  }
+
+  return {
+    userIds: await getApprovedMemberIds(firstEvent.team_id, actorUserId),
+    payload: {
+      title: "팀 반복 일정이 등록되었습니다",
+      body: `${truncateText(firstEvent.title, 50)} 일정이 ${events.length}개 등록되었습니다.`,
+      url: `/teams/${firstEvent.team_id}/calendar`,
+      tag: `team-calendar-recurring-${recurringGroupId}`,
     } satisfies PushPayload,
   };
 }

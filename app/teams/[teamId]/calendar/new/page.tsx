@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { TeamCalendarEventForm } from "@/components/TeamCalendarEventForm";
-import { createTeamCalendarEvent, type TeamCalendarEventInput } from "@/lib/db/teamCalendar";
+import {
+  createRecurringTeamCalendarEvents,
+  createTeamCalendarEvent,
+  type RecurringTeamCalendarEventInput,
+  type TeamCalendarEventInput,
+} from "@/lib/db/teamCalendar";
 import { getCloudSetlists } from "@/lib/db/setlists";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
@@ -18,6 +23,7 @@ export default function NewTeamCalendarEventPage() {
   const [setlists, setSetlists] = useState<Setlist[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -43,10 +49,25 @@ export default function NewTeamCalendarEventPage() {
     try {
       setSubmitting(true);
       setError("");
+      setMessage("");
       const event = await createTeamCalendarEvent(input);
       router.push(`/teams/${params.teamId}/calendar/${event.id}`);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "팀 일정을 등록하지 못했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRecurringSubmit(input: RecurringTeamCalendarEventInput) {
+    try {
+      setSubmitting(true);
+      setError("");
+      setMessage("");
+      const result = await createRecurringTeamCalendarEvents(input);
+      setMessage(createRecurringResultMessage(result.totalCount, result.createdCount, result.skippedCount));
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "반복 일정을 생성하지 못했습니다. 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -81,7 +102,30 @@ export default function NewTeamCalendarEventPage() {
       </div>
 
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
-      <TeamCalendarEventForm teamId={team.id} mode="create" setlists={setlists} submitting={submitting} onSubmit={handleSubmit} />
+      {message ? (
+        <div className="rounded-xl bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-700">
+          <p>{message}</p>
+          <Link href={`/teams/${team.id}/calendar`} className="mt-3 inline-flex text-emerald-800 underline">
+            팀 캘린더에서 확인하기
+          </Link>
+        </div>
+      ) : null}
+      <TeamCalendarEventForm
+        teamId={team.id}
+        mode="create"
+        setlists={setlists}
+        submitting={submitting}
+        onSubmit={handleSubmit}
+        onRecurringSubmit={handleRecurringSubmit}
+      />
     </div>
   );
+}
+
+function createRecurringResultMessage(totalCount: number, createdCount: number, skippedCount: number) {
+  if (skippedCount > 0) {
+    return `총 ${totalCount}개 중 ${createdCount}개 일정이 생성되었습니다. ${skippedCount}개는 기존 일정과 겹쳐 건너뛰었습니다.`;
+  }
+
+  return `반복 일정이 생성되었습니다. 총 ${totalCount}개 중 ${createdCount}개 일정이 생성되었습니다.`;
 }
