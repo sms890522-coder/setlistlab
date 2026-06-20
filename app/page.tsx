@@ -176,6 +176,21 @@ export default function HomePage() {
           description: "콘티 공지와 연습 포인트를 팀 안에서 바로 나눕니다.",
         },
         {
+          icon: "💌",
+          title: "팀원 1:1 대화",
+          description: "같은 팀 안의 특정 팀원과 개인적으로 확인할 내용을 주고받습니다.",
+        },
+        {
+          icon: "📌",
+          title: "팀 공지사항",
+          description: "연습 안내와 예배 준비사항을 채팅과 분리해 오래 보관합니다.",
+        },
+        {
+          icon: "🗓️",
+          title: "팀 스케줄",
+          description: "예배와 연습 일정을 등록하고 팀원 가능 여부를 체크합니다.",
+        },
+        {
           icon: "🔔",
           title: "휴대폰 알림",
           description: "새 채팅, 팀 콘티, 초대 승인 소식을 앱 안과 휴대폰 알림으로 확인합니다.",
