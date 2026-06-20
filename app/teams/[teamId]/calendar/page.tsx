@@ -101,8 +101,8 @@ export default function TeamCalendarPage() {
 
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 
-      <section className="card overflow-hidden p-2 sm:p-5">
-        <div className="mb-3 flex items-center justify-between gap-2 px-1 sm:mb-4 sm:px-0">
+      <section className="-mx-4 overflow-hidden bg-white/55 py-2 sm:mx-0 sm:rounded-lg sm:border sm:border-white/70 sm:bg-white/90 sm:p-5 sm:shadow-soft sm:backdrop-blur">
+        <div className="mb-3 flex items-center justify-between gap-2 px-2 sm:mb-4 sm:px-0">
           <button type="button" onClick={() => moveMonth(-1)} className="btn-secondary min-h-10 px-3">이전 달</button>
           <div className="text-center">
             <p className="text-xl font-black text-slate-950">{year}년 {month}월</p>
