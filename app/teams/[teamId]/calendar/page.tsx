@@ -101,8 +101,8 @@ export default function TeamCalendarPage() {
 
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 
-      <section className="card p-4 sm:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <section className="card overflow-hidden p-2 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-2 px-1 sm:mb-4 sm:px-0">
           <button type="button" onClick={() => moveMonth(-1)} className="btn-secondary min-h-10 px-3">이전 달</button>
           <div className="text-center">
             <p className="text-xl font-black text-slate-950">{year}년 {month}월</p>
@@ -120,35 +120,41 @@ export default function TeamCalendarPage() {
           <button type="button" onClick={() => moveMonth(1)} className="btn-secondary min-h-10 px-3">다음 달</button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-slate-500">
-          {WEEKDAYS.map((weekday) => (
-            <div key={weekday} className="py-2">{weekday}</div>
+        <div className="grid grid-cols-7 border-b border-slate-200 text-center text-xs font-black text-slate-500 sm:gap-1 sm:border-b-0">
+          {WEEKDAYS.map((weekday, index) => (
+            <div key={weekday} className={`py-2 ${index === 0 ? "text-rose-500" : ""}`}>{weekday}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0 sm:gap-1">
           {calendarDays.map((day) => {
             const dayEvents = day.dateKey ? eventsByDate.get(day.dateKey) ?? [] : [];
             return (
               <div
                 key={day.key}
-                className={`min-h-24 rounded-xl border p-1.5 text-left sm:min-h-32 ${
-                  day.isCurrentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50"
-                } ${day.isToday ? "ring-2 ring-blue-400" : ""}`}
+                className={`min-h-[5.4rem] border-b border-slate-100 px-0.5 py-2 text-center sm:min-h-32 sm:rounded-xl sm:border sm:p-1.5 sm:text-left ${
+                  day.isCurrentMonth ? "bg-transparent sm:border-slate-200 sm:bg-white" : "bg-transparent sm:border-slate-100 sm:bg-slate-50"
+                } ${day.isToday ? "sm:ring-2 sm:ring-rose-300" : ""}`}
               >
-                <p className={`text-xs font-black ${day.isCurrentMonth ? "text-slate-700" : "text-slate-300"}`}>{day.dayNumber}</p>
-                <div className="mt-1 space-y-1">
+                <p className="min-h-8 text-center sm:min-h-0 sm:text-left">
+                  {day.isCurrentMonth ? (
+                    <span className={dayNumberClass(day)}>
+                      {day.dayNumber}
+                    </span>
+                  ) : null}
+                </p>
+                <div className="mt-0.5 space-y-0.5 sm:mt-1 sm:space-y-1">
                   {dayEvents.slice(0, 2).map((event) => (
                     <Link
                       key={event.id}
                       href={`/teams/${team.id}/calendar/${event.id}`}
-                      className="block rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-bold leading-4 text-blue-900 hover:bg-blue-100"
+                      className={`${eventPillClass(event.eventType)} block truncate rounded-md px-1 py-0.5 text-[9px] font-bold leading-3 hover:brightness-95 sm:rounded-lg sm:px-2 sm:py-1 sm:text-[11px] sm:leading-4`}
                     >
-                      <span className="block truncate">{event.startTime ? `${event.startTime} ` : ""}{event.title}</span>
-                      <span className="text-[10px] text-blue-700">{event.summary.available} 가능</span>
+                      <span className="block truncate"><span className="hidden sm:inline">{event.startTime ? `${event.startTime} ` : ""}</span>{event.title}</span>
+                      <span className="hidden text-[10px] sm:block">{event.summary.available} 가능</span>
                     </Link>
                   ))}
-                  {dayEvents.length > 2 ? <p className="text-[11px] font-bold text-slate-500">+{dayEvents.length - 2}개</p> : null}
+                  {dayEvents.length > 2 ? <p className="text-[10px] font-bold text-slate-500 sm:text-[11px]">+{dayEvents.length - 2}개</p> : null}
                 </div>
               </div>
             );
@@ -239,6 +245,7 @@ function buildCalendarDays(year: number, month: number) {
       key: `${dateKey}-${index}`,
       dateKey,
       dayNumber: date.getDate(),
+      weekday: date.getDay(),
       isCurrentMonth: date.getMonth() === month - 1,
       isToday: dateKey === todayKey,
     };
@@ -268,4 +275,30 @@ function statusBadgeClass(status: AvailabilityStatus) {
     unknown: "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600",
   };
   return classes[status];
+}
+
+function dayNumberClass(day: ReturnType<typeof buildCalendarDays>[number]) {
+  if (day.isToday) {
+    return "inline-flex size-8 items-center justify-center rounded-full bg-rose-500 text-base font-black text-white shadow-sm sm:size-7 sm:text-xs";
+  }
+
+  if (day.weekday === 0) {
+    return "text-base font-black text-rose-500 sm:text-xs";
+  }
+
+  if (day.weekday === 6) {
+    return "text-base font-black text-slate-500 sm:text-xs";
+  }
+
+  return "text-base font-black text-slate-900 sm:text-xs sm:text-slate-700";
+}
+
+function eventPillClass(eventType: keyof typeof TEAM_CALENDAR_EVENT_TYPE_LABELS) {
+  const classes = {
+    worship: "bg-blue-100 text-blue-800",
+    practice: "bg-emerald-100 text-emerald-800",
+    event: "bg-violet-100 text-violet-800",
+    etc: "bg-amber-100 text-amber-800",
+  };
+  return classes[eventType];
 }
