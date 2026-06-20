@@ -2,11 +2,18 @@ import { isWebPushConfigured, sendPushToUsers, type PushPayload } from "@/lib/se
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 
-type PushEventType = "team_chat_message" | "team_setlist_created" | "team_invite_requested" | "team_invite_approved";
+type PushEventType =
+  | "team_chat_message"
+  | "team_notice_created"
+  | "team_notice_updated"
+  | "team_setlist_created"
+  | "team_invite_requested"
+  | "team_invite_approved";
 
 type PushEventRequest = {
   eventType?: PushEventType;
   messageId?: string;
+  postId?: string;
   setlistId?: string;
   membershipId?: string;
 };
@@ -26,6 +33,13 @@ type SetlistRow = {
   worship_date: string | null;
   status: "draft" | "published";
   notification_sent_at: string | null;
+};
+
+type TeamPostRow = {
+  id: string;
+  team_id: string;
+  author_id: string | null;
+  title: string;
 };
 
 type MembershipRow = {
@@ -95,6 +109,10 @@ async function buildPushEvent(body: PushEventRequest, actorUserId: string) {
   switch (body.eventType) {
     case "team_chat_message":
       return buildChatMessagePush(body.messageId, actorUserId);
+    case "team_notice_created":
+      return buildTeamNoticePush(body.postId, actorUserId, "created");
+    case "team_notice_updated":
+      return buildTeamNoticePush(body.postId, actorUserId, "updated");
     case "team_setlist_created":
       return buildSetlistCreatedPush(body.setlistId, actorUserId);
     case "team_invite_requested":
@@ -104,6 +122,33 @@ async function buildPushEvent(body: PushEventRequest, actorUserId: string) {
     default:
       return null;
   }
+}
+
+async function buildTeamNoticePush(postId: string | undefined, actorUserId: string, event: "created" | "updated") {
+  if (!postId) throw new Error("공지사항 정보가 필요합니다.");
+
+  const supabase = getSupabaseAdminClient();
+  const { data: post, error } = await supabase
+    .from("team_posts")
+    .select("id,team_id,author_id,title")
+    .eq("id", postId)
+    .maybeSingle<TeamPostRow>();
+
+  if (error || !post) throw new Error(error?.message || "공지사항을 찾을 수 없습니다.");
+
+  if (!(await isTeamAdmin(post.team_id, actorUserId))) {
+    throw new Error("이 팀 공지 알림을 보낼 권한이 없습니다.");
+  }
+
+  return {
+    userIds: await getApprovedMemberIds(post.team_id, actorUserId),
+    payload: {
+      title: event === "updated" ? "팀 공지사항이 수정되었습니다" : "새 팀 공지사항이 등록되었습니다",
+      body: truncateText(post.title || "공지사항", 80),
+      url: `/teams/${post.team_id}/posts/${post.id}`,
+      tag: `team-notice-${post.id}-${event}`,
+    } satisfies PushPayload,
+  };
 }
 
 async function buildChatMessagePush(messageId: string | undefined, actorUserId: string) {

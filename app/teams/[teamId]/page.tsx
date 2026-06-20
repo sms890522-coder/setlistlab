@@ -188,7 +188,8 @@ export default function TeamDashboardPage() {
               <p className="mt-3 text-sm font-semibold text-slate-600">내 권한: {roleLabel(myMembership.role)} · {myMembership.position || "포지션 미정"}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link href={`/teams/${team.id}/chat`} className="btn-primary">팀 채팅</Link>
+              <Link href={`/teams/${team.id}/posts`} className="btn-primary">공지사항</Link>
+              <Link href={`/teams/${team.id}/chat`} className="btn-secondary">팀 채팅</Link>
               <Link href={`/teams/${team.id}/direct`} className="btn-secondary">1:1 대화</Link>
               <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary">팀 콘티 만들기</Link>
               {canManage ? <button type="button" onClick={() => setEditing((value) => !value)} className="btn-secondary">팀 정보 수정</button> : null}
@@ -275,7 +276,10 @@ export default function TeamDashboardPage() {
       <section className="card p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="section-title">팀 콘티</h2>
-          <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary min-h-10 px-3">팀 콘티 만들기</Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/teams/${team.id}/posts`} className="btn-secondary min-h-10 px-3">공지사항</Link>
+            <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary min-h-10 px-3">팀 콘티 만들기</Link>
+          </div>
         </div>
         {setlists.length === 0 ? (
           <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">아직 팀 콘티가 없습니다.</p>

@@ -224,6 +224,46 @@ on public.team_direct_messages (thread_id, created_at);
 create index if not exists team_direct_messages_team_created_idx
 on public.team_direct_messages (team_id, created_at);
 
+create table if not exists public.team_posts (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams(id) on delete cascade,
+  author_id uuid references auth.users(id) on delete set null,
+  type text not null default 'notice',
+  title text not null,
+  content text not null,
+  is_pinned boolean not null default false,
+  notify_members boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_posts_type_check check (type in ('notice', 'free', 'rehearsal', 'resource'))
+);
+
+create index if not exists team_posts_team_created_idx
+on public.team_posts (team_id, created_at desc);
+
+create index if not exists team_posts_team_pinned_created_idx
+on public.team_posts (team_id, is_pinned desc, created_at desc);
+
+drop trigger if exists team_posts_set_updated_at on public.team_posts;
+create trigger team_posts_set_updated_at
+before update on public.team_posts
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.team_post_reads (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.team_posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  read_at timestamptz not null default now(),
+  unique (post_id, user_id)
+);
+
+create index if not exists team_post_reads_post_idx
+on public.team_post_reads (post_id);
+
+create index if not exists team_post_reads_user_idx
+on public.team_post_reads (user_id);
+
 create or replace function public.protect_team_direct_message_update()
 returns trigger
 language plpgsql
@@ -283,6 +323,17 @@ begin
          and tablename = 'team_direct_messages'
      ) then
     alter publication supabase_realtime add table public.team_direct_messages;
+  end if;
+
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'team_posts'
+     ) then
+    alter publication supabase_realtime add table public.team_posts;
   end if;
 end $$;
 
@@ -428,6 +479,8 @@ create table if not exists public.notifications (
   constraint notifications_type_check check (
     type in (
       'team_chat_message',
+      'team_notice_created',
+      'team_notice_updated',
       'team_setlist_created',
       'team_invite_requested',
       'team_invite_approved'
@@ -450,6 +503,8 @@ add constraint notifications_type_check check (
   type in (
     'team_chat_message',
     'team_direct_message',
+    'team_notice_created',
+    'team_notice_updated',
     'team_setlist_created',
     'team_invite_requested',
     'team_invite_approved'
@@ -533,6 +588,8 @@ alter table public.team_memberships enable row level security;
 alter table public.team_chat_messages enable row level security;
 alter table public.team_direct_threads enable row level security;
 alter table public.team_direct_messages enable row level security;
+alter table public.team_posts enable row level security;
+alter table public.team_post_reads enable row level security;
 alter table public.saved_songs enable row level security;
 alter table public.setlists enable row level security;
 alter table public.setlist_assignments enable row level security;
@@ -654,6 +711,76 @@ begin
     and memberships.status = 'approved'
     and memberships.removed_at is null
     and memberships.user_id <> auth.uid();
+end;
+$$;
+
+drop function if exists public.create_team_post_notifications(uuid, text);
+
+create function public.create_team_post_notifications(
+  p_post_id uuid,
+  p_event_type text default 'team_notice_created'
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_post public.team_posts;
+  v_notification_title text;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  if p_event_type not in ('team_notice_created', 'team_notice_updated') then
+    raise exception '지원하지 않는 공지 알림 타입입니다.';
+  end if;
+
+  select *
+  into v_post
+  from public.team_posts
+  where id = p_post_id;
+
+  if v_post.id is null then
+    raise exception '공지사항을 찾을 수 없습니다.';
+  end if;
+
+  if not public.is_team_admin(v_post.team_id, auth.uid()) then
+    raise exception '이 작업을 수행할 권한이 없습니다.';
+  end if;
+
+  if p_event_type = 'team_notice_created' and not v_post.notify_members then
+    return false;
+  end if;
+
+  v_notification_title := case
+    when p_event_type = 'team_notice_updated' then '팀 공지사항이 수정되었습니다'
+    else '새 팀 공지사항이 등록되었습니다'
+  end;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    v_post.team_id,
+    p_event_type,
+    v_notification_title,
+    v_post.title,
+    '/teams/' || v_post.team_id::text || '/posts/' || v_post.id::text
+  from public.team_memberships memberships
+  where memberships.team_id = v_post.team_id
+    and memberships.status = 'approved'
+    and memberships.removed_at is null
+    and memberships.user_id <> auth.uid();
+
+  return true;
 end;
 $$;
 
@@ -1347,6 +1474,82 @@ create policy "team_direct_messages_delete_admin"
 on public.team_direct_messages
 for delete
 using (public.is_team_admin(team_id, auth.uid()));
+
+drop policy if exists "team_posts_select_member" on public.team_posts;
+create policy "team_posts_select_member"
+on public.team_posts
+for select
+using (public.is_team_approved_member(team_id, auth.uid()));
+
+drop policy if exists "team_posts_insert_admin" on public.team_posts;
+create policy "team_posts_insert_admin"
+on public.team_posts
+for insert
+with check (
+  auth.uid() = author_id
+  and public.is_team_admin(team_id, auth.uid())
+);
+
+drop policy if exists "team_posts_update_admin" on public.team_posts;
+create policy "team_posts_update_admin"
+on public.team_posts
+for update
+using (public.is_team_admin(team_id, auth.uid()))
+with check (public.is_team_admin(team_id, auth.uid()));
+
+drop policy if exists "team_posts_delete_admin" on public.team_posts;
+create policy "team_posts_delete_admin"
+on public.team_posts
+for delete
+using (public.is_team_admin(team_id, auth.uid()));
+
+drop policy if exists "team_post_reads_select_self_or_admin" on public.team_post_reads;
+create policy "team_post_reads_select_self_or_admin"
+on public.team_post_reads
+for select
+using (
+  auth.uid() = user_id
+  or exists (
+    select 1
+    from public.team_posts posts
+    where posts.id = public.team_post_reads.post_id
+      and public.is_team_admin(posts.team_id, auth.uid())
+  )
+);
+
+drop policy if exists "team_post_reads_insert_self_member" on public.team_post_reads;
+create policy "team_post_reads_insert_self_member"
+on public.team_post_reads
+for insert
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.team_posts posts
+    where posts.id = public.team_post_reads.post_id
+      and public.is_team_approved_member(posts.team_id, auth.uid())
+  )
+);
+
+drop policy if exists "team_post_reads_update_self" on public.team_post_reads;
+create policy "team_post_reads_update_self"
+on public.team_post_reads
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "team_post_reads_delete_admin" on public.team_post_reads;
+create policy "team_post_reads_delete_admin"
+on public.team_post_reads
+for delete
+using (
+  exists (
+    select 1
+    from public.team_posts posts
+    where posts.id = public.team_post_reads.post_id
+      and public.is_team_admin(posts.team_id, auth.uid())
+  )
+);
 
 drop policy if exists "saved_songs_select_own" on public.saved_songs;
 create policy "saved_songs_select_own"
