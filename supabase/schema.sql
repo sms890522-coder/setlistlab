@@ -264,6 +264,64 @@ on public.team_post_reads (post_id);
 create index if not exists team_post_reads_user_idx
 on public.team_post_reads (user_id);
 
+create table if not exists public.team_calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams(id) on delete cascade,
+  setlist_id uuid references public.setlists(id) on delete set null,
+  title text not null,
+  event_type text not null default 'worship',
+  event_date date not null,
+  start_time time,
+  gathering_time time,
+  location text,
+  memo text,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_calendar_events_type_check check (event_type in ('worship', 'practice', 'event', 'etc'))
+);
+
+create index if not exists team_calendar_events_team_date_idx
+on public.team_calendar_events (team_id, event_date);
+
+create index if not exists team_calendar_events_team_date_desc_idx
+on public.team_calendar_events (team_id, event_date desc);
+
+drop trigger if exists team_calendar_events_set_updated_at on public.team_calendar_events;
+create trigger team_calendar_events_set_updated_at
+before update on public.team_calendar_events
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.team_event_availability (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.team_calendar_events(id) on delete cascade,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'unknown',
+  memo text,
+  available_roles text[],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (event_id, user_id),
+  constraint team_event_availability_status_check check (status in ('available', 'unavailable', 'maybe', 'unknown'))
+);
+
+create index if not exists team_event_availability_event_idx
+on public.team_event_availability (event_id);
+
+create index if not exists team_event_availability_team_user_idx
+on public.team_event_availability (team_id, user_id);
+
+create index if not exists team_event_availability_status_idx
+on public.team_event_availability (status);
+
+drop trigger if exists team_event_availability_set_updated_at on public.team_event_availability;
+create trigger team_event_availability_set_updated_at
+before update on public.team_event_availability
+for each row
+execute function public.set_updated_at();
+
 create or replace function public.protect_team_direct_message_update()
 returns trigger
 language plpgsql
@@ -334,6 +392,28 @@ begin
          and tablename = 'team_posts'
      ) then
     alter publication supabase_realtime add table public.team_posts;
+  end if;
+
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'team_calendar_events'
+     ) then
+    alter publication supabase_realtime add table public.team_calendar_events;
+  end if;
+
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'team_event_availability'
+     ) then
+    alter publication supabase_realtime add table public.team_event_availability;
   end if;
 end $$;
 
@@ -479,6 +559,9 @@ create table if not exists public.notifications (
   constraint notifications_type_check check (
     type in (
       'team_chat_message',
+      'team_calendar_event_created',
+      'team_calendar_event_updated',
+      'team_calendar_availability_reminder',
       'team_notice_created',
       'team_notice_updated',
       'team_setlist_created',
@@ -503,6 +586,9 @@ add constraint notifications_type_check check (
   type in (
     'team_chat_message',
     'team_direct_message',
+    'team_calendar_event_created',
+    'team_calendar_event_updated',
+    'team_calendar_availability_reminder',
     'team_notice_created',
     'team_notice_updated',
     'team_setlist_created',
@@ -590,6 +676,8 @@ alter table public.team_direct_threads enable row level security;
 alter table public.team_direct_messages enable row level security;
 alter table public.team_posts enable row level security;
 alter table public.team_post_reads enable row level security;
+alter table public.team_calendar_events enable row level security;
+alter table public.team_event_availability enable row level security;
 alter table public.saved_songs enable row level security;
 alter table public.setlists enable row level security;
 alter table public.setlist_assignments enable row level security;
@@ -779,6 +867,134 @@ begin
     and memberships.status = 'approved'
     and memberships.removed_at is null
     and memberships.user_id <> auth.uid();
+
+  return true;
+end;
+$$;
+
+drop function if exists public.create_team_calendar_event_notifications(uuid, text);
+
+create function public.create_team_calendar_event_notifications(
+  p_event_id uuid,
+  p_event_type text default 'team_calendar_event_created'
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_event public.team_calendar_events;
+  v_notification_title text;
+  v_body text;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  if p_event_type not in ('team_calendar_event_created', 'team_calendar_event_updated') then
+    raise exception '지원하지 않는 일정 알림 타입입니다.';
+  end if;
+
+  select *
+  into v_event
+  from public.team_calendar_events
+  where id = p_event_id;
+
+  if v_event.id is null then
+    raise exception '팀 일정을 찾을 수 없습니다.';
+  end if;
+
+  if not public.is_team_admin(v_event.team_id, auth.uid()) then
+    raise exception '이 작업을 수행할 권한이 없습니다.';
+  end if;
+
+  v_notification_title := case
+    when p_event_type = 'team_calendar_event_updated' then '팀 일정이 수정되었습니다'
+    else '새 팀 일정이 등록되었습니다'
+  end;
+  v_body := v_event.title || ' · ' || v_event.event_date::text;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    v_event.team_id,
+    p_event_type,
+    v_notification_title,
+    v_body,
+    '/teams/' || v_event.team_id::text || '/calendar/' || v_event.id::text
+  from public.team_memberships memberships
+  where memberships.team_id = v_event.team_id
+    and memberships.status = 'approved'
+    and memberships.removed_at is null
+    and memberships.user_id <> auth.uid();
+
+  return true;
+end;
+$$;
+
+drop function if exists public.create_team_calendar_availability_reminder_notifications(uuid);
+
+create function public.create_team_calendar_availability_reminder_notifications(p_event_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_event public.team_calendar_events;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_event
+  from public.team_calendar_events
+  where id = p_event_id;
+
+  if v_event.id is null then
+    raise exception '팀 일정을 찾을 수 없습니다.';
+  end if;
+
+  if not public.is_team_admin(v_event.team_id, auth.uid()) then
+    raise exception '이 작업을 수행할 권한이 없습니다.';
+  end if;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    v_event.team_id,
+    'team_calendar_availability_reminder',
+    '가능 여부를 확인해 주세요',
+    v_event.title || ' 일정에 참여 가능 여부를 체크해 주세요.',
+    '/teams/' || v_event.team_id::text || '/calendar/' || v_event.id::text
+  from public.team_memberships memberships
+  where memberships.team_id = v_event.team_id
+    and memberships.status = 'approved'
+    and memberships.removed_at is null
+    and memberships.user_id <> auth.uid()
+    and not exists (
+      select 1
+      from public.team_event_availability availability
+      where availability.event_id = v_event.id
+        and availability.user_id = memberships.user_id
+        and availability.status <> 'unknown'
+    );
 
   return true;
 end;
@@ -1549,6 +1765,77 @@ using (
     where posts.id = public.team_post_reads.post_id
       and public.is_team_admin(posts.team_id, auth.uid())
   )
+);
+
+drop policy if exists "team_calendar_events_select_member" on public.team_calendar_events;
+create policy "team_calendar_events_select_member"
+on public.team_calendar_events
+for select
+using (public.is_team_approved_member(team_id, auth.uid()));
+
+drop policy if exists "team_calendar_events_insert_admin" on public.team_calendar_events;
+create policy "team_calendar_events_insert_admin"
+on public.team_calendar_events
+for insert
+with check (
+  auth.uid() = created_by
+  and public.is_team_admin(team_id, auth.uid())
+);
+
+drop policy if exists "team_calendar_events_update_admin" on public.team_calendar_events;
+create policy "team_calendar_events_update_admin"
+on public.team_calendar_events
+for update
+using (public.is_team_admin(team_id, auth.uid()))
+with check (public.is_team_admin(team_id, auth.uid()));
+
+drop policy if exists "team_calendar_events_delete_admin" on public.team_calendar_events;
+create policy "team_calendar_events_delete_admin"
+on public.team_calendar_events
+for delete
+using (public.is_team_admin(team_id, auth.uid()));
+
+drop policy if exists "team_event_availability_select_member" on public.team_event_availability;
+create policy "team_event_availability_select_member"
+on public.team_event_availability
+for select
+using (public.is_team_approved_member(team_id, auth.uid()));
+
+drop policy if exists "team_event_availability_insert_self" on public.team_event_availability;
+create policy "team_event_availability_insert_self"
+on public.team_event_availability
+for insert
+with check (
+  auth.uid() = user_id
+  and public.is_team_approved_member(team_id, auth.uid())
+  and exists (
+    select 1
+    from public.team_calendar_events events
+    where events.id = public.team_event_availability.event_id
+      and events.team_id = public.team_event_availability.team_id
+  )
+);
+
+drop policy if exists "team_event_availability_update_self" on public.team_event_availability;
+create policy "team_event_availability_update_self"
+on public.team_event_availability
+for update
+using (
+  auth.uid() = user_id
+  and public.is_team_approved_member(team_id, auth.uid())
+)
+with check (
+  auth.uid() = user_id
+  and public.is_team_approved_member(team_id, auth.uid())
+);
+
+drop policy if exists "team_event_availability_delete_self" on public.team_event_availability;
+create policy "team_event_availability_delete_self"
+on public.team_event_availability
+for delete
+using (
+  auth.uid() = user_id
+  and public.is_team_approved_member(team_id, auth.uid())
 );
 
 drop policy if exists "saved_songs_select_own" on public.saved_songs;

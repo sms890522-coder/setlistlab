@@ -9,6 +9,9 @@ export const NOTIFICATIONS_UPDATED_EVENT = "setlistlab:notifications-updated";
 export type NotificationType =
   | "team_chat_message"
   | "team_direct_message"
+  | "team_calendar_event_created"
+  | "team_calendar_event_updated"
+  | "team_calendar_availability_reminder"
   | "team_notice_created"
   | "team_notice_updated"
   | "team_setlist_created"

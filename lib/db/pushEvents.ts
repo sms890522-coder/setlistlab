@@ -4,6 +4,9 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/c
 
 type PushEventInput =
   | { eventType: "team_chat_message"; messageId: string }
+  | { eventType: "team_calendar_event_created"; eventId: string }
+  | { eventType: "team_calendar_event_updated"; eventId: string }
+  | { eventType: "team_calendar_availability_reminder"; eventId: string }
   | { eventType: "team_notice_created"; postId: string }
   | { eventType: "team_notice_updated"; postId: string }
   | { eventType: "team_setlist_created"; setlistId: string }

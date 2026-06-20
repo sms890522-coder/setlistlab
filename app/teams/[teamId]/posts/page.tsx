@@ -86,6 +86,7 @@ export default function TeamPostsPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               {canManage ? <Link href={`/teams/${team.id}/posts/new`} className="btn-primary">공지 작성</Link> : null}
+              <Link href={`/teams/${team.id}/calendar`} className="btn-secondary">팀 캘린더</Link>
               <Link href={`/teams/${team.id}`} className="btn-secondary">팀으로</Link>
               <Link href={`/teams/${team.id}/chat`} className="btn-secondary">팀 채팅</Link>
             </div>

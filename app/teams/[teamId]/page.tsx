@@ -188,6 +188,7 @@ export default function TeamDashboardPage() {
               <p className="mt-3 text-sm font-semibold text-slate-600">내 권한: {roleLabel(myMembership.role)} · {myMembership.position || "포지션 미정"}</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link href={`/teams/${team.id}/calendar`} className="btn-primary">팀 캘린더</Link>
               <Link href={`/teams/${team.id}/posts`} className="btn-primary">공지사항</Link>
               <Link href={`/teams/${team.id}/chat`} className="btn-secondary">팀 채팅</Link>
               <Link href={`/teams/${team.id}/direct`} className="btn-secondary">1:1 대화</Link>
@@ -277,6 +278,7 @@ export default function TeamDashboardPage() {
         <div className="flex items-center justify-between gap-3">
           <h2 className="section-title">팀 콘티</h2>
           <div className="flex flex-wrap gap-2">
+            <Link href={`/teams/${team.id}/calendar`} className="btn-secondary min-h-10 px-3">팀 캘린더</Link>
             <Link href={`/teams/${team.id}/posts`} className="btn-secondary min-h-10 px-3">공지사항</Link>
             <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary min-h-10 px-3">팀 콘티 만들기</Link>
           </div>

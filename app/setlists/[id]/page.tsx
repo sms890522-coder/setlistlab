@@ -5,6 +5,12 @@ import { ExportImportPanel } from "@/components/ExportImportPanel";
 import { SongCard } from "@/components/SongCard";
 import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  AVAILABILITY_LABELS,
+  getLinkedCalendarEventsForSetlist,
+  type AvailabilityStatus,
+  type TeamCalendarEventWithAvailability,
+} from "@/lib/db/teamCalendar";
 import { duplicateCloudSetlist, getCloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
@@ -22,6 +28,7 @@ export default function SetlistDetailPage() {
   const [loaded, setLoaded] = useState(false);
   const [completedSongs, setCompletedSongs] = useState<Record<string, boolean>>({});
   const [storageMode, setStorageMode] = useState<StorageMode>("local");
+  const [linkedEvents, setLinkedEvents] = useState<TeamCalendarEventWithAvailability[]>([]);
   const [loadError, setLoadError] = useState("");
   const [canEdit, setCanEdit] = useState(true);
 
@@ -35,8 +42,10 @@ export default function SetlistDetailPage() {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
+            const calendarEvents = cloudSetlist.teamId ? await getLinkedCalendarEventsForSetlist(cloudSetlist.id).catch(() => []) : [];
             setCanEdit(Boolean(cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "")));
             setSetlist(cloudSetlist);
+            setLinkedEvents(calendarEvents);
             setStorageMode("cloud");
             setCompletedSongs(getPracticeCompletions(params.id));
             setLoaded(true);
@@ -47,6 +56,7 @@ export default function SetlistDetailPage() {
 
       setCanEdit(true);
       setSetlist(getSetlist(params.id) ?? null);
+      setLinkedEvents([]);
       setStorageMode("local");
       setCompletedSongs(getPracticeCompletions(params.id));
       setLoaded(true);
@@ -55,6 +65,7 @@ export default function SetlistDetailPage() {
     loadSetlist().catch((error) => {
       setLoadError(error instanceof Error ? error.message : "콘티를 불러오지 못했습니다.");
       setSetlist(getSetlist(params.id) ?? null);
+      setLinkedEvents([]);
       setStorageMode("local");
       setCompletedSongs(getPracticeCompletions(params.id));
       setLoaded(true);
@@ -157,6 +168,8 @@ export default function SetlistDetailPage() {
 
       <TeamAssignmentsView assignments={setlist.teamAssignments} />
 
+      {linkedEvents.length > 0 ? <LinkedCalendarEvents events={linkedEvents} /> : null}
+
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="section-title">곡 목록</h2>
@@ -203,4 +216,53 @@ export default function SetlistDetailPage() {
       <ExportImportPanel setlist={setlist} onImported={(imported) => router.push(`/setlists/${imported.id}`)} />
     </div>
   );
+}
+
+function LinkedCalendarEvents({ events }: { events: TeamCalendarEventWithAvailability[] }) {
+  return (
+    <section className="card p-5">
+      <h2 className="section-title">연결된 팀 캘린더 일정</h2>
+      <p className="mt-1 text-sm text-slate-500">가능 인원은 실제 섬김 배정이 아니라 리더가 팀원 지정을 할 때 참고하는 정보입니다.</p>
+      <div className="mt-4 grid gap-3">
+        {events.map((event) => (
+          <Link
+            key={event.id}
+            href={`/teams/${event.teamId}/calendar/${event.id}`}
+            className="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-200 hover:bg-blue-50"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-slate-950">{event.title}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">
+                  {formatCalendarDate(event.eventDate)}
+                  {event.startTime ? ` · ${event.startTime}` : ""}
+                </p>
+              </div>
+              <CalendarSummary summary={event.summary} />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CalendarSummary({ summary }: { summary: Record<AvailabilityStatus, number> }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {(["available", "unavailable", "maybe", "unknown"] as AvailabilityStatus[]).map((status) => (
+        <span key={status} className="rounded-full bg-slate-50 px-2.5 py-1 text-xs font-black text-slate-600 ring-1 ring-slate-200">
+          {AVAILABILITY_LABELS[status]} {summary[status]}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function formatCalendarDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
 }

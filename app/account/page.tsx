@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { USER_ROLES, getCurrentUser, signOut } from "@/lib/auth";
+import { AVAILABILITY_LABELS, getMyUpcomingTeamEvents, type TeamCalendarEventWithAvailability } from "@/lib/db/teamCalendar";
 import { getCloudSetlists } from "@/lib/db/setlists";
 import { getCloudSongLibrary } from "@/lib/db/savedSongs";
 import { getMyProfile, upsertMyProfile } from "@/lib/db/profiles";
@@ -22,6 +23,7 @@ export default function AccountPage() {
   const [serviceName, setServiceName] = useState("");
   const [sharePracticePresence, setSharePracticePresence] = useState(true);
   const [stats, setStats] = useState({ setlists: 0, songs: 0, teamMembers: 0 });
+  const [upcomingEvents, setUpcomingEvents] = useState<TeamCalendarEventWithAvailability[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -38,11 +40,12 @@ export default function AccountPage() {
         return;
       }
 
-      const [profile, cloudSetlists, cloudSongs, teamMembers] = await Promise.all([
+      const [profile, cloudSetlists, cloudSongs, teamMembers, teamEvents] = await Promise.all([
         getMyProfile(),
         getCloudSetlists().catch(() => []),
         getCloudSongLibrary().catch(() => []),
         getTeamMembers().catch(() => []),
+        getMyUpcomingTeamEvents().catch(() => []),
       ]);
       setEmail(user.email ?? "");
       setDisplayName(profile?.displayName || user.email?.split("@")[0] || "");
@@ -53,6 +56,7 @@ export default function AccountPage() {
       setServiceName(profile?.serviceName || "");
       setSharePracticePresence(profile?.sharePracticePresence ?? true);
       setStats({ setlists: cloudSetlists.length, songs: cloudSongs.length, teamMembers: teamMembers.length });
+      setUpcomingEvents(teamEvents);
       setLoaded(true);
     }
 
@@ -130,6 +134,46 @@ export default function AccountPage() {
           </section>
 
           <section className="card p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="section-title">내 팀 일정</h2>
+                <p className="mt-1 text-sm text-slate-500">다가오는 예배와 연습 일정, 내 가능 여부를 확인할 수 있습니다.</p>
+              </div>
+              <Link href="/teams" className="btn-secondary min-h-10 px-3">내 팀</Link>
+            </div>
+
+            {upcomingEvents.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">
+                다가오는 팀 일정이 없습니다.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                {upcomingEvents.map((event) => (
+                  <div key={event.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-blue-700">{event.teamLabel || "팀 일정"}</p>
+                        <h3 className="mt-1 font-black text-slate-950">{event.title}</h3>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          {formatEventDate(event.eventDate)}
+                          {event.startTime ? ` · ${event.startTime}` : ""}
+                        </p>
+                      </div>
+                      <span className={availabilityBadgeClass(event.myAvailability?.status ?? "unknown")}>
+                        내 응답: {AVAILABILITY_LABELS[event.myAvailability?.status ?? "unknown"]}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link href={`/teams/${event.teamId}/calendar/${event.id}`} className="btn-secondary min-h-10 px-3">변경하기</Link>
+                      {event.setlist ? <Link href={`/setlists/${event.setlist.id}`} className="btn-secondary min-h-10 px-3">콘티 보기</Link> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="card p-6">
             <h2 className="section-title">프로필</h2>
             <p className="mt-1 text-sm text-slate-500">{email}</p>
             <form onSubmit={handleSubmit} className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -194,4 +238,22 @@ export default function AccountPage() {
       )}
     </div>
   );
+}
+
+function formatEventDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function availabilityBadgeClass(status: "available" | "unavailable" | "maybe" | "unknown") {
+  const classes = {
+    available: "rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700",
+    unavailable: "rounded-full bg-rose-50 px-2.5 py-1 text-xs font-black text-rose-700",
+    maybe: "rounded-full bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700",
+    unknown: "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600",
+  };
+  return classes[status];
 }

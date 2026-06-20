@@ -126,6 +126,7 @@ export default function TeamDirectListPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link href={`/teams/${team.id}/calendar`} className="btn-secondary">팀 캘린더</Link>
               <Link href={`/teams/${team.id}/posts`} className="btn-secondary">공지사항</Link>
               <Link href={`/teams/${team.id}/chat`} className="btn-secondary">팀 채팅</Link>
               <Link href={`/teams/${team.id}`} className="btn-secondary">팀으로</Link>

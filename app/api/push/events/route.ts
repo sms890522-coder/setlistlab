@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 
 type PushEventType =
   | "team_chat_message"
+  | "team_calendar_event_created"
+  | "team_calendar_event_updated"
+  | "team_calendar_availability_reminder"
   | "team_notice_created"
   | "team_notice_updated"
   | "team_setlist_created"
@@ -13,6 +16,7 @@ type PushEventType =
 type PushEventRequest = {
   eventType?: PushEventType;
   messageId?: string;
+  eventId?: string;
   postId?: string;
   setlistId?: string;
   membershipId?: string;
@@ -40,6 +44,13 @@ type TeamPostRow = {
   team_id: string;
   author_id: string | null;
   title: string;
+};
+
+type TeamCalendarEventRow = {
+  id: string;
+  team_id: string;
+  title: string;
+  event_date: string;
 };
 
 type MembershipRow = {
@@ -109,6 +120,12 @@ async function buildPushEvent(body: PushEventRequest, actorUserId: string) {
   switch (body.eventType) {
     case "team_chat_message":
       return buildChatMessagePush(body.messageId, actorUserId);
+    case "team_calendar_event_created":
+      return buildTeamCalendarPush(body.eventId, actorUserId, "created");
+    case "team_calendar_event_updated":
+      return buildTeamCalendarPush(body.eventId, actorUserId, "updated");
+    case "team_calendar_availability_reminder":
+      return buildTeamCalendarReminderPush(body.eventId, actorUserId);
     case "team_notice_created":
       return buildTeamNoticePush(body.postId, actorUserId, "created");
     case "team_notice_updated":
@@ -122,6 +139,56 @@ async function buildPushEvent(body: PushEventRequest, actorUserId: string) {
     default:
       return null;
   }
+}
+
+async function buildTeamCalendarPush(eventId: string | undefined, actorUserId: string, event: "created" | "updated") {
+  const calendarEvent = await getCalendarEventForPush(eventId);
+
+  if (!(await isTeamAdmin(calendarEvent.team_id, actorUserId))) {
+    throw new Error("이 팀 일정 알림을 보낼 권한이 없습니다.");
+  }
+
+  return {
+    userIds: await getApprovedMemberIds(calendarEvent.team_id, actorUserId),
+    payload: {
+      title: event === "updated" ? "팀 일정이 수정되었습니다" : "새 팀 일정이 등록되었습니다",
+      body: `${truncateText(calendarEvent.title, 50)} · ${calendarEvent.event_date}`,
+      url: `/teams/${calendarEvent.team_id}/calendar/${calendarEvent.id}`,
+      tag: `team-calendar-${calendarEvent.id}-${event}`,
+    } satisfies PushPayload,
+  };
+}
+
+async function buildTeamCalendarReminderPush(eventId: string | undefined, actorUserId: string) {
+  const calendarEvent = await getCalendarEventForPush(eventId);
+
+  if (!(await isTeamAdmin(calendarEvent.team_id, actorUserId))) {
+    throw new Error("이 팀 일정 리마인더를 보낼 권한이 없습니다.");
+  }
+
+  return {
+    userIds: await getUnrespondedMemberIds(calendarEvent.id, calendarEvent.team_id, actorUserId),
+    payload: {
+      title: "가능 여부를 확인해 주세요",
+      body: `${truncateText(calendarEvent.title, 50)} 일정에 참여 가능 여부를 체크해 주세요.`,
+      url: `/teams/${calendarEvent.team_id}/calendar/${calendarEvent.id}`,
+      tag: `team-calendar-reminder-${calendarEvent.id}`,
+    } satisfies PushPayload,
+  };
+}
+
+async function getCalendarEventForPush(eventId: string | undefined) {
+  if (!eventId) throw new Error("팀 일정 정보가 필요합니다.");
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("team_calendar_events")
+    .select("id,team_id,title,event_date")
+    .eq("id", eventId)
+    .maybeSingle<TeamCalendarEventRow>();
+
+  if (error || !data) throw new Error(error?.message || "팀 일정을 찾을 수 없습니다.");
+  return data;
 }
 
 async function buildTeamNoticePush(postId: string | undefined, actorUserId: string, event: "created" | "updated") {
@@ -269,6 +336,24 @@ async function getApprovedMemberIds(teamId: string, excludeUserId?: string) {
 
   if (error) throw new Error(error.message || "팀원 정보를 불러오지 못했습니다.");
   return (data ?? []).map((row) => row.user_id).filter((userId) => userId !== excludeUserId);
+}
+
+async function getUnrespondedMemberIds(eventId: string, teamId: string, excludeUserId?: string) {
+  const memberIds = await getApprovedMemberIds(teamId, excludeUserId);
+  if (memberIds.length === 0) return [];
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("team_event_availability")
+    .select("user_id,status")
+    .eq("event_id", eventId)
+    .in("user_id", memberIds)
+    .neq("status", "unknown")
+    .returns<Array<{ user_id: string; status: string }>>();
+
+  if (error) throw new Error(error.message || "가능 여부 응답을 불러오지 못했습니다.");
+  const respondedIds = new Set((data ?? []).map((row) => row.user_id));
+  return memberIds.filter((userId) => !respondedIds.has(userId));
 }
 
 async function getAdminMemberIds(teamId: string, excludeUserId?: string) {
