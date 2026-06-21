@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { FaqSection } from "@/components/FaqSection";
+import { faqJsonLd } from "@/lib/faq";
 
 export const metadata: Metadata = {
   title: "문의/피드백 | 콘티연습실",
@@ -12,6 +14,10 @@ export default function ContactPage() {
 
   return (
     <div className="page-shell pb-20">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <section className="mx-auto max-w-2xl space-y-5 py-8">
         <Link href="/" className="text-sm font-bold text-blue-700 transition hover:text-blue-800">
           홈으로
@@ -53,6 +59,7 @@ export default function ContactPage() {
             )}
           </div>
         </div>
+        <FaqSection />
       </section>
     </div>
   );

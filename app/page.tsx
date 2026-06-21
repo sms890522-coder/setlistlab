@@ -1,38 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { FaqSection } from "@/components/FaqSection";
 import { getCurrentSession, getCurrentUser } from "@/lib/auth";
+import { faqJsonLd } from "@/lib/faq";
 import { getSharedSetlistCount } from "@/lib/supabase";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 
 type AuthStatus = "loading" | "signedIn" | "signedOut";
 type SharedCountStatus = "loading" | "ready" | "unavailable";
-
-const faqItems = [
-  {
-    question: "콘티연습실은 어떤 서비스인가요?",
-    answer:
-      "찬양팀이 콘티를 만들고, 악보 이미지와 유튜브 연습 링크, 팀 채팅, PDF 공유까지 한 곳에서 관리할 수 있는 예배 준비 도구입니다.",
-  },
-  {
-    question: "앱 설치가 필요한가요?",
-    answer: "별도 앱 설치 없이 웹에서 사용할 수 있으며, PC와 휴대폰 모두 지원합니다.",
-  },
-  {
-    question: "악보를 직접 제공하나요?",
-    answer:
-      "콘티연습실은 악보를 직접 제공하지 않습니다. 사용자가 보유한 악보 이미지를 등록하거나 검색 도우미를 통해 필요한 자료를 직접 찾을 수 있도록 돕습니다.",
-  },
-  {
-    question: "팀원들과 함께 사용할 수 있나요?",
-    answer: "팀 초대, 팀 채팅, 공지사항, 알림 기능을 통해 찬양팀이 함께 사용할 수 있습니다.",
-  },
-  {
-    question: "튜너와 메트로놈도 사용할 수 있나요?",
-    answer: "브라우저에서 바로 사용할 수 있는 튜너와 메트로놈을 제공해 예배 전 연습에 활용할 수 있습니다.",
-  },
-];
 
 const applicationJsonLd = {
   "@context": "https://schema.org",
@@ -42,19 +19,6 @@ const applicationJsonLd = {
   operatingSystem: "Web",
   url: "https://setlistlab.vercel.app/",
   description: "찬양팀 콘티 작성, 연습, 팀 공유 도구",
-};
-
-const faqJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: faqItems.map((item) => ({
-    "@type": "Question",
-    name: item.question,
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: item.answer,
-    },
-  })),
 };
 
 export default function HomePage() {
@@ -404,20 +368,7 @@ export default function HomePage() {
           </div>
         ))}
 
-        <section className="rounded-3xl border border-slate-200 bg-white/75 p-5 shadow-sm sm:p-7">
-          <div>
-            <p className="text-sm font-black text-blue-700">FAQ</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">자주 묻는 질문</h2>
-          </div>
-          <div className="mt-5 grid gap-3">
-            {faqItems.map((item) => (
-              <details key={item.question} className="rounded-2xl border border-slate-100 bg-white p-4">
-                <summary className="cursor-pointer text-base font-black text-slate-950">{item.question}</summary>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{item.answer}</p>
-              </details>
-            ))}
-          </div>
-        </section>
+        <FaqSection />
       </section>
     </div>
   );
