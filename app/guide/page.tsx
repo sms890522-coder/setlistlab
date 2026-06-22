@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { existsSync } from "node:fs";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
@@ -612,19 +611,13 @@ function RoleCard({ title, badge, items }: { title: string; badge: string; items
 }
 
 function GuideImage({ image }: { image: (typeof guideImages)[keyof typeof guideImages] }) {
-  const publicFilePath = `${process.cwd()}/public${image.src}`;
   const desktopSrc = image.src.replace("/guide/", "/guide/desktop/");
-  const desktopFilePath = `${process.cwd()}/public${desktopSrc}`;
-  const hasMobileImage = existsSync(publicFilePath);
-  const hasDesktopImage = existsSync(desktopFilePath);
-
-  if (!hasMobileImage && !hasDesktopImage) return null;
 
   return (
     <figure className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <picture>
-        {hasDesktopImage ? <source srcSet={desktopSrc} media="(min-width: 768px)" /> : null}
-        <img src={hasMobileImage ? image.src : desktopSrc} alt={image.alt} className="h-auto w-full" loading="lazy" />
+        <source srcSet={desktopSrc} media="(min-width: 768px)" />
+        <img src={image.src} alt={image.alt} className="h-auto w-full" loading="lazy" />
       </picture>
       {image.caption ? (
         <figcaption className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold leading-5 text-slate-500">
