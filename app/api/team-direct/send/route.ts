@@ -105,7 +105,7 @@ export async function POST(request: Request) {
 
     if (threadError) throw new Error(threadError.message || "대화방 정보를 갱신하지 못했습니다.");
 
-    const pushResult = await createNotificationAndPush(thread.team_id, thread.id, user.id, otherUserId, message).catch((error) => ({
+    const pushResult = await createNotificationAndPush(thread.team_id, thread.id, insertedMessage.id, user.id, otherUserId, message).catch((error) => ({
       sent: 0,
       failed: 0,
       removed: 0,
@@ -150,7 +150,14 @@ async function isApprovedTeamMember(teamId: string, userId: string) {
   return Boolean(data);
 }
 
-async function createNotificationAndPush(teamId: string, threadId: string, senderUserId: string, recipientUserId: string, message: string) {
+async function createNotificationAndPush(
+  teamId: string,
+  threadId: string,
+  messageId: string,
+  senderUserId: string,
+  recipientUserId: string,
+  message: string,
+) {
   const supabase = getSupabaseAdminClient();
   const senderName = await getSenderName(senderUserId);
   const notificationBody = `${senderName}: ${message}`.slice(0, 180);
@@ -162,9 +169,11 @@ async function createNotificationAndPush(teamId: string, threadId: string, sende
     title: "새 1:1 메시지가 도착했습니다",
     body: notificationBody,
     link_url: `/teams/${teamId}/direct/${threadId}`,
+    source_type: "team_direct_message",
+    source_id: messageId,
   });
 
-  if (error) throw new Error(error.message || "1:1 메시지 알림을 만들지 못했습니다.");
+  if (error && error.code !== "23505") throw new Error(error.message || "1:1 메시지 알림을 만들지 못했습니다.");
 
   if (!isWebPushConfigured()) {
     return { sent: 0, failed: 0, removed: 0, subscriptions: 0, skipped: true };

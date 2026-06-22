@@ -16,6 +16,7 @@ export type NotificationType =
   | "team_notice_created"
   | "team_notice_updated"
   | "team_setlist_created"
+  | "team_setlist_updated"
   | "team_invite_requested"
   | "team_invite_approved"
   | "team_deputy_assigned"
@@ -30,6 +31,8 @@ export type AppNotification = {
   title: string;
   body?: string;
   linkUrl?: string;
+  sourceType?: string;
+  sourceId?: string;
   readAt?: string;
   createdAt: string;
 };
@@ -42,6 +45,8 @@ type NotificationRow = {
   title: string;
   body: string | null;
   link_url: string | null;
+  source_type: string | null;
+  source_id: string | null;
   read_at: string | null;
   created_at: string;
 };
@@ -217,6 +222,8 @@ function rowToNotification(row: NotificationRow): AppNotification {
     title: row.title,
     body: row.body ?? undefined,
     linkUrl: row.link_url ?? undefined,
+    sourceType: row.source_type ?? undefined,
+    sourceId: row.source_id ?? undefined,
     readAt: row.read_at ?? undefined,
     createdAt: row.created_at,
   };

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TeamNavTabs } from "@/components/TeamNavTabs";
 import {
   AVAILABILITY_LABELS,
   TEAM_CALENDAR_EVENT_TYPE_LABELS,
@@ -93,12 +94,12 @@ export default function TeamCalendarPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               {canManage ? <Link href={`/teams/${team.id}/calendar/new`} className="btn-primary">일정 만들기</Link> : null}
-              <Link href={`/teams/${team.id}/posts`} className="btn-secondary">공지사항</Link>
-              <Link href={`/teams/${team.id}`} className="btn-secondary">팀으로</Link>
             </div>
           </div>
         </div>
       </section>
+
+      <TeamNavTabs teamId={team.id} active="calendar" />
 
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 

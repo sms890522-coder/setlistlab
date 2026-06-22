@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TeamNavTabs } from "@/components/TeamNavTabs";
 import { getCurrentUser } from "@/lib/auth";
 import {
   getOrCreateTeamDirectThread,
@@ -125,15 +126,11 @@ export default function TeamDirectListPage() {
                 팀 안의 특정 팀원과 개인적으로 대화할 수 있습니다. 예배 준비와 관련된 확인이 필요할 때 사용해보세요.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Link href={`/teams/${team.id}/calendar`} className="btn-secondary">팀 캘린더</Link>
-              <Link href={`/teams/${team.id}/posts`} className="btn-secondary">공지사항</Link>
-              <Link href={`/teams/${team.id}/chat`} className="btn-secondary">팀 채팅</Link>
-              <Link href={`/teams/${team.id}`} className="btn-secondary">팀으로</Link>
-            </div>
           </div>
         </div>
       </section>
+
+      <TeamNavTabs teamId={team.id} active="direct" />
 
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 

@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       throw new Error(insertError?.message || "메시지를 보내지 못했습니다.");
     }
 
-    const pushResult = await createNotificationsAndPush(teamId, user.id, message).catch((error) => ({
+    const pushResult = await createNotificationsAndPush(teamId, insertedMessage.id, user.id, message).catch((error) => ({
       sent: 0,
       failed: 0,
       removed: 0,
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
   }
 }
 
-async function createNotificationsAndPush(teamId: string, senderUserId: string, message: string) {
+async function createNotificationsAndPush(teamId: string, messageId: string, senderUserId: string, message: string) {
   const supabase = getSupabaseAdminClient();
   const recipients = await getRecipientUserIds(teamId, senderUserId);
   const senderName = await getSenderName(senderUserId);
@@ -121,10 +121,12 @@ async function createNotificationsAndPush(teamId: string, senderUserId: string, 
         title: "새 팀 채팅 메시지",
         body: notificationBody,
         link_url: `/teams/${teamId}/chat`,
+        source_type: "team_chat_message",
+        source_id: messageId,
       })),
     );
 
-    if (error) throw new Error(error.message || "채팅 알림을 만들지 못했습니다.");
+    if (error && error.code !== "23505") throw new Error(error.message || "채팅 알림을 만들지 못했습니다.");
   }
 
   if (recipients.length === 0 || !isWebPushConfigured()) {

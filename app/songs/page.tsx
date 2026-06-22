@@ -245,7 +245,7 @@ export default function SongsPage() {
 
             {songs.length === 0 ? (
               <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                아직 저장된 곡이 없습니다.
+                자주 부르는 곡을 저장해두면 콘티를 더 빠르게 만들 수 있습니다.
               </div>
             ) : filteredSongs.length === 0 ? (
               <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">검색 결과가 없습니다.</p>

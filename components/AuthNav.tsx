@@ -4,7 +4,6 @@ import Link from "next/link";
 import { NotificationBell } from "@/components/NotificationBell";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile, PROFILE_UPDATED_EVENT } from "@/lib/db/profiles";
-import { getApprovedMemberships } from "@/lib/db/teamMemberships";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -12,7 +11,6 @@ import { useEffect, useState } from "react";
 export function AuthNav() {
   const [loaded, setLoaded] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  const [chatHref, setChatHref] = useState("/teams");
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
@@ -31,9 +29,7 @@ export function AuthNav() {
       }
 
       const profile = await getMyProfile().catch(() => null);
-      const memberships = await getApprovedMemberships().catch(() => []);
       setDisplayName(profile?.displayName || user.email?.split("@")[0] || "내 계정");
-      setChatHref(memberships[0]?.teamId ? `/teams/${memberships[0].teamId}/chat` : "/teams");
       setLoaded(true);
     }
 
@@ -68,11 +64,9 @@ export function AuthNav() {
   const navItems = [
     { href: "/setlists", label: "콘티" },
     { href: "/teams", label: "내 팀" },
-    { href: chatHref, label: "내 팀 채팅" },
     { href: "/songs", label: "곡 보관함" },
-    { href: "/tools/tuner", label: "튜너/메트로놈" },
-    { href: "/settings/notifications", label: "알림 설정" },
-    { href: "/contact", label: "문의/피드백" },
+    { href: "/tools/tuner", label: "연습도구" },
+    { href: "/contact", label: "문의" },
   ];
   const accountLabel = loaded && displayName ? displayName : "로그인";
   const accountHref = loaded && displayName ? "/account" : "/login";

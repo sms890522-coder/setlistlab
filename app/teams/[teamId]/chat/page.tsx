@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { TeamChatPanel } from "@/components/TeamChatPanel";
+import { TeamNavTabs } from "@/components/TeamNavTabs";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
 import { useParams } from "next/navigation";
@@ -57,14 +58,7 @@ export default function TeamChatPage() {
 
   return (
     <div className="page-shell space-y-4 pb-24">
-      <div className="flex items-center justify-between gap-3">
-        <Link href={`/teams/${team.id}`} className="btn-secondary min-h-10 px-3">팀으로</Link>
-        <div className="flex flex-wrap gap-2">
-          <Link href={`/teams/${team.id}/calendar`} className="btn-secondary min-h-10 px-3">팀 캘린더</Link>
-          <Link href={`/teams/${team.id}/posts`} className="btn-secondary min-h-10 px-3">공지사항</Link>
-          <Link href={`/teams/${team.id}/direct`} className="btn-secondary min-h-10 px-3">1:1 대화</Link>
-        </div>
-      </div>
+      <TeamNavTabs teamId={team.id} active="chat" />
       <TeamChatPanel team={team} />
     </div>
   );

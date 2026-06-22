@@ -18,7 +18,7 @@ const applicationJsonLd = {
   applicationCategory: "MusicApplication",
   operatingSystem: "Web",
   url: "https://setlistlab.vercel.app/",
-  description: "찬양팀 콘티 작성, 연습, 팀 공유 도구",
+  description: "찬양팀 콘티 작성, 악보 이미지 관리, 유튜브 연습 링크, 팀 채팅, 공지사항, 캘린더, PDF 공유, 튜너와 메트로놈을 한 곳에서 사용할 수 있는 예배 준비 도구",
 };
 
 export default function HomePage() {
@@ -244,8 +244,7 @@ export default function HomePage() {
               찬양팀을 위한 콘티 작성 · 연습 · 팀 공유 도구
             </p>
             <p className="max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
-              이번 주 콘티를 만들고, 곡별 구성과 악보, 팀 채팅, PDF 공유까지 한 곳에서 준비하세요.
-              PC와 휴대폰 어디서든 예배 준비를 이어갈 수 있습니다.
+              콘티 작성부터 팀 채팅, 공지사항, 캘린더, 악보 검색, PDF 공유, 튜너와 메트로놈까지 예배 준비를 한 곳에서 관리하세요.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">

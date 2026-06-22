@@ -7,9 +7,9 @@ import "./globals.css";
 const siteUrl = "https://setlistlab.vercel.app";
 const siteTitle = "콘티연습실 | 찬양팀 콘티 작성 · 연습 · 팀 공유 도구";
 const siteDescription =
-  "콘티연습실은 찬양팀을 위한 콘티 작성, 악보 이미지 관리, 유튜브 구간반복, 팀 채팅, PDF 공유, 튜너와 메트로놈을 한 곳에서 사용할 수 있는 예배 준비 도구입니다.";
+  "콘티연습실은 찬양팀을 위한 콘티 작성, 악보 이미지 관리, 유튜브 연습 링크, 팀 채팅, 공지사항, 캘린더, PDF 공유, 튜너와 메트로놈을 한 곳에서 사용할 수 있는 예배 준비 도구입니다.";
 const socialDescription =
-  "콘티 작성부터 악보 이미지, 팀 채팅, PDF 공유, 튜너와 메트로놈까지 찬양팀 예배 준비를 한 곳에서 관리하세요.";
+  "콘티 작성부터 팀 채팅, 공지사항, 캘린더, 악보 검색, PDF 공유, 튜너와 메트로놈까지 찬양팀 예배 준비를 한 곳에서 관리하세요.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -25,7 +25,11 @@ export const metadata: Metadata = {
     "찬양 콘티",
     "예배 준비",
     "악보 이미지",
+    "악보 검색",
     "팀 채팅",
+    "공지사항",
+    "팀 캘린더",
+    "PDF 공유",
     "찬양팀 연습",
     "튜너",
     "메트로놈",

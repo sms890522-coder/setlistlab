@@ -639,6 +639,8 @@ create table if not exists public.notifications (
   title text not null,
   body text,
   link_url text,
+  source_type text,
+  source_id uuid,
   read_at timestamptz,
   created_at timestamptz not null default now(),
   constraint notifications_type_check check (
@@ -651,6 +653,7 @@ create table if not exists public.notifications (
       'team_notice_created',
       'team_notice_updated',
       'team_setlist_created',
+      'team_setlist_updated',
       'team_invite_requested',
       'team_invite_approved',
       'team_deputy_assigned',
@@ -668,6 +671,16 @@ on public.notifications (user_id, created_at desc)
 where read_at is null;
 
 alter table public.notifications
+add column if not exists source_type text;
+
+alter table public.notifications
+add column if not exists source_id uuid;
+
+create unique index if not exists notifications_unique_source_idx
+on public.notifications (user_id, type, source_type, source_id)
+where source_type is not null and source_id is not null;
+
+alter table public.notifications
 drop constraint if exists notifications_type_check;
 
 alter table public.notifications
@@ -682,6 +695,7 @@ add constraint notifications_type_check check (
     'team_notice_created',
     'team_notice_updated',
     'team_setlist_created',
+    'team_setlist_updated',
     'team_invite_requested',
     'team_invite_approved',
     'team_deputy_assigned',
@@ -896,7 +910,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -904,12 +920,15 @@ begin
     'team_chat_message',
     '새 팀 채팅 메시지',
     left(coalesce(v_sender_name, '팀원') || ': ' || v_message.message, 180),
-    '/teams/' || v_message.team_id::text || '/chat'
+    '/teams/' || v_message.team_id::text || '/chat',
+    'team_chat_message',
+    v_message.id
   from public.team_memberships memberships
   where memberships.team_id = v_message.team_id
     and memberships.status = 'approved'
     and memberships.removed_at is null
-    and memberships.user_id <> auth.uid();
+    and memberships.user_id <> auth.uid()
+  on conflict do nothing;
 end;
 $$;
 
@@ -927,6 +946,7 @@ as $$
 declare
   v_post public.team_posts;
   v_notification_title text;
+  v_inserted_count integer := 0;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다.';
@@ -964,7 +984,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -972,14 +994,18 @@ begin
     p_event_type,
     v_notification_title,
     v_post.title,
-    '/teams/' || v_post.team_id::text || '/posts/' || v_post.id::text
+    '/teams/' || v_post.team_id::text || '/posts/' || v_post.id::text,
+    'team_post',
+    v_post.id
   from public.team_memberships memberships
   where memberships.team_id = v_post.team_id
     and memberships.status = 'approved'
     and memberships.removed_at is null
-    and memberships.user_id <> auth.uid();
+    and memberships.user_id <> auth.uid()
+  on conflict do nothing;
 
-  return true;
+  get diagnostics v_inserted_count = row_count;
+  return v_inserted_count > 0;
 end;
 $$;
 
@@ -998,6 +1024,7 @@ declare
   v_event public.team_calendar_events;
   v_notification_title text;
   v_body text;
+  v_inserted_count integer := 0;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다.';
@@ -1032,7 +1059,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -1040,14 +1069,18 @@ begin
     p_event_type,
     v_notification_title,
     v_body,
-    '/teams/' || v_event.team_id::text || '/calendar/' || v_event.id::text
+    '/teams/' || v_event.team_id::text || '/calendar/' || v_event.id::text,
+    'team_calendar_event',
+    v_event.id
   from public.team_memberships memberships
   where memberships.team_id = v_event.team_id
     and memberships.status = 'approved'
     and memberships.removed_at is null
-    and memberships.user_id <> auth.uid();
+    and memberships.user_id <> auth.uid()
+  on conflict do nothing;
 
-  return true;
+  get diagnostics v_inserted_count = row_count;
+  return v_inserted_count > 0;
 end;
 $$;
 
@@ -1062,6 +1095,7 @@ as $$
 declare
   v_first_event public.team_calendar_events;
   v_count integer;
+  v_inserted_count integer := 0;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다.';
@@ -1094,7 +1128,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -1102,14 +1138,18 @@ begin
     'team_calendar_recurring_events_created',
     '팀 반복 일정이 등록되었습니다',
     v_first_event.title || ' 일정이 ' || v_count::text || '개 등록되었습니다.',
-    '/teams/' || v_first_event.team_id::text || '/calendar'
+    '/teams/' || v_first_event.team_id::text || '/calendar',
+    'team_calendar_recurring_group',
+    p_recurring_group_id
   from public.team_memberships memberships
   where memberships.team_id = v_first_event.team_id
     and memberships.status = 'approved'
     and memberships.removed_at is null
-    and memberships.user_id <> auth.uid();
+    and memberships.user_id <> auth.uid()
+  on conflict do nothing;
 
-  return true;
+  get diagnostics v_inserted_count = row_count;
+  return v_inserted_count > 0;
 end;
 $$;
 
@@ -1123,6 +1163,7 @@ set search_path = public
 as $$
 declare
   v_event public.team_calendar_events;
+  v_inserted_count integer := 0;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다.';
@@ -1147,7 +1188,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -1155,7 +1198,9 @@ begin
     'team_calendar_availability_reminder',
     '가능 여부를 확인해 주세요',
     v_event.title || ' 일정에 참여 가능 여부를 체크해 주세요.',
-    '/teams/' || v_event.team_id::text || '/calendar/' || v_event.id::text
+    '/teams/' || v_event.team_id::text || '/calendar/' || v_event.id::text,
+    'team_calendar_availability_reminder',
+    v_event.id
   from public.team_memberships memberships
   where memberships.team_id = v_event.team_id
     and memberships.status = 'approved'
@@ -1167,9 +1212,11 @@ begin
       where availability.event_id = v_event.id
         and availability.user_id = memberships.user_id
         and availability.status <> 'unknown'
-    );
+    )
+  on conflict do nothing;
 
-  return true;
+  get diagnostics v_inserted_count = row_count;
+  return v_inserted_count > 0;
 end;
 $$;
 
@@ -1306,6 +1353,7 @@ declare
   v_setlist public.setlists;
   v_body text;
   v_sent_at timestamptz := now();
+  v_inserted_count integer := 0;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다.';
@@ -1351,7 +1399,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -1359,12 +1409,17 @@ begin
     'team_setlist_created',
     '새 팀 콘티가 공유되었습니다',
     v_body,
-    '/setlists/' || v_setlist.id::text
+    '/setlists/' || v_setlist.id::text,
+    'setlist',
+    v_setlist.id
   from public.team_memberships memberships
   where memberships.team_id = v_setlist.team_id
     and memberships.status = 'approved'
     and memberships.removed_at is null
-    and memberships.user_id <> auth.uid();
+    and memberships.user_id <> auth.uid()
+  on conflict do nothing;
+
+  get diagnostics v_inserted_count = row_count;
 
   update public.setlists
   set
@@ -1373,7 +1428,7 @@ begin
     updated_at = v_sent_at
   where id = v_setlist.id;
 
-  return true;
+  return v_inserted_count > 0;
 end;
 $$;
 
@@ -1419,7 +1474,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   values (
     v_membership.user_id,
@@ -1427,8 +1484,11 @@ begin
     'team_invite_approved',
     '팀 참여가 승인되었습니다',
     coalesce(v_team.church_name, '') || case when v_team.team_name is not null then ' · ' || v_team.team_name else '' end,
-    '/teams/' || v_membership.team_id::text
-  );
+    '/teams/' || v_membership.team_id::text,
+    'team_membership',
+    v_membership.id
+  )
+  on conflict do nothing;
 end;
 $$;
 
@@ -1497,7 +1557,9 @@ begin
       type,
       title,
       body,
-      link_url
+      link_url,
+      source_type,
+      source_id
     )
     values (
       p_user_id,
@@ -1505,8 +1567,11 @@ begin
       case when p_role = 'admin' then 'team_deputy_assigned' else 'team_deputy_removed' end,
       case when p_role = 'admin' then '부리더로 지정되었습니다' else '부리더 권한이 해제되었습니다' end,
       coalesce(v_team.church_name, '') || case when v_team.team_name is not null then ' · ' || v_team.team_name else '' end,
-      '/teams/' || p_team_id::text
-    );
+      '/teams/' || p_team_id::text,
+      'team_membership',
+      v_membership.id
+    )
+    on conflict do nothing;
   end if;
 
   return v_membership;
@@ -1595,7 +1660,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   values (
     p_new_owner_id,
@@ -1603,8 +1670,11 @@ begin
     'team_leadership_transferred',
     '팀 리더 권한을 받았습니다',
     coalesce(v_team.church_name, '') || case when v_team.team_name is not null then ' · ' || v_team.team_name else '' end,
-    '/teams/' || p_team_id::text
-  );
+    '/teams/' || p_team_id::text,
+    'team_leadership_transfer',
+    v_new_owner.id
+  )
+  on conflict do nothing;
 
   insert into public.notifications (
     user_id,
@@ -1612,7 +1682,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -1620,12 +1692,15 @@ begin
     'team_leadership_transferred',
     '팀 리더가 변경되었습니다',
     coalesce(v_new_owner_name, '새 리더') || '님이 ' || coalesce(v_team.team_name, '팀') || '의 새 리더가 되었습니다.',
-    '/teams/' || p_team_id::text
+    '/teams/' || p_team_id::text,
+    'team_leadership_transfer',
+    v_new_owner.id
   from public.team_memberships memberships
   where memberships.team_id = p_team_id
     and memberships.status = 'approved'
     and memberships.removed_at is null
-    and memberships.user_id not in (v_old_owner_id, p_new_owner_id);
+    and memberships.user_id not in (v_old_owner_id, p_new_owner_id)
+  on conflict do nothing;
 
   return v_new_owner;
 end;
@@ -1728,7 +1803,9 @@ begin
       type,
       title,
       body,
-      link_url
+      link_url,
+      source_type,
+      source_id
     )
     select
       memberships.user_id,
@@ -1736,13 +1813,16 @@ begin
       'team_invite_requested',
       '새로운 팀 참여 요청이 있습니다',
       coalesce(nullif(trim(p_position), ''), '팀원') || ' 참여 요청',
-      '/teams/' || v_team.id::text
+      '/teams/' || v_team.id::text,
+      'team_membership',
+      v_membership.id
     from public.team_memberships memberships
     where memberships.team_id = v_team.id
       and memberships.status = 'approved'
       and memberships.role = 'owner'
       and memberships.removed_at is null
-      and memberships.user_id <> auth.uid();
+      and memberships.user_id <> auth.uid()
+    on conflict do nothing;
 
     return v_membership;
   end if;
@@ -1771,7 +1851,9 @@ begin
     type,
     title,
     body,
-    link_url
+    link_url,
+    source_type,
+    source_id
   )
   select
     memberships.user_id,
@@ -1779,13 +1861,16 @@ begin
     'team_invite_requested',
     '새로운 팀 참여 요청이 있습니다',
     coalesce(nullif(trim(p_position), ''), '팀원') || ' 참여 요청',
-    '/teams/' || v_team.id::text
+    '/teams/' || v_team.id::text,
+    'team_membership',
+    v_membership.id
   from public.team_memberships memberships
   where memberships.team_id = v_team.id
     and memberships.status = 'approved'
     and memberships.role = 'owner'
     and memberships.removed_at is null
-    and memberships.user_id <> auth.uid();
+    and memberships.user_id <> auth.uid()
+  on conflict do nothing;
 
   return v_membership;
 end;
