@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
 import { getTeamPosts, subscribeTeamPosts, TEAM_POST_TYPE_LABELS, type TeamPost } from "@/lib/db/teamPosts";
+import { canCreateTeamPost } from "@/lib/permissions/teamPermissions";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -16,7 +17,7 @@ export default function TeamPostsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canManage = useMemo(() => membership?.status === "approved" && ["owner", "admin"].includes(membership.role), [membership]);
+  const canManage = useMemo(() => canCreateTeamPost(membership), [membership]);
 
   useEffect(() => {
     loadPage().catch((loadError) => {
@@ -98,7 +99,7 @@ export default function TeamPostsPage() {
         <section className="card p-8 text-center">
           <h2 className="text-xl font-black text-slate-950">아직 공지사항이 없습니다</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            {canManage ? "리더가 첫 공지를 작성해보세요." : "리더가 공지를 등록하면 이곳에서 확인할 수 있습니다."}
+            {canManage ? "리더 또는 부리더가 첫 공지를 작성해보세요." : "리더나 부리더가 공지를 등록하면 이곳에서 확인할 수 있습니다."}
           </p>
           {canManage ? <Link href={`/teams/${team.id}/posts/new`} className="btn-primary mt-5">공지 작성</Link> : null}
         </section>

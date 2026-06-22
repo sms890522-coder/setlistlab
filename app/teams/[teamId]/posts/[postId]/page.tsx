@@ -12,6 +12,7 @@ import {
   type TeamPost,
   type TeamPostReadStatus,
 } from "@/lib/db/teamPosts";
+import { canDeleteTeamPost, canManageTeamPost } from "@/lib/permissions/teamPermissions";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -27,7 +28,8 @@ export default function TeamPostDetailPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canManage = membership?.status === "approved" && ["owner", "admin"].includes(membership.role);
+  const canManage = canManageTeamPost(membership);
+  const canDelete = canDeleteTeamPost(membership);
 
   useEffect(() => {
     loadPage().catch((loadError) => {
@@ -65,7 +67,7 @@ export default function TeamPostDetailPage() {
       setPost((current) => (current ? { ...current, hasRead: true, readAt: read.readAt } : current));
     }
 
-    if (["owner", "admin"].includes(nextMembership.role)) {
+    if (canManageTeamPost(nextMembership)) {
       setReadStatus(await getTeamPostReadStatus(nextPost.id).catch(() => null));
     }
   }
@@ -101,10 +103,10 @@ export default function TeamPostDetailPage() {
     <div className="page-shell max-w-4xl space-y-6 pb-20">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href={`/teams/${team.id}/posts`} className="btn-secondary">공지 목록</Link>
-        {canManage ? (
+        {canManage || canDelete ? (
           <div className="flex flex-wrap gap-2">
-            <Link href={`/teams/${team.id}/posts/${post.id}/edit`} className="btn-secondary">수정</Link>
-            <button type="button" onClick={handleDelete} className="btn-danger">삭제</button>
+            {canManage ? <Link href={`/teams/${team.id}/posts/${post.id}/edit`} className="btn-secondary">수정</Link> : null}
+            {canDelete ? <button type="button" onClick={handleDelete} className="btn-danger">삭제</button> : null}
           </div>
         ) : null}
       </div>

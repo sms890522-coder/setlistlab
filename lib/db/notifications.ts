@@ -17,7 +17,10 @@ export type NotificationType =
   | "team_notice_updated"
   | "team_setlist_created"
   | "team_invite_requested"
-  | "team_invite_approved";
+  | "team_invite_approved"
+  | "team_deputy_assigned"
+  | "team_deputy_removed"
+  | "team_leadership_transferred";
 
 export type AppNotification = {
   id: string;

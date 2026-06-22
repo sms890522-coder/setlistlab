@@ -26,6 +26,7 @@ import {
   type TeamMember,
 } from "@/lib/db/teamMembers";
 import { cloneSong, createBlankSong } from "@/lib/factories";
+import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { deleteSongFromLibrary, getSetlists, getSongLibrary, saveSetlist } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -73,10 +74,10 @@ export default function SetlistEditPage() {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
-            const canEditCloudSetlist = cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "");
+            const canEditCloudSetlist = cloudSetlist.ownerId === user.id || canManageTeamSetlist(membership);
             if (!canEditCloudSetlist) {
               setSetlist(null);
-              setSaveError("이 콘티는 작성자 또는 팀 리더/관리자만 수정할 수 있습니다. 내 콘티로 따로 수정하려면 복제해서 사용해 주세요.");
+              setSaveError("이 콘티는 작성자 또는 팀 리더/부리더만 수정할 수 있습니다. 내 콘티로 따로 수정하려면 복제해서 사용해 주세요.");
               setLoaded(true);
               return;
             }
@@ -615,7 +616,7 @@ function getMembershipProfileRole(member: TeamMembership) {
 
 function getMembershipNote(member: TeamMembership) {
   if (member.role === "owner") return "팀 리더";
-  if (member.role === "admin") return "팀 관리자";
+  if (member.role === "admin") return "팀 부리더";
   return undefined;
 }
 

@@ -11,6 +11,7 @@ import {
 import { getCloudSetlists } from "@/lib/db/setlists";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
+import { canManageTeamCalendarEvent } from "@/lib/permissions/teamPermissions";
 import type { Setlist } from "@/lib/types";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -60,7 +61,7 @@ export default function EditTeamCalendarEventPage() {
     }
   }
 
-  const canManage = membership?.status === "approved" && ["owner", "admin"].includes(membership.role);
+  const canManage = canManageTeamCalendarEvent(membership);
 
   if (!loaded) {
     return <div className="page-shell"><div className="card p-8 text-sm text-slate-500">일정 수정 화면을 준비하는 중입니다.</div></div>;
@@ -71,7 +72,7 @@ export default function EditTeamCalendarEventPage() {
       <div className="page-shell">
         <section className="card p-8 text-center">
           <h1 className="text-2xl font-black text-slate-950">일정 수정 권한이 없습니다</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">팀 리더와 관리자만 일정을 수정할 수 있습니다.</p>
+          <p className="mt-3 text-sm leading-6 text-slate-600">팀 리더와 부리더만 일정을 수정할 수 있습니다.</p>
           <Link href={team ? `/teams/${team.id}/calendar` : "/teams"} className="btn-primary mt-5">돌아가기</Link>
         </section>
       </div>

@@ -318,7 +318,7 @@ async function buildInviteRequestedPush(membershipId: string | undefined, actorU
 
   const requesterName = await getDisplayName(actorUserId);
   return {
-    userIds: await getAdminMemberIds(membership.team_id, actorUserId),
+    userIds: await getOwnerMemberIds(membership.team_id, actorUserId),
     payload: {
       title: "새 팀 참여 요청이 있습니다",
       body: `${requesterName}님이 팀 참여를 요청했습니다.`,
@@ -330,7 +330,7 @@ async function buildInviteRequestedPush(membershipId: string | undefined, actorU
 
 async function buildInviteApprovedPush(membershipId: string | undefined, actorUserId: string) {
   const membership = await getMembershipForEvent(membershipId);
-  if (!(await isTeamAdmin(membership.team_id, actorUserId))) {
+  if (!(await isTeamOwner(membership.team_id, actorUserId))) {
     throw new Error("팀 참여 승인 알림을 보낼 권한이 없습니다.");
   }
   if (membership.status !== "approved") return null;
@@ -408,6 +408,21 @@ async function getAdminMemberIds(teamId: string, excludeUserId?: string) {
   return (data ?? []).map((row) => row.user_id).filter((userId) => userId !== excludeUserId);
 }
 
+async function getOwnerMemberIds(teamId: string, excludeUserId?: string) {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("team_memberships")
+    .select("user_id")
+    .eq("team_id", teamId)
+    .eq("status", "approved")
+    .eq("role", "owner")
+    .is("removed_at", null)
+    .returns<Array<{ user_id: string }>>();
+
+  if (error) throw new Error(error.message || "팀 리더 정보를 불러오지 못했습니다.");
+  return (data ?? []).map((row) => row.user_id).filter((userId) => userId !== excludeUserId);
+}
+
 async function isTeamAdmin(teamId: string, userId: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -421,6 +436,22 @@ async function isTeamAdmin(teamId: string, userId: string) {
     .maybeSingle<{ id: string }>();
 
   if (error) throw new Error(error.message || "팀 권한을 확인하지 못했습니다.");
+  return Boolean(data);
+}
+
+async function isTeamOwner(teamId: string, userId: string) {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("team_memberships")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", userId)
+    .eq("status", "approved")
+    .eq("role", "owner")
+    .is("removed_at", null)
+    .maybeSingle<{ id: string }>();
+
+  if (error) throw new Error(error.message || "팀 리더 권한을 확인하지 못했습니다.");
   return Boolean(data);
 }
 

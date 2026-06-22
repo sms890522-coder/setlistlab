@@ -121,6 +121,33 @@ export async function removeTeamMember(membershipId: string) {
   return updateMembershipStatus(membershipId, "removed", { removed_at: new Date().toISOString() });
 }
 
+export async function setTeamMemberRole(teamId: string, userId: string, role: Extract<TeamMembershipRole, "admin" | "member">) {
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .rpc("set_team_member_role", {
+      p_team_id: teamId,
+      p_user_id: userId,
+      p_role: role,
+    })
+    .single<TeamMembershipRow>();
+
+  if (error) throw new Error(error.message || "팀원 권한을 변경하지 못했습니다.");
+  return rowToMembership(data);
+}
+
+export async function transferTeamOwnership(teamId: string, newOwnerUserId: string) {
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .rpc("transfer_team_ownership", {
+      p_team_id: teamId,
+      p_new_owner_id: newOwnerUserId,
+    })
+    .single<TeamMembershipRow>();
+
+  if (error) throw new Error(error.message || "리더 권한을 양도하지 못했습니다.");
+  return rowToMembership(data);
+}
+
 export async function leaveTeam(teamId: string) {
   const user = await getCurrentUser();
   if (!user) throw new Error("로그인이 필요합니다.");

@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/teamCalendar";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
+import { canDeleteTeamCalendarEvent, canManageTeamCalendarEvent } from "@/lib/permissions/teamPermissions";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -33,7 +34,8 @@ export default function TeamCalendarEventDetailPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canManage = membership?.status === "approved" && ["owner", "admin"].includes(membership.role);
+  const canManage = canManageTeamCalendarEvent(membership);
+  const canDelete = canDeleteTeamCalendarEvent(membership);
   const groupedMembers = useMemo(() => (event ? groupMembersByAvailability(event) : createEmptyGroups()), [event]);
 
   useEffect(() => {
@@ -137,10 +139,10 @@ export default function TeamCalendarEventDetailPage() {
     <div className="page-shell max-w-5xl space-y-6 pb-24">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href={`/teams/${team.id}/calendar`} className="btn-secondary">캘린더</Link>
-        {canManage ? (
+        {canManage || canDelete ? (
           <div className="flex flex-wrap gap-2">
-            <Link href={`/teams/${team.id}/calendar/${event.id}/edit`} className="btn-secondary">수정</Link>
-            <button type="button" onClick={handleDelete} className="btn-danger">삭제</button>
+            {canManage ? <Link href={`/teams/${team.id}/calendar/${event.id}/edit`} className="btn-secondary">수정</Link> : null}
+            {canDelete ? <button type="button" onClick={handleDelete} className="btn-danger">삭제</button> : null}
           </div>
         ) : null}
       </div>

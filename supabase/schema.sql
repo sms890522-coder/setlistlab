@@ -103,6 +103,73 @@ on public.team_memberships (user_id, status, updated_at desc);
 create index if not exists team_memberships_team_status_idx
 on public.team_memberships (team_id, status, role);
 
+update public.team_memberships
+set role = 'member'
+where role is null or role not in ('owner', 'admin', 'member');
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'team_memberships_role_check'
+      and conrelid = 'public.team_memberships'::regclass
+  ) then
+    alter table public.team_memberships
+    add constraint team_memberships_role_check
+    check (role in ('owner', 'admin', 'member'));
+  end if;
+end;
+$$;
+
+insert into public.team_memberships (
+  team_id,
+  user_id,
+  role,
+  position,
+  status,
+  approved_at
+)
+select
+  teams.id,
+  teams.owner_id,
+  'owner',
+  '찬양인도자',
+  'approved',
+  now()
+from public.teams teams
+where not exists (
+  select 1
+  from public.team_memberships memberships
+  where memberships.team_id = teams.id
+    and memberships.user_id = teams.owner_id
+);
+
+update public.team_memberships memberships
+set
+  role = 'member',
+  updated_at = now()
+from public.teams teams
+where memberships.team_id = teams.id
+  and memberships.role = 'owner'
+  and memberships.user_id <> teams.owner_id;
+
+update public.team_memberships memberships
+set
+  role = 'owner',
+  status = 'approved',
+  approved_at = coalesce(memberships.approved_at, now()),
+  rejected_at = null,
+  removed_at = null,
+  updated_at = now()
+from public.teams teams
+where memberships.team_id = teams.id
+  and memberships.user_id = teams.owner_id;
+
+create unique index if not exists team_memberships_one_owner_per_team_idx
+on public.team_memberships (team_id)
+where role = 'owner' and status = 'approved' and removed_at is null;
+
 drop trigger if exists team_memberships_set_updated_at on public.team_memberships;
 create trigger team_memberships_set_updated_at
 before update on public.team_memberships
@@ -585,7 +652,10 @@ create table if not exists public.notifications (
       'team_notice_updated',
       'team_setlist_created',
       'team_invite_requested',
-      'team_invite_approved'
+      'team_invite_approved',
+      'team_deputy_assigned',
+      'team_deputy_removed',
+      'team_leadership_transferred'
     )
   )
 );
@@ -613,7 +683,10 @@ add constraint notifications_type_check check (
     'team_notice_updated',
     'team_setlist_created',
     'team_invite_requested',
-    'team_invite_approved'
+    'team_invite_approved',
+    'team_deputy_assigned',
+    'team_deputy_removed',
+    'team_leadership_transferred'
   )
 );
 
@@ -737,6 +810,24 @@ as $$
       and user_id = p_user_id
       and status = 'approved'
       and role in ('owner', 'admin')
+      and removed_at is null
+  );
+$$;
+
+create or replace function public.is_team_owner(p_team_id uuid, p_user_id uuid default auth.uid())
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.team_memberships
+    where team_id = p_team_id
+      and user_id = p_user_id
+      and status = 'approved'
+      and role = 'owner'
       and removed_at is null
   );
 $$;
@@ -1309,7 +1400,7 @@ begin
     raise exception '팀 참여 정보를 찾을 수 없습니다.';
   end if;
 
-  if not public.is_team_admin(v_membership.team_id, auth.uid()) then
+  if not public.is_team_owner(v_membership.team_id, auth.uid()) then
     raise exception '이 작업을 수행할 권한이 없습니다.';
   end if;
 
@@ -1338,6 +1429,205 @@ begin
     coalesce(v_team.church_name, '') || case when v_team.team_name is not null then ' · ' || v_team.team_name else '' end,
     '/teams/' || v_membership.team_id::text
   );
+end;
+$$;
+
+create or replace function public.set_team_member_role(
+  p_team_id uuid,
+  p_user_id uuid,
+  p_role text
+)
+returns public.team_memberships
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_membership public.team_memberships;
+  v_team public.teams;
+  v_previous_role text;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  if p_role not in ('admin', 'member') then
+    raise exception '부리더 또는 팀원 권한만 지정할 수 있습니다.';
+  end if;
+
+  if not public.is_team_owner(p_team_id, auth.uid()) then
+    raise exception '리더만 팀원 권한을 변경할 수 있습니다.';
+  end if;
+
+  select *
+  into v_membership
+  from public.team_memberships
+  where team_id = p_team_id
+    and user_id = p_user_id
+    and status = 'approved'
+    and removed_at is null
+  for update;
+
+  if v_membership.id is null then
+    raise exception '승인된 팀원을 찾을 수 없습니다.';
+  end if;
+
+  if v_membership.role = 'owner' then
+    raise exception '리더 권한은 리더 양도 기능으로만 변경할 수 있습니다.';
+  end if;
+
+  v_previous_role := v_membership.role;
+
+  update public.team_memberships
+  set
+    role = p_role,
+    updated_at = now()
+  where id = v_membership.id
+  returning * into v_membership;
+
+  if v_previous_role is distinct from p_role then
+    select *
+    into v_team
+    from public.teams
+    where id = p_team_id;
+
+    insert into public.notifications (
+      user_id,
+      team_id,
+      type,
+      title,
+      body,
+      link_url
+    )
+    values (
+      p_user_id,
+      p_team_id,
+      case when p_role = 'admin' then 'team_deputy_assigned' else 'team_deputy_removed' end,
+      case when p_role = 'admin' then '부리더로 지정되었습니다' else '부리더 권한이 해제되었습니다' end,
+      coalesce(v_team.church_name, '') || case when v_team.team_name is not null then ' · ' || v_team.team_name else '' end,
+      '/teams/' || p_team_id::text
+    );
+  end if;
+
+  return v_membership;
+end;
+$$;
+
+create or replace function public.transfer_team_ownership(
+  p_team_id uuid,
+  p_new_owner_id uuid
+)
+returns public.team_memberships
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_old_owner_id uuid := auth.uid();
+  v_new_owner public.team_memberships;
+  v_team public.teams;
+  v_new_owner_name text;
+begin
+  if v_old_owner_id is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  if v_old_owner_id = p_new_owner_id then
+    raise exception '자기 자신에게 리더 권한을 양도할 수 없습니다.';
+  end if;
+
+  if not public.is_team_owner(p_team_id, v_old_owner_id) then
+    raise exception '리더만 리더 권한을 양도할 수 있습니다.';
+  end if;
+
+  select *
+  into v_new_owner
+  from public.team_memberships
+  where team_id = p_team_id
+    and user_id = p_new_owner_id
+    and status = 'approved'
+    and removed_at is null
+  for update;
+
+  if v_new_owner.id is null then
+    raise exception '승인된 팀원에게만 리더 권한을 양도할 수 있습니다.';
+  end if;
+
+  select *
+  into v_team
+  from public.teams
+  where id = p_team_id
+  for update;
+
+  update public.team_memberships
+  set
+    role = 'member',
+    updated_at = now()
+  where team_id = p_team_id
+    and role = 'owner'
+    and removed_at is null;
+
+  update public.team_memberships
+  set
+    role = 'owner',
+    status = 'approved',
+    approved_at = coalesce(approved_at, now()),
+    rejected_at = null,
+    removed_at = null,
+    updated_at = now()
+  where id = v_new_owner.id
+  returning * into v_new_owner;
+
+  update public.teams
+  set
+    owner_id = p_new_owner_id,
+    updated_at = now()
+  where id = p_team_id;
+
+  select nullif(trim(display_name), '')
+  into v_new_owner_name
+  from public.profiles
+  where id = p_new_owner_id;
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  values (
+    p_new_owner_id,
+    p_team_id,
+    'team_leadership_transferred',
+    '팀 리더 권한을 받았습니다',
+    coalesce(v_team.church_name, '') || case when v_team.team_name is not null then ' · ' || v_team.team_name else '' end,
+    '/teams/' || p_team_id::text
+  );
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url
+  )
+  select
+    memberships.user_id,
+    p_team_id,
+    'team_leadership_transferred',
+    '팀 리더가 변경되었습니다',
+    coalesce(v_new_owner_name, '새 리더') || '님이 ' || coalesce(v_team.team_name, '팀') || '의 새 리더가 되었습니다.',
+    '/teams/' || p_team_id::text
+  from public.team_memberships memberships
+  where memberships.team_id = p_team_id
+    and memberships.status = 'approved'
+    and memberships.removed_at is null
+    and memberships.user_id not in (v_old_owner_id, p_new_owner_id);
+
+  return v_new_owner;
 end;
 $$;
 
@@ -1450,7 +1740,7 @@ begin
     from public.team_memberships memberships
     where memberships.team_id = v_team.id
       and memberships.status = 'approved'
-      and memberships.role in ('owner', 'admin')
+      and memberships.role = 'owner'
       and memberships.removed_at is null
       and memberships.user_id <> auth.uid();
 
@@ -1493,7 +1783,7 @@ begin
   from public.team_memberships memberships
   where memberships.team_id = v_team.id
     and memberships.status = 'approved'
-    and memberships.role in ('owner', 'admin')
+    and memberships.role = 'owner'
     and memberships.removed_at is null
     and memberships.user_id <> auth.uid();
 
@@ -1586,8 +1876,8 @@ drop policy if exists "teams_update_admin" on public.teams;
 create policy "teams_update_admin"
 on public.teams
 for update
-using (public.is_team_admin(id, auth.uid()))
-with check (public.is_team_admin(id, auth.uid()));
+using (public.is_team_owner(id, auth.uid()))
+with check (public.is_team_owner(id, auth.uid()));
 
 drop policy if exists "teams_delete_owner" on public.teams;
 create policy "teams_delete_owner"
@@ -1601,7 +1891,7 @@ on public.team_memberships
 for select
 using (
   auth.uid() = user_id
-  or public.is_team_admin(team_id, auth.uid())
+  or public.is_team_owner(team_id, auth.uid())
   or (
     status = 'approved'
     and public.is_team_approved_member(team_id, auth.uid())
@@ -1634,11 +1924,11 @@ create policy "team_memberships_update_admin_or_self_leave"
 on public.team_memberships
 for update
 using (
-  public.is_team_admin(team_id, auth.uid())
+  public.is_team_owner(team_id, auth.uid())
   or auth.uid() = user_id
 )
 with check (
-  public.is_team_admin(team_id, auth.uid())
+  public.is_team_owner(team_id, auth.uid())
   or (
     auth.uid() = user_id
     and user_id = auth.uid()
@@ -1799,7 +2089,7 @@ drop policy if exists "team_posts_delete_admin" on public.team_posts;
 create policy "team_posts_delete_admin"
 on public.team_posts
 for delete
-using (public.is_team_admin(team_id, auth.uid()));
+using (public.is_team_owner(team_id, auth.uid()));
 
 drop policy if exists "team_post_reads_select_self_or_admin" on public.team_post_reads;
 create policy "team_post_reads_select_self_or_admin"
@@ -1875,7 +2165,7 @@ drop policy if exists "team_calendar_events_delete_admin" on public.team_calenda
 create policy "team_calendar_events_delete_admin"
 on public.team_calendar_events
 for delete
-using (public.is_team_admin(team_id, auth.uid()));
+using (public.is_team_owner(team_id, auth.uid()));
 
 drop policy if exists "team_event_availability_select_member" on public.team_event_availability;
 create policy "team_event_availability_select_member"

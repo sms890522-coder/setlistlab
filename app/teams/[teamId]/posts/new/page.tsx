@@ -5,6 +5,7 @@ import { TeamPostForm } from "@/components/TeamPostForm";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
 import { createTeamPost, type TeamPostType } from "@/lib/db/teamPosts";
+import { canCreateTeamPost } from "@/lib/permissions/teamPermissions";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -50,7 +51,7 @@ export default function NewTeamPostPage() {
     }
   }
 
-  const canManage = membership?.status === "approved" && ["owner", "admin"].includes(membership.role);
+  const canManage = canCreateTeamPost(membership);
 
   if (!loaded) {
     return <div className="page-shell"><div className="card p-8 text-sm text-slate-500">공지 작성 화면을 준비하는 중입니다.</div></div>;
@@ -61,7 +62,7 @@ export default function NewTeamPostPage() {
       <div className="page-shell">
         <section className="card p-8 text-center">
           <h1 className="text-2xl font-black text-slate-950">공지 작성 권한이 없습니다</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">팀 리더와 관리자만 공지사항을 작성할 수 있습니다.</p>
+          <p className="mt-3 text-sm leading-6 text-slate-600">팀 리더와 부리더만 공지사항을 작성할 수 있습니다.</p>
           <Link href={team ? `/teams/${team.id}/posts` : "/teams"} className="btn-primary mt-5">돌아가기</Link>
         </section>
       </div>

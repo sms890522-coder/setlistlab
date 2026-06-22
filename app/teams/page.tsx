@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TeamRoleBadge } from "@/components/TeamRoleBadge";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyMemberships, type TeamMembership } from "@/lib/db/teamMemberships";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -92,9 +93,11 @@ export default function TeamsPage() {
                 <div>
                   <p className="text-sm font-bold text-blue-700">{membership.team?.churchName || "교회 이름 없음"}</p>
                   <h2 className="mt-1 text-xl font-black text-slate-950">{membership.team?.teamName || "찬양팀 이름 없음"}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    내 역할 {roleLabel(membership.role)} · 포지션 {membership.position || "-"} · 상태 {statusLabel(membership.status)}
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm leading-6 text-slate-600">
+                    <span>내 역할</span>
+                    <TeamRoleBadge role={membership.role} />
+                    <span>· 포지션 {membership.position || "-"} · 상태 {statusLabel(membership.status)}</span>
+                  </div>
                 </div>
                 {membership.status === "approved" ? (
                   <Link href={`/teams/${membership.teamId}`} className="btn-primary">
@@ -114,12 +117,6 @@ export default function TeamsPage() {
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
     </div>
   );
-}
-
-function roleLabel(role: string) {
-  if (role === "owner") return "리더";
-  if (role === "admin") return "관리자";
-  return "팀원";
 }
 
 function statusLabel(status: string) {

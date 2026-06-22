@@ -9,6 +9,7 @@ import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePla
 import { getCurrentUser } from "@/lib/auth";
 import { getCloudSetlist, saveCloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
+import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import {
   getPracticeCompletion,
   getPracticePosition,
@@ -48,7 +49,7 @@ export default function SongPracticePage() {
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
-            setCanEdit(Boolean(cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "")));
+            setCanEdit(Boolean(cloudSetlist.ownerId === user.id || canManageTeamSetlist(membership)));
             foundSetlist = cloudSetlist;
             setStorageMode("cloud");
           }

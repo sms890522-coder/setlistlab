@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/teamCalendar";
 import { duplicateCloudSetlist, getCloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
+import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
@@ -43,7 +44,7 @@ export default function SetlistDetailPage() {
           if (cloudSetlist) {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
             const calendarEvents = cloudSetlist.teamId ? await getLinkedCalendarEventsForSetlist(cloudSetlist.id).catch(() => []) : [];
-            setCanEdit(Boolean(cloudSetlist.ownerId === user.id || ["owner", "admin"].includes(membership?.role ?? "")));
+            setCanEdit(Boolean(cloudSetlist.ownerId === user.id || canManageTeamSetlist(membership)));
             setSetlist(cloudSetlist);
             setLinkedEvents(calendarEvents);
             setStorageMode("cloud");

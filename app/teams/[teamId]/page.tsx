@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TeamRoleBadge, getTeamRoleDescription, getTeamRoleIcon } from "@/components/TeamRoleBadge";
 import {
   disableInviteCode,
   enableInviteCode,
@@ -17,9 +18,18 @@ import {
   leaveTeam,
   rejectJoinRequest,
   removeTeamMember,
+  setTeamMemberRole,
+  transferTeamOwnership,
   type TeamMembership,
 } from "@/lib/db/teamMemberships";
 import { getCloudSetlists } from "@/lib/db/setlists";
+import {
+  canCreateTeamSetlist,
+  canManageDeputyLeaders,
+  canManageMembers,
+  canManageTeam,
+  canTransferLeadership,
+} from "@/lib/permissions/teamPermissions";
 import { formatMemberNameWithEmoji } from "@/lib/roleEmoji";
 import type { Setlist } from "@/lib/types";
 import { useParams, useRouter } from "next/navigation";
@@ -41,7 +51,12 @@ export default function TeamDashboardPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canManage = myMembership?.status === "approved" && ["owner", "admin"].includes(myMembership.role);
+  const canEditTeamSettings = canManageTeam(myMembership);
+  const canManageTeamMembers = canManageMembers(myMembership);
+  const canManageDeputies = canManageDeputyLeaders(myMembership);
+  const canTransferLeader = canTransferLeadership(myMembership);
+  const canCreateSetlist = canCreateTeamSetlist(myMembership);
+  const canShowOwnerActions = canEditTeamSettings || canManageTeamMembers || canManageDeputies || canTransferLeader;
   const inviteLink = useMemo(() => {
     if (!team || typeof window === "undefined") return "";
     return `${window.location.origin}/join/${team.inviteCode}`;
@@ -66,7 +81,7 @@ export default function TeamDashboardPage() {
     const [nextMembers, nextSetlists, nextPendingRequests] = await Promise.all([
       getTeamMembers(params.teamId),
       getCloudSetlists(),
-      ["owner", "admin"].includes(nextMembership.role) ? getPendingJoinRequests(params.teamId) : Promise.resolve([]),
+      canManageMembers(nextMembership) ? getPendingJoinRequests(params.teamId) : Promise.resolve([]),
     ]);
 
     setTeam(nextTeam);
@@ -152,6 +167,60 @@ export default function TeamDashboardPage() {
     await loadTeam();
   }
 
+  async function handleSetDeputy(member: TeamMembership) {
+    if (!team) return;
+    const name = member.profile?.displayName || "팀원";
+    const confirmed = window.confirm(
+      `${name} 님을 부리더로 지정할까요?\n\n부리더는 팀 콘티, 공지사항, 일정을 만들고 수정할 수 있습니다.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await setTeamMemberRole(team.id, member.userId, "admin");
+      setMessage("부리더로 지정했습니다.");
+      setError("");
+      await loadTeam();
+    } catch (roleError) {
+      setError(roleError instanceof Error ? roleError.message : "부리더로 지정하지 못했습니다.");
+      setMessage("");
+    }
+  }
+
+  async function handleUnsetDeputy(member: TeamMembership) {
+    if (!team) return;
+    const name = member.profile?.displayName || "팀원";
+    if (!window.confirm(`${name} 님의 부리더 권한을 해제할까요?`)) return;
+
+    try {
+      await setTeamMemberRole(team.id, member.userId, "member");
+      setMessage("부리더 권한을 해제했습니다.");
+      setError("");
+      await loadTeam();
+    } catch (roleError) {
+      setError(roleError instanceof Error ? roleError.message : "부리더 권한을 해제하지 못했습니다.");
+      setMessage("");
+    }
+  }
+
+  async function handleTransferLeadership(member: TeamMembership) {
+    if (!team) return;
+    const name = member.profile?.displayName || "팀원";
+    const typed = window.prompt(
+      `정말 리더 권한을 ${name} 님에게 양도하시겠어요?\n\n권한을 양도하면 선택한 팀원이 새 리더가 되고, 현재 리더는 일반 팀원으로 변경됩니다.\n계속하려면 "양도"라고 입력해 주세요.`,
+    );
+    if (typed !== "양도") return;
+
+    try {
+      await transferTeamOwnership(team.id, member.userId);
+      setMessage("리더 권한을 양도했습니다.");
+      setError("");
+      await loadTeam();
+    } catch (transferError) {
+      setError(transferError instanceof Error ? transferError.message : "리더 권한을 양도하지 못했습니다.");
+      setMessage("");
+    }
+  }
+
   async function handleLeaveTeam() {
     if (!team || !window.confirm("이 팀에서 나갈까요?")) return;
     await leaveTeam(team.id);
@@ -185,15 +254,19 @@ export default function TeamDashboardPage() {
               <p className="text-sm font-bold text-blue-700">{team.churchName}</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{team.teamName}</h1>
               {team.description ? <p className="mt-3 text-sm leading-7 text-slate-700">{team.description}</p> : null}
-              <p className="mt-3 text-sm font-semibold text-slate-600">내 권한: {roleLabel(myMembership.role)} · {myMembership.position || "포지션 미정"}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-600">
+                <span>내 권한:</span>
+                <TeamRoleBadge role={myMembership.role} />
+                <span>· {myMembership.position || "포지션 미정"}</span>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href={`/teams/${team.id}/calendar`} className="btn-primary">팀 캘린더</Link>
               <Link href={`/teams/${team.id}/posts`} className="btn-primary">공지사항</Link>
               <Link href={`/teams/${team.id}/chat`} className="btn-secondary">팀 채팅</Link>
               <Link href={`/teams/${team.id}/direct`} className="btn-secondary">1:1 대화</Link>
-              <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary">팀 콘티 만들기</Link>
-              {canManage ? <button type="button" onClick={() => setEditing((value) => !value)} className="btn-secondary">팀 정보 수정</button> : null}
+              {canCreateSetlist ? <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary">팀 콘티 만들기</Link> : null}
+              {canEditTeamSettings ? <button type="button" onClick={() => setEditing((value) => !value)} className="btn-secondary">팀 정보 수정</button> : null}
             </div>
           </div>
         </div>
@@ -202,7 +275,7 @@ export default function TeamDashboardPage() {
       {message ? <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 
-      {editing && canManage ? (
+      {editing && canEditTeamSettings ? (
         <form onSubmit={handleUpdateTeam} className="card grid gap-4 p-5 lg:grid-cols-2">
           <label className="space-y-1">
             <span className="field-label">교회 이름</span>
@@ -231,13 +304,13 @@ export default function TeamDashboardPage() {
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={copyInviteCode} className="btn-secondary">코드 복사</button>
             <button type="button" onClick={copyInviteLink} className="btn-secondary">링크 복사</button>
-            {canManage ? <button type="button" onClick={handleRegenerateInviteCode} className="btn-secondary">재발급</button> : null}
-            {canManage ? <button type="button" onClick={handleInviteToggle} className="btn-secondary">{team.inviteEnabled ? "초대 비활성화" : "초대 활성화"}</button> : null}
+            {canEditTeamSettings ? <button type="button" onClick={handleRegenerateInviteCode} className="btn-secondary">재발급</button> : null}
+            {canEditTeamSettings ? <button type="button" onClick={handleInviteToggle} className="btn-secondary">{team.inviteEnabled ? "초대 비활성화" : "초대 활성화"}</button> : null}
           </div>
         </div>
       </section>
 
-      {canManage ? (
+      {canManageTeamMembers ? (
         <section className="card p-5">
           <h2 className="section-title">새로운 팀 참여 요청</h2>
           {pendingRequests.length === 0 ? (
@@ -261,15 +334,55 @@ export default function TeamDashboardPage() {
       ) : null}
 
       <section className="card p-5">
-        <h2 className="section-title">팀원 목록</h2>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="section-title">팀원 목록</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              리더는 팀원 승인과 부리더 지정, 리더 권한 양도를 할 수 있습니다. 부리더는 콘티, 공지사항, 일정을 함께 관리합니다.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {members.map((member) => (
-            <span key={member.id} className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800">
-              {member.position || "팀원"}: {formatMemberNameWithEmoji(member.position || "팀원", member.profile?.displayName || "팀원")}
-              {canManage && member.role !== "owner" ? (
-                <button type="button" onClick={() => handleRemove(member)} className="text-xs font-black text-rose-600">제거</button>
+            <article key={member.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {member.role !== "member" ? <span aria-hidden="true">{getTeamRoleIcon(member.role)}</span> : null}
+                    <p className="font-black text-slate-950">
+                      {formatMemberNameWithEmoji(member.position || "팀원", member.profile?.displayName || "팀원")}
+                    </p>
+                    <TeamRoleBadge role={member.role} />
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-slate-500">{member.position || "포지션 미정"}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{getTeamRoleDescription(member.role)}</p>
+                </div>
+              </div>
+              {canShowOwnerActions && member.role !== "owner" ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {canManageDeputies && member.role === "member" ? (
+                    <button type="button" onClick={() => handleSetDeputy(member)} className="btn-secondary min-h-9 px-3 text-xs">
+                      부리더로 지정
+                    </button>
+                  ) : null}
+                  {canManageDeputies && member.role === "admin" ? (
+                    <button type="button" onClick={() => handleUnsetDeputy(member)} className="btn-secondary min-h-9 px-3 text-xs">
+                      부리더 해제
+                    </button>
+                  ) : null}
+                  {canTransferLeader && members.length > 1 ? (
+                    <button type="button" onClick={() => handleTransferLeadership(member)} className="btn-secondary min-h-9 px-3 text-xs">
+                      리더 권한 양도
+                    </button>
+                  ) : null}
+                  {canManageTeamMembers ? (
+                    <button type="button" onClick={() => handleRemove(member)} className="btn-danger min-h-9 px-3 text-xs">
+                      제거
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
-            </span>
+            </article>
           ))}
         </div>
       </section>
@@ -280,7 +393,7 @@ export default function TeamDashboardPage() {
           <div className="flex flex-wrap gap-2">
             <Link href={`/teams/${team.id}/calendar`} className="btn-secondary min-h-10 px-3">팀 캘린더</Link>
             <Link href={`/teams/${team.id}/posts`} className="btn-secondary min-h-10 px-3">공지사항</Link>
-            <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary min-h-10 px-3">팀 콘티 만들기</Link>
+            {canCreateSetlist ? <Link href={`/setlists/new?teamId=${team.id}`} className="btn-secondary min-h-10 px-3">팀 콘티 만들기</Link> : null}
           </div>
         </div>
         {setlists.length === 0 ? (
@@ -302,10 +415,4 @@ export default function TeamDashboardPage() {
       ) : null}
     </div>
   );
-}
-
-function roleLabel(role: string) {
-  if (role === "owner") return "리더";
-  if (role === "admin") return "관리자";
-  return "팀원";
 }

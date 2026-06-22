@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/teamCalendar";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
+import { canCreateTeamCalendarEvent } from "@/lib/permissions/teamPermissions";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -27,7 +28,7 @@ export default function TeamCalendarPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
-  const canManage = membership?.status === "approved" && ["owner", "admin"].includes(membership.role);
+  const canManage = canCreateTeamCalendarEvent(membership);
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const calendarDays = useMemo(() => buildCalendarDays(year, month), [year, month]);
 
@@ -174,7 +175,7 @@ export default function TeamCalendarPage() {
           <div className="card p-8 text-center">
             <h3 className="text-xl font-black text-slate-950">등록된 일정이 없습니다</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {canManage ? "이번 달 예배나 연습 일정을 만들어 팀원 가능 여부를 확인해 보세요." : "리더가 일정을 등록하면 이곳에 표시됩니다."}
+              {canManage ? "이번 달 예배나 연습 일정을 만들어 팀원 가능 여부를 확인해 보세요." : "리더나 부리더가 일정을 등록하면 이곳에 표시됩니다."}
             </p>
             {canManage ? <Link href={`/teams/${team.id}/calendar/new`} className="btn-primary mt-5">일정 만들기</Link> : null}
           </div>
