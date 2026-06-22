@@ -17,7 +17,7 @@
 - `team-dashboard.png`
 - `team-invite.png`
 - `team-chat.png`
-- `team-posts.png`
+- `team-notice.png`
 - `team-calendar.png`
 - `availability-check.png`
 - `tuner.png`

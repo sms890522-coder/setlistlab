@@ -76,7 +76,7 @@ const guideImages = {
     caption: "팀 전체 채팅과 팀원 간 1:1 대화로 예배 준비 내용을 나눕니다.",
   },
   teamPosts: {
-    src: "/guide/team-posts.png",
+    src: "/guide/team-notice.png",
     alt: "콘티연습실 팀 공지사항 화면",
     caption: "중요한 연습 안내와 예배 준비사항은 공지사항으로 남깁니다.",
   },
