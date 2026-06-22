@@ -8,6 +8,7 @@ const publicRoutes = [
   "/songs",
   "/teams",
   "/tools/tuner",
+  "/guide",
   "/login",
   "/signup",
   "/contact",

@@ -66,6 +66,7 @@ export function AuthNav() {
     { href: "/teams", label: "내 팀" },
     { href: "/songs", label: "곡 보관함" },
     { href: "/tools/tuner", label: "연습도구" },
+    { href: "/guide", label: "사용설명서" },
     { href: "/contact", label: "문의" },
   ];
   const accountLabel = loaded && displayName ? displayName : "로그인";

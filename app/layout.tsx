@@ -116,6 +116,10 @@ export default function RootLayout({
             미션랩
           </a>{" "}
           ·{" "}
+          <Link href="/guide" className="font-semibold text-slate-500 transition hover:text-blue-600">
+            사용설명서
+          </Link>{" "}
+          ·{" "}
           <Link href="/contact" className="font-semibold text-slate-500 transition hover:text-blue-600">
             문의/피드백
           </Link>
