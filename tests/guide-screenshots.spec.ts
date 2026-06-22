@@ -4,6 +4,12 @@ import path from "node:path";
 
 const baseUrl = process.env.GUIDE_SCREENSHOT_BASE_URL ?? "http://localhost:3000";
 const outputDir = path.join(process.cwd(), "public", "guide");
+const desktopOutputDir = path.join(outputDir, "desktop");
+
+const viewportTargets = [
+  { name: "mobile", outputDir, viewport: { width: 390, height: 844 } },
+  { name: "desktop", outputDir: desktopOutputDir, viewport: { width: 1280, height: 900 } },
+] as const;
 
 const screenshots = [
   { pagePath: "/guide/demo/create-setlist", target: "create-setlist", fileName: "create-setlist.png" },
@@ -26,43 +32,44 @@ const screenshots = [
   { pagePath: "/guide/demo/practice-tools", target: "metronome", fileName: "metronome.png" },
 ] as const;
 
-test.use({
-  viewport: { width: 390, height: 844 },
-  colorScheme: "light",
-});
+test.use({ colorScheme: "light" });
 
 test.describe("guide screenshots", () => {
   test.beforeAll(async () => {
     await mkdir(outputDir, { recursive: true });
+    await mkdir(desktopOutputDir, { recursive: true });
   });
 
-  for (const screenshot of screenshots) {
-    test(`capture ${screenshot.fileName}`, async ({ page }) => {
-      await page.goto(`${baseUrl}${screenshot.pagePath}`, { waitUntil: "domcontentloaded" });
-      await page.waitForLoadState("networkidle").catch(() => undefined);
-      await page.addStyleTag({
-        content: `
-          header.sticky,
-          nextjs-portal,
-          [data-nextjs-dev-overlay],
-          [data-nextjs-dev-tools-button],
-          [data-nextjs-toast],
-          .team-chat-widget,
-          .team-chat-panel {
-            display: none !important;
-          }
-        `,
-      });
-      await page.waitForTimeout(250);
+  for (const viewportTarget of viewportTargets) {
+    for (const screenshot of screenshots) {
+      test(`capture ${viewportTarget.name} ${screenshot.fileName}`, async ({ page }) => {
+        await page.setViewportSize(viewportTarget.viewport);
+        await page.goto(`${baseUrl}${screenshot.pagePath}`, { waitUntil: "domcontentloaded" });
+        await page.waitForLoadState("networkidle").catch(() => undefined);
+        await page.addStyleTag({
+          content: `
+            header.sticky,
+            nextjs-portal,
+            [data-nextjs-dev-overlay],
+            [data-nextjs-dev-tools-button],
+            [data-nextjs-toast],
+            .team-chat-widget,
+            .team-chat-panel {
+              display: none !important;
+            }
+          `,
+        });
+        await page.waitForTimeout(250);
 
-      const target = page.locator(`[data-guide-shot="${screenshot.target}"]`).first();
-      await expect(target).toBeVisible({ timeout: 10_000 });
-      await target.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
-      await page.waitForTimeout(100);
-      await target.screenshot({
-        path: path.join(outputDir, screenshot.fileName),
-        animations: "disabled",
+        const target = page.locator(`[data-guide-shot="${screenshot.target}"]`).first();
+        await expect(target).toBeVisible({ timeout: 10_000 });
+        await target.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest" }));
+        await page.waitForTimeout(100);
+        await target.screenshot({
+          path: path.join(viewportTarget.outputDir, screenshot.fileName),
+          animations: "disabled",
+        });
       });
-    });
+    }
   }
 });

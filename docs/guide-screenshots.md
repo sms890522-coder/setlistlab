@@ -30,13 +30,14 @@ npx playwright install chromium
 
 ## 3. 생성 위치
 
-생성된 PNG 파일은 아래 폴더에 저장됩니다.
+생성된 PNG 파일은 모바일/PC 기준으로 각각 저장됩니다.
 
 ```text
-public/guide/
+public/guide/          # 모바일 캡처, 390 x 844
+public/guide/desktop/  # PC 캡처, 1280 x 900
 ```
 
-`/guide` 페이지는 `app/guide/page.tsx`의 `guideImages` 설정과 같은 파일명이 존재할 때만 이미지를 표시합니다. 이미지가 없으면 깨진 이미지 아이콘이나 빈 박스가 표시되지 않습니다.
+`/guide` 페이지는 `app/guide/page.tsx`의 `guideImages` 설정과 같은 파일명이 존재할 때만 이미지를 표시합니다. PC 화면에서는 `public/guide/desktop/`, 모바일 화면에서는 `public/guide/` 이미지를 우선 사용합니다. 이미지가 없으면 깨진 이미지 아이콘이나 빈 박스가 표시되지 않습니다.
 
 ## 4. 캡처 전용 데모 페이지
 

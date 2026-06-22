@@ -39,7 +39,6 @@ const demoSongs: Song[] = [
     chordMemo: "이번 주는 G키 원곡 흐름으로 진행합니다. 어쿠스틱은 G폼, 일렉은 실제 키 기준으로 연주합니다.",
     chordProgression: "G - D - Em - C",
     sheetLinks: [{ id: "sheet-1", label: "코드 악보", url: "https://example.com/sheet" }],
-    imageLinks: [{ id: "image-1", label: "코드 악보 이미지", url: "https://example.com/score.png" }],
     transitionNote: "다음 곡으로 넘어가기 전 짧게 기도합니다.",
   },
   {
