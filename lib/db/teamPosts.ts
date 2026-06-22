@@ -22,6 +22,7 @@ export type TeamPost = {
   author?: Profile | null;
   readAt?: string;
   hasRead: boolean;
+  commentCount: number;
 };
 
 export type TeamPostRead = {
@@ -253,7 +254,11 @@ async function attachPostMeta(rows: TeamPostRow[]) {
   const posts = rows.map(rowToPost);
   if (posts.length === 0) return posts;
 
-  const [reads, authors] = await Promise.all([getMyPostReads(posts.map((post) => post.id)), getAuthors(posts)]);
+  const [reads, authors, commentCounts] = await Promise.all([
+    getMyPostReads(posts.map((post) => post.id)),
+    getAuthors(posts),
+    getPostCommentCounts(posts.map((post) => post.id)),
+  ]);
   const readByPostId = new Map(reads.map((read) => [read.postId, read.readAt]));
 
   return posts.map((post) => ({
@@ -261,6 +266,7 @@ async function attachPostMeta(rows: TeamPostRow[]) {
     author: post.authorId ? authors.get(post.authorId) ?? null : null,
     readAt: readByPostId.get(post.id),
     hasRead: readByPostId.has(post.id),
+    commentCount: commentCounts.get(post.id) ?? 0,
   }));
 }
 
@@ -292,6 +298,26 @@ async function getAuthors(posts: TeamPost[]) {
   const authorIds = Array.from(new Set(posts.map((post) => post.authorId).filter(Boolean))) as string[];
   const entries = await Promise.all(authorIds.map(async (id) => [id, await getProfile(id).catch(() => null)] as const));
   return new Map(entries);
+}
+
+async function getPostCommentCounts(postIds: string[]) {
+  if (postIds.length === 0) return new Map<string, number>();
+
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("team_post_comments")
+    .select("post_id")
+    .in("post_id", postIds)
+    .eq("is_deleted", false)
+    .returns<Array<{ post_id: string }>>();
+
+  if (error) return new Map<string, number>();
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    counts.set(row.post_id, (counts.get(row.post_id) ?? 0) + 1);
+  }
+  return counts;
 }
 
 async function createTeamPostNotifications(postId: string, eventType: "team_notice_created" | "team_notice_updated") {
@@ -333,6 +359,7 @@ function rowToPost(row: TeamPostRow): TeamPost {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     hasRead: false,
+    commentCount: 0,
   };
 }
 
@@ -350,6 +377,7 @@ function createDeletedPostPlaceholder(teamId: string, row: Partial<TeamPostRow>)
     createdAt: row.created_at ?? now,
     updatedAt: row.updated_at ?? now,
     hasRead: false,
+    commentCount: 0,
   };
 }
 

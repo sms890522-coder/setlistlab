@@ -10,6 +10,7 @@ type PushEventType =
   | "team_calendar_recurring_events_created"
   | "team_notice_created"
   | "team_notice_updated"
+  | "team_notice_comment_created"
   | "team_setlist_created"
   | "team_invite_requested"
   | "team_invite_approved";
@@ -20,6 +21,7 @@ type PushEventRequest = {
   eventId?: string;
   recurringGroupId?: string;
   postId?: string;
+  commentId?: string;
   setlistId?: string;
   membershipId?: string;
 };
@@ -46,6 +48,15 @@ type TeamPostRow = {
   team_id: string;
   author_id: string | null;
   title: string;
+};
+
+type TeamPostCommentRow = {
+  id: string;
+  post_id: string;
+  team_id: string;
+  author_id: string | null;
+  content: string;
+  is_deleted: boolean;
 };
 
 type TeamCalendarEventRow = {
@@ -135,6 +146,8 @@ async function buildPushEvent(body: PushEventRequest, actorUserId: string) {
       return buildTeamNoticePush(body.postId, actorUserId, "created");
     case "team_notice_updated":
       return buildTeamNoticePush(body.postId, actorUserId, "updated");
+    case "team_notice_comment_created":
+      return buildTeamNoticeCommentPush(body.commentId, actorUserId);
     case "team_setlist_created":
       return buildSetlistCreatedPush(body.setlistId, actorUserId);
     case "team_invite_requested":
@@ -251,6 +264,39 @@ async function buildTeamNoticePush(postId: string | undefined, actorUserId: stri
       body: truncateText(post.title || "공지사항", 80),
       url: `/teams/${post.team_id}/posts/${post.id}`,
       tag: `team-notice-${post.id}-${event}`,
+    } satisfies PushPayload,
+  };
+}
+
+async function buildTeamNoticeCommentPush(commentId: string | undefined, actorUserId: string) {
+  if (!commentId) throw new Error("댓글 정보가 필요합니다.");
+
+  const supabase = getSupabaseAdminClient();
+  const { data: comment, error } = await supabase
+    .from("team_post_comments")
+    .select("id,post_id,team_id,author_id,content,is_deleted")
+    .eq("id", commentId)
+    .maybeSingle<TeamPostCommentRow>();
+
+  if (error || !comment) throw new Error(error?.message || "댓글을 찾을 수 없습니다.");
+  if (comment.is_deleted) return null;
+  if (comment.author_id !== actorUserId) throw new Error("본인이 작성한 댓글만 푸시 알림을 만들 수 있습니다.");
+  if (!(await isApprovedTeamMember(comment.team_id, actorUserId))) {
+    throw new Error("이 공지사항에 댓글을 작성할 권한이 없습니다.");
+  }
+
+  const [senderName, userIds] = await Promise.all([
+    getDisplayName(actorUserId),
+    getNoticeCommentTargetIds(comment.post_id, comment.team_id, actorUserId),
+  ]);
+
+  return {
+    userIds,
+    payload: {
+      title: "공지사항에 새 댓글이 달렸습니다",
+      body: `${senderName}: ${truncateText(comment.content, 50)}`,
+      url: `/teams/${comment.team_id}/posts/${comment.post_id}`,
+      tag: `team-notice-comment-${comment.id}`,
     } satisfies PushPayload,
   };
 }
@@ -408,6 +454,50 @@ async function getAdminMemberIds(teamId: string, excludeUserId?: string) {
   return (data ?? []).map((row) => row.user_id).filter((userId) => userId !== excludeUserId);
 }
 
+async function getNoticeCommentTargetIds(postId: string, teamId: string, excludeUserId?: string) {
+  const supabase = getSupabaseAdminClient();
+  const [postResult, commentAuthorsResult, adminsResult, approvedMembersResult] = await Promise.all([
+    supabase.from("team_posts").select("author_id").eq("id", postId).eq("team_id", teamId).maybeSingle<{ author_id: string | null }>(),
+    supabase
+      .from("team_post_comments")
+      .select("author_id")
+      .eq("post_id", postId)
+      .eq("team_id", teamId)
+      .eq("is_deleted", false)
+      .returns<Array<{ author_id: string | null }>>(),
+    supabase
+      .from("team_memberships")
+      .select("user_id")
+      .eq("team_id", teamId)
+      .eq("status", "approved")
+      .in("role", ["owner", "admin"])
+      .is("removed_at", null)
+      .returns<Array<{ user_id: string }>>(),
+    supabase
+      .from("team_memberships")
+      .select("user_id")
+      .eq("team_id", teamId)
+      .eq("status", "approved")
+      .is("removed_at", null)
+      .returns<Array<{ user_id: string }>>(),
+  ]);
+
+  const queryError = postResult.error ?? commentAuthorsResult.error ?? adminsResult.error ?? approvedMembersResult.error;
+  if (queryError) throw new Error(queryError.message || "댓글 알림 대상을 불러오지 못했습니다.");
+
+  const approvedUserIds = new Set((approvedMembersResult.data ?? []).map((member) => member.user_id));
+  const candidates = new Set<string>();
+  if (postResult.data?.author_id) candidates.add(postResult.data.author_id);
+  for (const row of commentAuthorsResult.data ?? []) {
+    if (row.author_id) candidates.add(row.author_id);
+  }
+  for (const row of adminsResult.data ?? []) {
+    candidates.add(row.user_id);
+  }
+
+  return Array.from(candidates).filter((userId) => approvedUserIds.has(userId) && userId !== excludeUserId);
+}
+
 async function getOwnerMemberIds(teamId: string, excludeUserId?: string) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -421,6 +511,21 @@ async function getOwnerMemberIds(teamId: string, excludeUserId?: string) {
 
   if (error) throw new Error(error.message || "팀 리더 정보를 불러오지 못했습니다.");
   return (data ?? []).map((row) => row.user_id).filter((userId) => userId !== excludeUserId);
+}
+
+async function isApprovedTeamMember(teamId: string, userId: string) {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("team_memberships")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", userId)
+    .eq("status", "approved")
+    .is("removed_at", null)
+    .maybeSingle<{ id: string }>();
+
+  if (error) throw new Error(error.message || "팀 권한을 확인하지 못했습니다.");
+  return Boolean(data);
 }
 
 async function isTeamAdmin(teamId: string, userId: string) {

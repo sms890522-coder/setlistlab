@@ -10,6 +10,7 @@ type PushEventInput =
   | { eventType: "team_calendar_recurring_events_created"; recurringGroupId: string }
   | { eventType: "team_notice_created"; postId: string }
   | { eventType: "team_notice_updated"; postId: string }
+  | { eventType: "team_notice_comment_created"; commentId: string }
   | { eventType: "team_setlist_created"; setlistId: string }
   | { eventType: "team_invite_requested"; membershipId: string }
   | { eventType: "team_invite_approved"; membershipId: string };

@@ -331,6 +331,36 @@ on public.team_post_reads (post_id);
 create index if not exists team_post_reads_user_idx
 on public.team_post_reads (user_id);
 
+create table if not exists public.team_post_comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.team_posts(id) on delete cascade,
+  team_id uuid not null references public.teams(id) on delete cascade,
+  author_id uuid references auth.users(id) on delete set null,
+  content text not null,
+  is_deleted boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_post_comments_content_check check (
+    length(btrim(content)) > 0
+    and length(content) <= 1000
+  )
+);
+
+create index if not exists team_post_comments_post_created_idx
+on public.team_post_comments (post_id, created_at);
+
+create index if not exists team_post_comments_team_created_idx
+on public.team_post_comments (team_id, created_at);
+
+create index if not exists team_post_comments_author_idx
+on public.team_post_comments (author_id);
+
+drop trigger if exists team_post_comments_set_updated_at on public.team_post_comments;
+create trigger team_post_comments_set_updated_at
+before update on public.team_post_comments
+for each row
+execute function public.set_updated_at();
+
 create table if not exists public.team_calendar_events (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
@@ -477,6 +507,17 @@ begin
          and tablename = 'team_posts'
      ) then
     alter publication supabase_realtime add table public.team_posts;
+  end if;
+
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'team_post_comments'
+     ) then
+    alter publication supabase_realtime add table public.team_post_comments;
   end if;
 
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
@@ -652,6 +693,7 @@ create table if not exists public.notifications (
       'team_calendar_recurring_events_created',
       'team_notice_created',
       'team_notice_updated',
+      'team_notice_comment_created',
       'team_setlist_created',
       'team_setlist_updated',
       'team_invite_requested',
@@ -694,6 +736,7 @@ add constraint notifications_type_check check (
     'team_calendar_recurring_events_created',
     'team_notice_created',
     'team_notice_updated',
+    'team_notice_comment_created',
     'team_setlist_created',
     'team_setlist_updated',
     'team_invite_requested',
@@ -783,6 +826,7 @@ alter table public.team_direct_threads enable row level security;
 alter table public.team_direct_messages enable row level security;
 alter table public.team_posts enable row level security;
 alter table public.team_post_reads enable row level security;
+alter table public.team_post_comments enable row level security;
 alter table public.team_calendar_events enable row level security;
 alter table public.team_event_availability enable row level security;
 alter table public.saved_songs enable row level security;
@@ -1002,6 +1046,119 @@ begin
     and memberships.status = 'approved'
     and memberships.removed_at is null
     and memberships.user_id <> auth.uid()
+  on conflict do nothing;
+
+  get diagnostics v_inserted_count = row_count;
+  return v_inserted_count > 0;
+end;
+$$;
+
+drop function if exists public.create_team_post_comment_notifications(uuid);
+
+create function public.create_team_post_comment_notifications(p_comment_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_comment public.team_post_comments;
+  v_post public.team_posts;
+  v_author_name text;
+  v_inserted_count integer := 0;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_comment
+  from public.team_post_comments
+  where id = p_comment_id;
+
+  if v_comment.id is null then
+    raise exception '댓글을 찾을 수 없습니다.';
+  end if;
+
+  if v_comment.is_deleted then
+    return false;
+  end if;
+
+  if v_comment.author_id <> auth.uid() then
+    raise exception '본인이 작성한 댓글만 알림을 만들 수 있습니다.';
+  end if;
+
+  select *
+  into v_post
+  from public.team_posts
+  where id = v_comment.post_id
+    and team_id = v_comment.team_id;
+
+  if v_post.id is null then
+    raise exception '공지사항을 찾을 수 없습니다.';
+  end if;
+
+  if not public.is_team_approved_member(v_comment.team_id, auth.uid()) then
+    raise exception '이 공지사항에 댓글을 작성할 권한이 없습니다.';
+  end if;
+
+  select nullif(trim(display_name), '')
+  into v_author_name
+  from public.profiles
+  where id = auth.uid();
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url,
+    source_type,
+    source_id
+  )
+  with candidate_users as (
+    select v_post.author_id as user_id
+    where v_post.author_id is not null
+
+    union
+
+    select comments.author_id as user_id
+    from public.team_post_comments comments
+    where comments.post_id = v_comment.post_id
+      and comments.team_id = v_comment.team_id
+      and comments.author_id is not null
+      and not comments.is_deleted
+
+    union
+
+    select memberships.user_id
+    from public.team_memberships memberships
+    where memberships.team_id = v_comment.team_id
+      and memberships.status = 'approved'
+      and memberships.role in ('owner', 'admin')
+      and memberships.removed_at is null
+  ),
+  target_users as (
+    select distinct candidate_users.user_id
+    from candidate_users
+    join public.team_memberships memberships
+      on memberships.team_id = v_comment.team_id
+     and memberships.user_id = candidate_users.user_id
+     and memberships.status = 'approved'
+     and memberships.removed_at is null
+    where candidate_users.user_id <> auth.uid()
+  )
+  select
+    target_users.user_id,
+    v_comment.team_id,
+    'team_notice_comment_created',
+    '공지사항에 새 댓글이 달렸습니다',
+    left(coalesce(v_author_name, '팀원') || ': ' || regexp_replace(v_comment.content, '[[:space:]]+', ' ', 'g'), 180),
+    '/teams/' || v_comment.team_id::text || '/posts/' || v_comment.post_id::text,
+    'team_post_comment',
+    v_comment.id
+  from target_users
   on conflict do nothing;
 
   get diagnostics v_inserted_count = row_count;
@@ -2221,6 +2378,62 @@ using (
     from public.team_posts posts
     where posts.id = public.team_post_reads.post_id
       and public.is_team_admin(posts.team_id, auth.uid())
+  )
+);
+
+drop policy if exists "team_post_comments_select_member" on public.team_post_comments;
+create policy "team_post_comments_select_member"
+on public.team_post_comments
+for select
+using (public.is_team_approved_member(team_id, auth.uid()));
+
+drop policy if exists "team_post_comments_insert_member" on public.team_post_comments;
+create policy "team_post_comments_insert_member"
+on public.team_post_comments
+for insert
+with check (
+  auth.uid() = author_id
+  and public.is_team_approved_member(team_id, auth.uid())
+  and exists (
+    select 1
+    from public.team_posts posts
+    where posts.id = public.team_post_comments.post_id
+      and posts.team_id = public.team_post_comments.team_id
+  )
+);
+
+drop policy if exists "team_post_comments_update_self" on public.team_post_comments;
+create policy "team_post_comments_update_self"
+on public.team_post_comments
+for update
+using (
+  auth.uid() = author_id
+  and not is_deleted
+)
+with check (
+  auth.uid() = author_id
+  and public.is_team_approved_member(team_id, auth.uid())
+  and exists (
+    select 1
+    from public.team_posts posts
+    where posts.id = public.team_post_comments.post_id
+      and posts.team_id = public.team_post_comments.team_id
+  )
+);
+
+drop policy if exists "team_post_comments_soft_delete_admin" on public.team_post_comments;
+create policy "team_post_comments_soft_delete_admin"
+on public.team_post_comments
+for update
+using (public.is_team_admin(team_id, auth.uid()))
+with check (
+  public.is_team_admin(team_id, auth.uid())
+  and is_deleted = true
+  and exists (
+    select 1
+    from public.team_posts posts
+    where posts.id = public.team_post_comments.post_id
+      and posts.team_id = public.team_post_comments.team_id
   )
 );
 

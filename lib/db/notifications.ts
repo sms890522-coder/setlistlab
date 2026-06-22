@@ -15,6 +15,7 @@ export type NotificationType =
   | "team_calendar_recurring_events_created"
   | "team_notice_created"
   | "team_notice_updated"
+  | "team_notice_comment_created"
   | "team_setlist_created"
   | "team_setlist_updated"
   | "team_invite_requested"

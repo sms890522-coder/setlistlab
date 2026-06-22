@@ -120,6 +120,9 @@ export default function TeamPostsPage() {
                   <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-black text-rose-700">읽지 않음</span>
                 )}
                 {post.notifyMembers ? <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-black text-violet-700">알림 전송</span> : null}
+                {post.commentCount > 0 ? (
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">댓글 {post.commentCount}</span>
+                ) : null}
               </div>
               <h2 className="mt-3 text-lg font-black text-slate-950">{post.title}</h2>
               <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{post.content}</p>

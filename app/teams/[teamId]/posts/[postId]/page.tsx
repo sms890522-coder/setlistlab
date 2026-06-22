@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TeamPostComments } from "@/components/TeamPostComments";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { getTeam, type Team } from "@/lib/db/teams";
 import {
@@ -128,6 +129,8 @@ export default function TeamPostDetailPage() {
         </div>
         <div className="whitespace-pre-wrap p-5 text-sm leading-8 text-slate-800 sm:p-7">{post.content}</div>
       </article>
+
+      <TeamPostComments postId={post.id} teamId={team.id} membership={membership} />
 
       {canManage && readStatus ? (
         <details className="card p-5">
