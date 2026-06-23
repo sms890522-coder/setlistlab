@@ -1,5 +1,6 @@
 "use client";
 
+import type { User } from "@supabase/supabase-js";
 import type { UserRole } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -48,6 +49,39 @@ export async function getProfile(userId: string) {
   }
 
   return data ? rowToProfile(data) : null;
+}
+
+export async function ensureUserProfile(user?: User | null) {
+  const currentUser = user ?? (await getCurrentUser());
+  if (!currentUser) return null;
+
+  const existingProfile = await getProfile(currentUser.id).catch(() => null);
+  const displayName = existingProfile?.displayName?.trim() || inferDisplayName(currentUser);
+  const role = existingProfile?.role?.trim() || "기타";
+  const now = new Date().toISOString();
+
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .upsert({
+      id: currentUser.id,
+      display_name: displayName,
+      role,
+      custom_role: existingProfile?.customRole ?? null,
+      church_name: existingProfile?.churchName ?? null,
+      praise_team_name: existingProfile?.praiseTeamName ?? null,
+      service_name: existingProfile?.serviceName ?? null,
+      share_practice_presence: existingProfile?.sharePracticePresence ?? true,
+      updated_at: now,
+    })
+    .select("*")
+    .single<ProfileRow>();
+
+  if (error) {
+    throw new Error(error.message || "프로필을 준비하지 못했습니다.");
+  }
+
+  return rowToProfile(data);
 }
 
 export async function upsertMyProfile(input: {
@@ -103,6 +137,28 @@ export async function upsertMyProfile(input: {
   }
 
   return profile;
+}
+
+function inferDisplayName(user: User) {
+  const metadata = user.user_metadata ?? {};
+  const candidates = [
+    metadata.display_name,
+    metadata.full_name,
+    metadata.name,
+    metadata.nickname,
+    metadata.user_name,
+    metadata.preferred_username,
+    metadata.email,
+    user.email,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return user.email?.split("@")[0] || "팀원";
 }
 
 function rowToProfile(row: ProfileRow): Profile {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { User } from "@supabase/supabase-js";
+import type { Provider, User } from "@supabase/supabase-js";
 import { sanitizeRedirectPath } from "./routes";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "./supabase/client";
 
@@ -48,9 +48,10 @@ export async function signInWithEmail(email: string, password: string) {
   return data;
 }
 
-export async function signUpWithEmail(email: string, password: string) {
+export async function signUpWithEmail(email: string, password: string, redirectTo = "/onboarding") {
   const supabase = getSupabaseBrowserClient();
-  const emailRedirectTo = typeof window !== "undefined" ? `${window.location.origin}/onboarding` : undefined;
+  const safeRedirectTo = sanitizeRedirectPath(redirectTo, "/onboarding");
+  const emailRedirectTo = typeof window !== "undefined" ? `${window.location.origin}${safeRedirectTo}` : undefined;
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -65,19 +66,48 @@ export async function signUpWithEmail(email: string, password: string) {
 }
 
 export async function signInWithGoogle(redirectTo = "/onboarding") {
+  return signInWithOAuthProvider("google", redirectTo, "구글 로그인에 실패했습니다.");
+}
+
+export async function signInWithNaver(redirectTo = "/onboarding") {
+  const provider = getNaverOAuthProvider();
+  if (!provider) {
+    throw new Error("네이버 로그인은 준비 중입니다.");
+  }
+
+  return signInWithOAuthProvider(provider as Provider | `custom:${string}`, redirectTo, "네이버 로그인에 실패했습니다.");
+}
+
+export function isNaverOAuthEnabled() {
+  return process.env.NEXT_PUBLIC_ENABLE_NAVER_OAUTH === "true";
+}
+
+export function getNaverOAuthProvider() {
+  if (!isNaverOAuthEnabled()) return "";
+  return process.env.NEXT_PUBLIC_SUPABASE_NAVER_PROVIDER?.trim() || "";
+}
+
+async function signInWithOAuthProvider(provider: Provider | `custom:${string}`, redirectTo: string, fallbackMessage: string) {
   const supabase = getSupabaseBrowserClient();
-  const redirectOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const safeRedirectTo = sanitizeRedirectPath(redirectTo, "/onboarding");
+  const redirectUrl = getOAuthCallbackUrl(safeRedirectTo);
   const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
+    provider: provider as Provider,
     options: {
-      redirectTo: `${redirectOrigin}${safeRedirectTo}`,
+      redirectTo: redirectUrl,
     },
   });
 
   if (error) {
-    throw new Error(error.message || "구글 로그인에 실패했습니다.");
+    throw new Error(error.message || fallbackMessage);
   }
+}
+
+function getOAuthCallbackUrl(nextPath: string) {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const callbackUrl = new URL("/auth/callback", origin || "https://setlistlab.local");
+  callbackUrl.searchParams.set("next", nextPath);
+  return callbackUrl.toString();
 }
 
 export async function signOut() {

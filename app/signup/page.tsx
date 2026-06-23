@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
+import { sanitizeRedirectPath } from "@/lib/routes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { signUpWithEmail } from "@/lib/auth";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [redirectPath, setRedirectPath] = useState("/setlists");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setRedirectPath(sanitizeRedirectPath(new URLSearchParams(window.location.search).get("redirect")));
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -26,9 +34,10 @@ export default function SignupPage() {
 
     try {
       setLoading(true);
-      const data = await signUpWithEmail(email, password);
+      const onboardingPath = `/onboarding?redirect=${encodeURIComponent(redirectPath)}`;
+      const data = await signUpWithEmail(email, password, onboardingPath);
       if (data.session) {
-        router.push("/onboarding");
+        router.push(onboardingPath);
         return;
       }
       setMessage("가입 확인 메일을 보냈습니다. 이메일 인증 후 로그인해 주세요.");
@@ -45,11 +54,27 @@ export default function SignupPage() {
         <p className="text-sm font-bold text-blue-700">계정</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">회원가입</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          회원가입하면 콘티와 곡 보관함을 저장하고, 팀 초대, 팀 채팅, 알림 기능을 함께 사용할 수 있습니다.
-          PC와 휴대폰에서 같은 계정으로 예배 준비를 이어가세요.
+          콘티연습실에서 찬양팀 콘티와 연습 자료를 함께 관리해보세요. 콘티, 곡 보관함, 팀 초대, 팀 채팅,
+          알림 기능을 PC와 휴대폰에서 이어서 사용할 수 있습니다.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        {!isSupabaseConfigured() ? (
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+            회원가입 기능이 아직 준비되지 않았습니다. 관리자 설정이 끝나면 계정 저장을 사용할 수 있습니다.
+          </div>
+        ) : null}
+
+        <div className="mt-6">
+          <SocialAuthButtons mode="signup" redirectTo={`/onboarding?redirect=${encodeURIComponent(redirectPath)}`} />
+        </div>
+
+        <div className="my-6 flex items-center gap-3">
+          <span className="h-px flex-1 bg-slate-200" />
+          <span className="text-xs font-black text-slate-400">또는</span>
+          <span className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block space-y-1">
             <span className="field-label">이메일</span>
             <input
@@ -81,7 +106,7 @@ export default function SignupPage() {
 
         <p className="mt-4 text-center text-sm text-slate-500">
           이미 계정이 있나요?{" "}
-          <Link href="/login" className="font-bold text-blue-700 hover:text-blue-800">
+          <Link href={`/login?redirect=${encodeURIComponent(redirectPath)}`} className="font-bold text-blue-700 hover:text-blue-800">
             로그인
           </Link>
         </p>
