@@ -2,7 +2,7 @@
 
 import type { User } from "@supabase/supabase-js";
 import type { UserRole } from "@/lib/auth";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentSession, getCurrentUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export const PROFILE_UPDATED_EVENT = "conti-practice-room:profile-updated";
@@ -34,7 +34,7 @@ type ProfileRow = {
 };
 
 export async function getMyProfile() {
-  const user = await getCurrentUser();
+  const user = await getProfileUser();
   if (!user) return null;
 
   return getProfile(user.id);
@@ -52,11 +52,11 @@ export async function getProfile(userId: string) {
 }
 
 export async function ensureUserProfile(user?: User | null) {
-  const currentUser = user ?? (await getCurrentUser());
+  const currentUser = user ?? (await getProfileUser());
   if (!currentUser) return null;
 
   const existingProfile = await getProfile(currentUser.id).catch(() => null);
-  const displayName = existingProfile?.displayName?.trim() || inferDisplayName(currentUser);
+  const displayName = existingProfile?.displayName?.trim() || inferProfileDisplayName(currentUser);
   const role = existingProfile?.role?.trim() || "기타";
   const now = new Date().toISOString();
 
@@ -93,7 +93,7 @@ export async function upsertMyProfile(input: {
   serviceName?: string;
   sharePracticePresence?: boolean;
 }) {
-  const user = await getCurrentUser();
+  const user = await getProfileUser();
   if (!user) {
     throw new Error("로그인이 필요합니다.");
   }
@@ -139,7 +139,7 @@ export async function upsertMyProfile(input: {
   return profile;
 }
 
-function inferDisplayName(user: User) {
+export function inferProfileDisplayName(user: User) {
   const metadata = user.user_metadata ?? {};
   const candidates = [
     metadata.display_name,
@@ -159,6 +159,12 @@ function inferDisplayName(user: User) {
   }
 
   return user.email?.split("@")[0] || "팀원";
+}
+
+async function getProfileUser() {
+  const session = await getCurrentSession();
+  if (session?.user) return session.user;
+  return getCurrentUser();
 }
 
 function rowToProfile(row: ProfileRow): Profile {

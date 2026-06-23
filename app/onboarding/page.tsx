@@ -1,10 +1,10 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { USER_ROLES, getCurrentSession, getCurrentUser } from "@/lib/auth";
-import { ensureUserProfile, getMyProfile, upsertMyProfile } from "@/lib/db/profiles";
+import { USER_ROLES, getCurrentSession } from "@/lib/auth";
+import { ensureUserProfile, inferProfileDisplayName, upsertMyProfile } from "@/lib/db/profiles";
 import { sanitizeRedirectPath } from "@/lib/routes";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -29,7 +29,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      const user = await waitForAuthenticatedUser();
+      const user = await withTimeout(waitForAuthenticatedUser(), 5000).catch(() => null);
       if (!user) {
         setRedirectingToLogin(true);
         setError("로그인 세션을 찾지 못했습니다. 다시 로그인해 주세요.");
@@ -38,13 +38,13 @@ export default function OnboardingPage() {
         return;
       }
 
-      const profile = (await ensureUserProfile(user).catch(() => null)) ?? (await getMyProfile());
+      const profile = await withTimeout(ensureUserProfile(user), 5000).catch(() => null);
       if (profile?.role?.trim() && profile.churchName?.trim() && profile.praiseTeamName?.trim()) {
         router.replace(getRedirectPath());
         return;
       }
 
-      setDisplayName(profile?.displayName || user.email?.split("@")[0] || "");
+      setDisplayName(profile?.displayName || inferProfileDisplayName(user));
       setRole(profile?.role || "찬양인도자");
       setCustomRole(profile?.customRole || "");
       setChurchName(profile?.churchName || "");
@@ -166,17 +166,58 @@ export default function OnboardingPage() {
 }
 
 async function waitForAuthenticatedUser(): Promise<User | null> {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const session = await getCurrentSession();
-    if (session?.user) return session.user;
+  const immediateSession = await getCurrentSession();
+  if (immediateSession?.user) return immediateSession.user;
 
-    const user = await getCurrentUser();
-    if (user) return user;
+  if (!isSupabaseConfigured()) return null;
+
+  const supabase = getSupabaseBrowserClient();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let cleanup: () => void = () => undefined;
+    const finish = (user: User | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      cleanup();
+      resolve(user);
+    };
+
+    const timeoutId = window.setTimeout(() => finish(null), 4500);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) finish(session.user);
+    });
+    cleanup = () => subscription.unsubscribe();
+
+    void pollSession((user) => finish(user));
+  });
+}
+
+async function pollSession(callback: (user: User | null) => void) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const session = await withTimeout(getCurrentSession(), 800).catch(() => null);
+    if (session?.user) {
+      callback(session.user);
+      return session.user;
+    }
 
     await wait(250);
   }
 
+  callback(null);
   return null;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error("timeout")), timeoutMs);
+    }),
+  ]);
 }
 
 function wait(ms: number) {
