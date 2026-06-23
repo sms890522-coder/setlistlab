@@ -1,7 +1,8 @@
 "use client";
 
-import { USER_ROLES, getCurrentUser } from "@/lib/auth";
-import { getMyProfile, upsertMyProfile } from "@/lib/db/profiles";
+import type { User } from "@supabase/supabase-js";
+import { USER_ROLES, getCurrentSession, getCurrentUser } from "@/lib/auth";
+import { ensureUserProfile, getMyProfile, upsertMyProfile } from "@/lib/db/profiles";
 import { sanitizeRedirectPath } from "@/lib/routes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,7 @@ export default function OnboardingPage() {
   const [sharePracticePresence, setSharePracticePresence] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [redirectingToLogin, setRedirectingToLogin] = useState(false);
 
   useEffect(() => {
     async function loadProfile() {
@@ -27,13 +29,16 @@ export default function OnboardingPage() {
         return;
       }
 
-      const user = await getCurrentUser();
+      const user = await waitForAuthenticatedUser();
       if (!user) {
+        setRedirectingToLogin(true);
+        setError("로그인 세션을 찾지 못했습니다. 다시 로그인해 주세요.");
+        setLoaded(true);
         router.replace("/login?redirect=/onboarding");
         return;
       }
 
-      const profile = await getMyProfile();
+      const profile = (await ensureUserProfile(user).catch(() => null)) ?? (await getMyProfile());
       if (profile?.role?.trim() && profile.churchName?.trim() && profile.praiseTeamName?.trim()) {
         router.replace(getRedirectPath());
         return;
@@ -86,6 +91,10 @@ export default function OnboardingPage() {
 
         {!loaded ? (
           <p className="mt-6 text-sm text-slate-500">프로필을 불러오는 중입니다.</p>
+        ) : redirectingToLogin ? (
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-800">
+            로그인 화면으로 이동하는 중입니다.
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 grid gap-4 sm:grid-cols-2">
             <label className="space-y-1 sm:col-span-2">
@@ -154,4 +163,22 @@ export default function OnboardingPage() {
       </section>
     </div>
   );
+}
+
+async function waitForAuthenticatedUser(): Promise<User | null> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const session = await getCurrentSession();
+    if (session?.user) return session.user;
+
+    const user = await getCurrentUser();
+    if (user) return user;
+
+    await wait(250);
+  }
+
+  return null;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
