@@ -10,6 +10,7 @@ import {
   getCloudSetlists,
   importLocalSetlistsToCloud,
 } from "@/lib/db/setlists";
+import { getSetlistCommentCounts } from "@/lib/db/setlistComments";
 import { getApprovedMemberships, type TeamMembership } from "@/lib/db/teamMemberships";
 import { clearSetlists, deleteSetlist, duplicateSetlist, getSetlists, getStoredSetlists } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -32,6 +33,7 @@ export default function SetlistsPage() {
   const [importing, setImporting] = useState(false);
   const [memberships, setMemberships] = useState<TeamMembership[]>([]);
   const [filter, setFilter] = useState("all");
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
 
   const filteredSetlists = setlists.filter((setlist) => {
     if (filter === "all") return true;
@@ -48,6 +50,7 @@ export default function SetlistsPage() {
       if (!isSupabaseConfigured()) {
         const browserSetlists = getSetlists();
         setSetlists(browserSetlists);
+        setCommentCounts({});
         setStorageMode("local");
         setLoaded(true);
         return;
@@ -57,6 +60,7 @@ export default function SetlistsPage() {
       if (!user) {
         const browserSetlists = getSetlists();
         setSetlists(browserSetlists);
+        setCommentCounts({});
         setStorageMode("local");
         setLoaded(true);
         return;
@@ -71,6 +75,8 @@ export default function SetlistsPage() {
       const [cloudSetlists, approvedMemberships] = await Promise.all([getCloudSetlists(), getApprovedMemberships()]);
       setSetlists(cloudSetlists);
       setMemberships(approvedMemberships);
+      const counts = await getSetlistCommentCounts(cloudSetlists.map((setlist) => setlist.id)).catch(() => new Map<string, number>());
+      setCommentCounts(Object.fromEntries(counts));
       setStorageMode("cloud");
       setLoaded(true);
     }
@@ -78,6 +84,7 @@ export default function SetlistsPage() {
     loadSetlists().catch((error) => {
       setLoadError(error instanceof Error ? error.message : "콘티 목록을 불러오지 못했습니다.");
       setSetlists(getSetlists());
+      setCommentCounts({});
       setStorageMode("local");
       setLoaded(true);
     });
@@ -98,6 +105,11 @@ export default function SetlistsPage() {
         deleteSetlist(deleteTarget.id);
       }
       setSetlists((current) => current.filter((setlist) => setlist.id !== deleteTarget.id));
+      setCommentCounts((current) => {
+        const next = { ...current };
+        delete next[deleteTarget.id];
+        return next;
+      });
       setDeleteTarget(null);
       setDeleteError("");
     } catch (error) {
@@ -116,7 +128,10 @@ export default function SetlistsPage() {
     try {
       setImporting(true);
       const imported = await importLocalSetlistsToCloud(localSetlists);
-      setSetlists(await getCloudSetlists());
+      const cloudSetlists = await getCloudSetlists();
+      setSetlists(cloudSetlists);
+      const counts = await getSetlistCommentCounts(cloudSetlists.map((setlist) => setlist.id)).catch(() => new Map<string, number>());
+      setCommentCounts(Object.fromEntries(counts));
       setMessage(`${imported.length}개의 임시 콘티를 계정 저장소로 가져왔습니다.`);
       if (window.confirm("가져온 뒤 이 브라우저의 임시 콘티를 비울까요?")) {
         clearSetlists();
@@ -209,6 +224,7 @@ export default function SetlistsPage() {
             <SetlistCard
               key={setlist.id}
               setlist={setlist}
+              commentCount={storageMode === "cloud" ? commentCounts[setlist.id] ?? 0 : undefined}
               onDelete={handleDeleteRequest}
               onDuplicate={handleDuplicate}
             />

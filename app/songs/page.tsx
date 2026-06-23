@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { createBlankSong } from "@/lib/factories";
+import { SongTagsEditor } from "@/components/SongTagsEditor";
 import { deleteCloudSongFromLibrary, getCloudSongLibrary, saveCloudSongToLibrary } from "@/lib/db/savedSongs";
+import { normalizeTagName, updateSongTags } from "@/lib/db/songTags";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { SavedSong, Song } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
@@ -14,27 +16,44 @@ export default function SongsPage() {
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Song>(() => createBlankSong());
+  const [draftTags, setDraftTags] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const allTags = useMemo(() => {
+    const tags = new Map<string, string>();
+    for (const item of songs) {
+      for (const tag of item.tags ?? []) {
+        if (!tags.has(tag.normalizedName)) tags.set(tag.normalizedName, tag.name);
+      }
+    }
+    return Array.from(tags.values()).sort((a, b) => a.localeCompare(b, "ko-KR"));
+  }, [songs]);
+
   const filteredSongs = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko-KR");
+    const normalizedSelectedTags = selectedTags.map(normalizeTagName);
     return songs.filter((item) => {
-      if (!normalizedQuery) return true;
-      return [
+      const songTagNames = item.tags?.map((tag) => tag.name) ?? [];
+      const songNormalizedTags = new Set(item.tags?.map((tag) => tag.normalizedName) ?? []);
+      const matchesQuery = !normalizedQuery || [
         item.song.title,
         item.song.description,
         item.song.originalKey,
         item.song.practiceKey,
         item.song.chordMemo,
         item.song.highlights.join(" "),
+        songTagNames.join(" "),
       ]
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase("ko-KR")
         .includes(normalizedQuery);
+      const matchesTags = normalizedSelectedTags.every((tag) => songNormalizedTags.has(tag));
+      return matchesQuery && matchesTags;
     });
-  }, [query, songs]);
+  }, [query, selectedTags, songs]);
 
   useEffect(() => {
     async function loadSongs() {
@@ -56,13 +75,24 @@ export default function SongsPage() {
   function resetForm() {
     setEditingId(null);
     setDraft(createBlankSong());
+    setDraftTags([]);
   }
 
   function selectSong(savedSong: SavedSong) {
     setEditingId(savedSong.id);
     setDraft({ ...savedSong.song });
+    setDraftTags((savedSong.tags ?? []).map((tag) => tag.name));
     setMessage("");
     setError("");
+  }
+
+  function toggleTagFilter(tag: string) {
+    const normalized = normalizeTagName(tag);
+    setSelectedTags((current) =>
+      current.some((item) => normalizeTagName(item) === normalized)
+        ? current.filter((item) => normalizeTagName(item) !== normalized)
+        : [...current, tag],
+    );
   }
 
   function updateDraft(patch: Partial<Song>) {
@@ -92,6 +122,7 @@ export default function SongsPage() {
 
     try {
       const saved = await saveCloudSongToLibrary(draft, true);
+      await updateSongTags(saved.id, draftTags);
       setSongs(await getCloudSongLibrary());
       setMessage(`${saved.song.title}을 보관함에 저장했습니다.`);
       resetForm();
@@ -222,6 +253,7 @@ export default function SongsPage() {
                   placeholder="G - D - Em - C"
                 />
               </label>
+              <SongTagsEditor tags={draftTags} onChange={setDraftTags} usedTags={allTags} />
               <button type="submit" className="btn-primary lg:col-span-2">
                 {editingId ? "수정 저장" : "보관함에 저장"}
               </button>
@@ -243,12 +275,54 @@ export default function SongsPage() {
               </label>
             </div>
 
+            {allTags.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="field-label">태그 필터</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">여러 태그를 선택하면 모두 포함한 곡만 보여줍니다.</p>
+                  </div>
+                  {selectedTags.length > 0 ? (
+                    <button type="button" onClick={() => setSelectedTags([])} className="btn-secondary min-h-9 px-3 text-xs">
+                      필터 초기화
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {allTags.map((tag) => {
+                    const selected = selectedTags.some((item) => normalizeTagName(item) === normalizeTagName(tag));
+                    return (
+                      <button
+                        key={normalizeTagName(tag)}
+                        type="button"
+                        onClick={() => toggleTagFilter(tag)}
+                        className={
+                          selected
+                            ? "rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white"
+                            : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        }
+                      >
+                        #{tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
             {songs.length === 0 ? (
               <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
                 자주 부르는 곡을 저장해두면 콘티를 더 빠르게 만들 수 있습니다.
               </div>
             ) : filteredSongs.length === 0 ? (
-              <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">검색 결과가 없습니다.</p>
+              <div className="mt-4 rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-500">
+                <p>{selectedTags.length > 0 || query.trim() ? "검색어와 태그 조건에 맞는 곡이 없습니다." : "검색 결과가 없습니다."}</p>
+                {selectedTags.length > 0 ? (
+                  <button type="button" onClick={() => setSelectedTags([])} className="btn-secondary mt-3 min-h-10 px-3">
+                    필터 초기화
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {filteredSongs.map((item) => (
@@ -260,6 +334,7 @@ export default function SongsPage() {
                     <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">
                       {item.song.sections.map((section) => section.name).join(" - ") || item.song.description || "곡 설명 없음"}
                     </p>
+                    <SongTagBadges tags={(item.tags ?? []).map((tag) => tag.name)} />
                     <div className="mt-4 flex gap-2">
                       <button type="button" onClick={() => selectSong(item)} className="btn-secondary min-h-10 flex-1 px-3">
                         수정
@@ -275,6 +350,25 @@ export default function SongsPage() {
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function SongTagBadges({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return null;
+  const visibleTags = tags.slice(0, 3);
+  const remainingCount = tags.length - visibleTags.length;
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {visibleTags.map((tag) => (
+        <span key={normalizeTagName(tag)} className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">
+          #{tag}
+        </span>
+      ))}
+      {remainingCount > 0 ? (
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">+{remainingCount}</span>
+      ) : null}
     </div>
   );
 }

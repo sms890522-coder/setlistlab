@@ -581,6 +581,34 @@ before update on public.saved_songs
 for each row
 execute function public.set_updated_at();
 
+create table if not exists public.song_tags (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  song_id uuid not null references public.saved_songs(id) on delete cascade,
+  name text not null,
+  normalized_name text not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, song_id, normalized_name),
+  constraint song_tags_name_check check (
+    length(btrim(name)) > 0
+    and length(name) <= 30
+    and length(btrim(normalized_name)) > 0
+    and length(normalized_name) <= 30
+  )
+);
+
+create index if not exists song_tags_user_idx
+on public.song_tags (user_id);
+
+create index if not exists song_tags_song_idx
+on public.song_tags (song_id);
+
+create index if not exists song_tags_user_normalized_idx
+on public.song_tags (user_id, normalized_name);
+
+create index if not exists song_tags_user_song_idx
+on public.song_tags (user_id, song_id);
+
 create table if not exists public.setlists (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -650,6 +678,51 @@ before update on public.setlists
 for each row
 execute function public.set_updated_at();
 
+create table if not exists public.setlist_comments (
+  id uuid primary key default gen_random_uuid(),
+  setlist_id uuid not null references public.setlists(id) on delete cascade,
+  team_id uuid references public.teams(id) on delete cascade,
+  author_id uuid references auth.users(id) on delete set null,
+  content text not null,
+  is_deleted boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint setlist_comments_content_check check (
+    length(btrim(content)) > 0
+    and length(content) <= 1000
+  )
+);
+
+create index if not exists setlist_comments_setlist_created_idx
+on public.setlist_comments (setlist_id, created_at);
+
+create index if not exists setlist_comments_team_created_idx
+on public.setlist_comments (team_id, created_at)
+where team_id is not null;
+
+create index if not exists setlist_comments_author_idx
+on public.setlist_comments (author_id);
+
+drop trigger if exists setlist_comments_set_updated_at on public.setlist_comments;
+create trigger setlist_comments_set_updated_at
+before update on public.setlist_comments
+for each row
+execute function public.set_updated_at();
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1
+       from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'setlist_comments'
+     ) then
+    alter publication supabase_realtime add table public.setlist_comments;
+  end if;
+end $$;
+
 create table if not exists public.setlist_assignments (
   id uuid primary key default gen_random_uuid(),
   setlist_id uuid not null references public.setlists(id) on delete cascade,
@@ -704,6 +777,7 @@ create table if not exists public.notifications (
       'team_notice_comment_created',
       'team_setlist_created',
       'team_setlist_updated',
+      'team_setlist_comment_created',
       'team_invite_requested',
       'team_invite_approved',
       'team_deputy_assigned',
@@ -747,6 +821,7 @@ add constraint notifications_type_check check (
     'team_notice_comment_created',
     'team_setlist_created',
     'team_setlist_updated',
+    'team_setlist_comment_created',
     'team_invite_requested',
     'team_invite_approved',
     'team_deputy_assigned',
@@ -838,7 +913,9 @@ alter table public.team_post_comments enable row level security;
 alter table public.team_calendar_events enable row level security;
 alter table public.team_event_availability enable row level security;
 alter table public.saved_songs enable row level security;
+alter table public.song_tags enable row level security;
 alter table public.setlists enable row level security;
+alter table public.setlist_comments enable row level security;
 alter table public.setlist_assignments enable row level security;
 alter table public.shared_setlists enable row level security;
 alter table public.notifications enable row level security;
@@ -1593,6 +1670,129 @@ begin
     updated_at = v_sent_at
   where id = v_setlist.id;
 
+  return v_inserted_count > 0;
+end;
+$$;
+
+drop function if exists public.create_team_setlist_comment_notifications(uuid);
+
+create function public.create_team_setlist_comment_notifications(p_comment_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_comment public.setlist_comments;
+  v_setlist public.setlists;
+  v_author_name text;
+  v_inserted_count integer := 0;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다.';
+  end if;
+
+  select *
+  into v_comment
+  from public.setlist_comments
+  where id = p_comment_id;
+
+  if v_comment.id is null then
+    raise exception '댓글을 찾을 수 없습니다.';
+  end if;
+
+  if v_comment.is_deleted then
+    return false;
+  end if;
+
+  if v_comment.author_id <> auth.uid() then
+    raise exception '본인이 작성한 댓글만 알림을 만들 수 있습니다.';
+  end if;
+
+  select *
+  into v_setlist
+  from public.setlists setlists
+  where setlists.id = v_comment.setlist_id
+    and (
+      (v_comment.team_id is null and setlists.team_id is null)
+      or setlists.team_id = v_comment.team_id
+    );
+
+  if v_setlist.id is null then
+    raise exception '콘티를 찾을 수 없습니다.';
+  end if;
+
+  if v_setlist.team_id is null then
+    return false;
+  end if;
+
+  if v_comment.team_id is null or v_comment.team_id <> v_setlist.team_id then
+    raise exception '댓글의 팀 정보가 올바르지 않습니다.';
+  end if;
+
+  if not public.is_team_approved_member(v_comment.team_id, auth.uid()) then
+    raise exception '이 콘티에 댓글을 작성할 권한이 없습니다.';
+  end if;
+
+  select nullif(trim(display_name), '')
+  into v_author_name
+  from public.profiles
+  where id = auth.uid();
+
+  insert into public.notifications (
+    user_id,
+    team_id,
+    type,
+    title,
+    body,
+    link_url,
+    source_type,
+    source_id
+  )
+  with candidate_users as (
+    select v_setlist.user_id as user_id
+
+    union
+
+    select comments.author_id as user_id
+    from public.setlist_comments comments
+    where comments.setlist_id = v_comment.setlist_id
+      and comments.team_id = v_comment.team_id
+      and comments.author_id is not null
+      and not comments.is_deleted
+
+    union
+
+    select memberships.user_id
+    from public.team_memberships memberships
+    where memberships.team_id = v_comment.team_id
+      and memberships.status = 'approved'
+      and memberships.role in ('owner', 'admin')
+      and memberships.removed_at is null
+  ),
+  target_users as (
+    select distinct candidate_users.user_id
+    from candidate_users
+    join public.team_memberships memberships
+      on memberships.team_id = v_comment.team_id
+     and memberships.user_id = candidate_users.user_id
+     and memberships.status = 'approved'
+     and memberships.removed_at is null
+    where candidate_users.user_id <> auth.uid()
+  )
+  select
+    target_users.user_id,
+    v_comment.team_id,
+    'team_setlist_comment_created',
+    '콘티에 새 댓글이 달렸습니다',
+    left(coalesce(v_author_name, '팀원') || ': ' || regexp_replace(v_comment.content, '[[:space:]]+', ' ', 'g'), 180),
+    '/setlists/' || v_comment.setlist_id::text,
+    'setlist_comment',
+    v_comment.id
+  from target_users
+  on conflict do nothing;
+
+  get diagnostics v_inserted_count = row_count;
   return v_inserted_count > 0;
 end;
 $$;
@@ -2559,6 +2759,59 @@ using (
   or (team_id is not null and public.is_team_admin(team_id, auth.uid()))
 );
 
+drop policy if exists "song_tags_select_own" on public.song_tags;
+create policy "song_tags_select_own"
+on public.song_tags
+for select
+using (auth.uid() = user_id);
+
+drop policy if exists "song_tags_insert_own_accessible_song" on public.song_tags;
+create policy "song_tags_insert_own_accessible_song"
+on public.song_tags
+for insert
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.saved_songs songs
+    where songs.id = public.song_tags.song_id
+      and (
+        songs.user_id = auth.uid()
+        or (
+          songs.team_id is not null
+          and public.is_team_approved_member(songs.team_id, auth.uid())
+        )
+      )
+  )
+);
+
+drop policy if exists "song_tags_update_own" on public.song_tags;
+create policy "song_tags_update_own"
+on public.song_tags
+for update
+using (auth.uid() = user_id)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.saved_songs songs
+    where songs.id = public.song_tags.song_id
+      and (
+        songs.user_id = auth.uid()
+        or (
+          songs.team_id is not null
+          and public.is_team_approved_member(songs.team_id, auth.uid())
+        )
+      )
+  )
+);
+
+drop policy if exists "song_tags_delete_own" on public.song_tags;
+create policy "song_tags_delete_own"
+on public.song_tags
+for delete
+using (auth.uid() = user_id);
+
 drop policy if exists "setlists_select_own_or_public" on public.setlists;
 create policy "setlists_select_own_or_public"
 on public.setlists
@@ -2609,6 +2862,119 @@ for delete
 using (
   auth.uid() = user_id
   or (team_id is not null and public.is_team_admin(team_id, auth.uid()))
+);
+
+drop policy if exists "setlist_comments_select_visible_setlist" on public.setlist_comments;
+create policy "setlist_comments_select_visible_setlist"
+on public.setlist_comments
+for select
+using (
+  exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.setlist_comments.setlist_id
+      and (
+        (
+          setlists.team_id is null
+          and public.setlist_comments.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+        or (
+          setlists.team_id is not null
+          and public.setlist_comments.team_id = setlists.team_id
+          and public.is_team_approved_member(setlists.team_id, auth.uid())
+          and (
+            setlists.status = 'published'
+            or setlists.user_id = auth.uid()
+            or public.is_team_admin(setlists.team_id, auth.uid())
+          )
+        )
+      )
+  )
+);
+
+drop policy if exists "setlist_comments_insert_visible_setlist" on public.setlist_comments;
+create policy "setlist_comments_insert_visible_setlist"
+on public.setlist_comments
+for insert
+with check (
+  auth.uid() = author_id
+  and exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.setlist_comments.setlist_id
+      and (
+        (
+          setlists.team_id is null
+          and public.setlist_comments.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+        or (
+          setlists.team_id is not null
+          and public.setlist_comments.team_id = setlists.team_id
+          and public.is_team_approved_member(setlists.team_id, auth.uid())
+          and (
+            setlists.status = 'published'
+            or setlists.user_id = auth.uid()
+            or public.is_team_admin(setlists.team_id, auth.uid())
+          )
+        )
+      )
+  )
+);
+
+drop policy if exists "setlist_comments_update_self" on public.setlist_comments;
+create policy "setlist_comments_update_self"
+on public.setlist_comments
+for update
+using (
+  auth.uid() = author_id
+  and not is_deleted
+)
+with check (
+  auth.uid() = author_id
+  and exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.setlist_comments.setlist_id
+      and (
+        (
+          setlists.team_id is null
+          and public.setlist_comments.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+        or (
+          setlists.team_id is not null
+          and public.setlist_comments.team_id = setlists.team_id
+          and public.is_team_approved_member(setlists.team_id, auth.uid())
+          and (
+            setlists.status = 'published'
+            or setlists.user_id = auth.uid()
+            or public.is_team_admin(setlists.team_id, auth.uid())
+          )
+        )
+      )
+  )
+);
+
+drop policy if exists "setlist_comments_soft_delete_admin" on public.setlist_comments;
+create policy "setlist_comments_soft_delete_admin"
+on public.setlist_comments
+for update
+using (
+  team_id is not null
+  and public.is_team_admin(team_id, auth.uid())
+)
+with check (
+  team_id is not null
+  and public.is_team_admin(team_id, auth.uid())
+  and is_deleted = true
+  and exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.setlist_comments.setlist_id
+      and setlists.team_id = public.setlist_comments.team_id
+  )
 );
 
 drop policy if exists "setlist_assignments_select_own_or_public_setlist" on public.setlist_assignments;

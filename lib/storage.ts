@@ -3,7 +3,7 @@
 import { createSampleSetlist, SAMPLE_SETLIST_ID, SAMPLE_YOUTUBE_URLS } from "./sampleData";
 import { cloneSetlist } from "./factories";
 import { createId } from "./id";
-import type { PartNote, SavedSong, Setlist, Song, SongLink, SongSection, TeamAssignment } from "./types";
+import type { PartNote, SavedSong, Setlist, Song, SongLink, SongSection, SongTag, TeamAssignment } from "./types";
 import { extractYouTubeVideoId } from "./youtube";
 
 const STORAGE_KEY = "conti-practice-room:setlists";
@@ -342,8 +342,19 @@ function normalizeSavedSong(value: unknown): SavedSong {
   return {
     id: value.id,
     song: normalizeSong(value.song),
+    tags: Array.isArray(value.tags) ? value.tags.filter(isRecord).map(normalizeSongTag) : [],
     createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now,
+  };
+}
+
+function normalizeSongTag(value: Record<string, unknown>): SongTag {
+  return {
+    id: typeof value.id === "string" ? value.id : createId("song-tag"),
+    songId: typeof value.songId === "string" ? value.songId : "",
+    name: typeof value.name === "string" ? value.name : "",
+    normalizedName: typeof value.normalizedName === "string" ? value.normalizedName : "",
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
   };
 }
 

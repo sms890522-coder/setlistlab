@@ -3,11 +3,12 @@ import type { Setlist } from "@/lib/types";
 
 type SetlistCardProps = {
   setlist: Setlist;
+  commentCount?: number;
   onDelete?: (id: string) => void;
   onDuplicate?: (id: string) => void;
 };
 
-export function SetlistCard({ setlist, onDelete, onDuplicate }: SetlistCardProps) {
+export function SetlistCard({ setlist, commentCount, onDelete, onDuplicate }: SetlistCardProps) {
   const songCount = setlist.songs.length;
 
   return (
@@ -25,6 +26,9 @@ export function SetlistCard({ setlist, onDelete, onDuplicate }: SetlistCardProps
           )}
           <div className="flex flex-wrap gap-2 pt-1 text-xs font-semibold text-slate-600">
             <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">곡 {songCount}개</span>
+            {typeof commentCount === "number" ? (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">댓글 {commentCount}개</span>
+            ) : null}
             <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700">
               {new Date(setlist.updatedAt).toLocaleDateString("ko-KR")} 수정
             </span>

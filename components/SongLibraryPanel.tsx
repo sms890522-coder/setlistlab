@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeTagName } from "@/lib/db/songTags";
 import type { SavedSong } from "@/lib/types";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -15,6 +16,7 @@ type SortMode = "recent" | "title" | "key";
 export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelProps) {
   const [query, setQuery] = useState("");
   const [keyFilter, setKeyFilter] = useState("");
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [deleteTarget, setDeleteTarget] = useState<SavedSong | null>(null);
   const availableKeys = useMemo(
@@ -24,10 +26,22 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
       ).sort((a, b) => a.localeCompare(b, "ko-KR")),
     [songs],
   );
+  const availableTags = useMemo(() => {
+    const tags = new Map<string, string>();
+    for (const item of songs) {
+      for (const tag of item.tags ?? []) {
+        if (!tags.has(tag.normalizedName)) tags.set(tag.normalizedName, tag.name);
+      }
+    }
+    return Array.from(tags.values()).sort((a, b) => a.localeCompare(b, "ko-KR"));
+  }, [songs]);
   const filteredSongs = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko-KR");
+    const normalizedTagFilters = tagFilters.map(normalizeTagName);
     const matchedSongs = songs.filter((item) => {
       const songKey = item.song.practiceKey || item.song.originalKey || "";
+      const songTagNames = item.tags?.map((tag) => tag.name) ?? [];
+      const songNormalizedTags = new Set(item.tags?.map((tag) => tag.normalizedName) ?? []);
       const searchable = [
         item.song.title,
         item.song.description,
@@ -35,12 +49,14 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
         item.song.originalKey,
         String(item.song.bpm ?? ""),
         item.song.highlights.join(" "),
+        songTagNames.join(" "),
       ]
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase("ko-KR");
+      const matchesTags = normalizedTagFilters.every((tag) => songNormalizedTags.has(tag));
 
-      return (!normalizedQuery || searchable.includes(normalizedQuery)) && (!keyFilter || songKey === keyFilter);
+      return (!normalizedQuery || searchable.includes(normalizedQuery)) && (!keyFilter || songKey === keyFilter) && matchesTags;
     });
 
     return [...matchedSongs].sort((a, b) => {
@@ -55,7 +71,16 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
       }
       return b.updatedAt.localeCompare(a.updatedAt);
     });
-  }, [keyFilter, query, songs, sortMode]);
+  }, [keyFilter, query, songs, sortMode, tagFilters]);
+
+  function toggleTagFilter(tag: string) {
+    const normalized = normalizeTagName(tag);
+    setTagFilters((current) =>
+      current.some((item) => normalizeTagName(item) === normalized)
+        ? current.filter((item) => normalizeTagName(item) !== normalized)
+        : [...current, tag],
+    );
+  }
 
   return (
     <section className="card p-5">
@@ -100,6 +125,7 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
           onClick={() => {
             setQuery("");
             setKeyFilter("");
+            setTagFilters([]);
             setSortMode("recent");
           }}
           className="btn-secondary min-h-11 px-3"
@@ -108,12 +134,54 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
         </button>
       </div>
 
+      {availableTags.length > 0 ? (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="field-label">태그 필터</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">선택한 태그를 모두 가진 곡만 표시합니다.</p>
+            </div>
+            {tagFilters.length > 0 ? (
+              <button type="button" onClick={() => setTagFilters([])} className="btn-secondary min-h-9 px-3 text-xs">
+                태그 초기화
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {availableTags.map((tag) => {
+              const selected = tagFilters.some((item) => normalizeTagName(item) === normalizeTagName(tag));
+              return (
+                <button
+                  key={normalizeTagName(tag)}
+                  type="button"
+                  onClick={() => toggleTagFilter(tag)}
+                  className={
+                    selected
+                      ? "rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white"
+                      : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  }
+                >
+                  #{tag}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       {songs.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
           아직 저장한 곡이 없습니다. 곡 입력 카드 아래의 보관함 저장 버튼을 눌러보세요.
         </div>
       ) : filteredSongs.length === 0 ? (
-        <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">검색 결과가 없습니다.</p>
+        <div className="mt-4 rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-500">
+          <p>{tagFilters.length > 0 || query.trim() ? "검색어와 태그 조건에 맞는 곡이 없습니다." : "검색 결과가 없습니다."}</p>
+          {tagFilters.length > 0 ? (
+            <button type="button" onClick={() => setTagFilters([])} className="btn-secondary mt-3 min-h-10 px-3">
+              필터 초기화
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {filteredSongs.map((item) => (
@@ -125,6 +193,7 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
               <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">
                 {item.song.sections.map((section) => section.name).filter(Boolean).join(" - ") || "곡 구성 없음"}
               </p>
+              <SongTagBadges tags={(item.tags ?? []).map((tag) => tag.name)} />
               <div className="mt-4 flex gap-2">
                 <button type="button" onClick={() => onAdd(item)} className="btn-primary min-h-10 flex-1 px-3">
                   불러오기
@@ -184,5 +253,24 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
           )
         : null}
     </section>
+  );
+}
+
+function SongTagBadges({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return null;
+  const visibleTags = tags.slice(0, 3);
+  const remainingCount = tags.length - visibleTags.length;
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {visibleTags.map((tag) => (
+        <span key={normalizeTagName(tag)} className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">
+          #{tag}
+        </span>
+      ))}
+      {remainingCount > 0 ? (
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">+{remainingCount}</span>
+      ) : null}
+    </div>
   );
 }

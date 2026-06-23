@@ -43,8 +43,17 @@ export type Song = {
 export type SavedSong = {
   id: string;
   song: Song;
+  tags?: SongTag[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type SongTag = {
+  id: string;
+  songId: string;
+  name: string;
+  normalizedName: string;
+  createdAt: string;
 };
 
 export type SongSection = {

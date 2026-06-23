@@ -3,8 +3,9 @@
 import { createId } from "@/lib/id";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { SavedSong, Song } from "@/lib/types";
+import type { SavedSong, Song, SongTag } from "@/lib/types";
 import { extractYouTubeVideoId } from "@/lib/youtube";
+import { getSongTagsForSongs } from "./songTags";
 
 type SavedSongRow = {
   id: string;
@@ -34,7 +35,9 @@ export async function getCloudSongLibrary() {
     throw new Error(error.message || "곡 보관함을 불러오지 못했습니다.");
   }
 
-  return (data ?? []).map(rowToSavedSong);
+  const rows = data ?? [];
+  const tagsBySong = await getSongTagsForSongs(rows.map((row) => row.id)).catch(() => new Map<string, SongTag[]>());
+  return rows.map((row) => rowToSavedSong(row, tagsBySong.get(row.id) ?? []));
 }
 
 export async function getCloudSavedSongByTitle(title: string) {
@@ -123,7 +126,7 @@ export async function createCloudSavedSong(input: Partial<Song> & { title: strin
   return saveCloudSongToLibrary(song, true);
 }
 
-function rowToSavedSong(row: SavedSongRow): SavedSong {
+function rowToSavedSong(row: SavedSongRow, tags: SongTag[] = []): SavedSong {
   const songFromJson = row.song_data ?? ({} as Partial<Song>);
   const song: Song = normalizeSong({
     id: songFromJson.id ?? createId("library-song"),
@@ -152,6 +155,7 @@ function rowToSavedSong(row: SavedSongRow): SavedSong {
   return {
     id: row.id,
     song,
+    tags,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

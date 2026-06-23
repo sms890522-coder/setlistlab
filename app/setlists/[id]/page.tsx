@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ExportImportPanel } from "@/components/ExportImportPanel";
+import { SetlistComments } from "@/components/SetlistComments";
 import { SongCard } from "@/components/SongCard";
 import { TeamAssignmentsView } from "@/components/TeamAssignmentsView";
 import { getCurrentUser } from "@/lib/auth";
@@ -11,8 +12,8 @@ import {
   type AvailabilityStatus,
   type TeamCalendarEventWithAvailability,
 } from "@/lib/db/teamCalendar";
-import { duplicateCloudSetlist, getCloudSetlist } from "@/lib/db/setlists";
-import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
+import { duplicateCloudSetlist, getCloudSetlist, type CloudSetlist } from "@/lib/db/setlists";
+import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -32,6 +33,8 @@ export default function SetlistDetailPage() {
   const [linkedEvents, setLinkedEvents] = useState<TeamCalendarEventWithAvailability[]>([]);
   const [loadError, setLoadError] = useState("");
   const [canEdit, setCanEdit] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [teamMembership, setTeamMembership] = useState<TeamMembership | null>(null);
 
   useEffect(() => {
     setLoadError("");
@@ -40,11 +43,13 @@ export default function SetlistDetailPage() {
       if (isSupabaseConfigured()) {
         const user = await getCurrentUser();
         if (user) {
+          setCurrentUserId(user.id);
           const cloudSetlist = await getCloudSetlist(params.id);
           if (cloudSetlist) {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
             const calendarEvents = cloudSetlist.teamId ? await getLinkedCalendarEventsForSetlist(cloudSetlist.id).catch(() => []) : [];
             setCanEdit(Boolean(cloudSetlist.ownerId === user.id || canManageTeamSetlist(membership)));
+            setTeamMembership(membership);
             setSetlist(cloudSetlist);
             setLinkedEvents(calendarEvents);
             setStorageMode("cloud");
@@ -56,6 +61,8 @@ export default function SetlistDetailPage() {
       }
 
       setCanEdit(true);
+      setCurrentUserId(null);
+      setTeamMembership(null);
       setSetlist(getSetlist(params.id) ?? null);
       setLinkedEvents([]);
       setStorageMode("local");
@@ -65,6 +72,8 @@ export default function SetlistDetailPage() {
 
     loadSetlist().catch((error) => {
       setLoadError(error instanceof Error ? error.message : "콘티를 불러오지 못했습니다.");
+      setCurrentUserId(null);
+      setTeamMembership(null);
       setSetlist(getSetlist(params.id) ?? null);
       setLinkedEvents([]);
       setStorageMode("local");
@@ -113,6 +122,11 @@ export default function SetlistDetailPage() {
   }
 
   const completedCount = setlist.songs.filter((song) => completedSongs[song.id]).length;
+  const cloudOwnerId = storageMode === "cloud" ? (setlist as CloudSetlist).ownerId : undefined;
+  const canUseComments =
+    storageMode === "cloud" &&
+    Boolean(setlist.teamId ? teamMembership?.status === "approved" : cloudOwnerId && cloudOwnerId === currentUserId);
+  const canManageComments = Boolean(setlist.teamId ? canManageTeamSetlist(teamMembership) : cloudOwnerId && cloudOwnerId === currentUserId);
 
   return (
     <div data-guide-shot="view-setlist" className="page-shell space-y-6">
@@ -213,6 +227,15 @@ export default function SetlistDetailPage() {
           </div>
         )}
       </section>
+
+      {canUseComments ? (
+        <SetlistComments
+          setlistId={setlist.id}
+          canComment={canUseComments}
+          canManageComments={canManageComments}
+          scopeLabel={setlist.teamId ? "팀원 전용" : "개인 콘티"}
+        />
+      ) : null}
 
       <ExportImportPanel setlist={setlist} onImported={(imported) => router.push(`/setlists/${imported.id}`)} />
     </div>

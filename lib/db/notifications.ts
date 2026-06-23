@@ -18,6 +18,7 @@ export type NotificationType =
   | "team_notice_comment_created"
   | "team_setlist_created"
   | "team_setlist_updated"
+  | "team_setlist_comment_created"
   | "team_invite_requested"
   | "team_invite_approved"
   | "team_deputy_assigned"
