@@ -23,7 +23,7 @@ export default function AuthCallbackPage() {
       const oauthError = searchParams.get("error");
 
       if (oauthError) {
-        router.replace(`/login?error=oauth_callback_failed&redirect=${encodeURIComponent(nextPath)}`);
+        router.replace(`/login?error=${getOAuthErrorCode(searchParams)}&redirect=${encodeURIComponent(nextPath)}`);
         return;
       }
 
@@ -46,8 +46,8 @@ export default function AuthCallbackPage() {
         }
 
         router.replace(nextPath);
-      } catch {
-        router.replace(`/login?error=oauth_callback_failed&redirect=${encodeURIComponent(nextPath)}`);
+      } catch (callbackError) {
+        router.replace(`/login?error=${getOAuthErrorCodeFromError(callbackError)}&redirect=${encodeURIComponent(nextPath)}`);
       }
     }
 
@@ -63,4 +63,31 @@ export default function AuthCallbackPage() {
       </section>
     </div>
   );
+}
+
+function getOAuthErrorCode(searchParams: URLSearchParams) {
+  const errorText = [
+    searchParams.get("error"),
+    searchParams.get("error_code"),
+    searchParams.get("error_description"),
+    searchParams.get("message"),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (errorText.includes("email") || errorText.includes("naver_email_missing")) {
+    return "oauth_email_missing";
+  }
+
+  return "oauth_callback_failed";
+}
+
+function getOAuthErrorCodeFromError(error: unknown) {
+  const errorText = error instanceof Error ? error.message.toLowerCase() : String(error ?? "").toLowerCase();
+  if (errorText.includes("email") || errorText.includes("naver_email_missing")) {
+    return "oauth_email_missing";
+  }
+
+  return "oauth_callback_failed";
 }

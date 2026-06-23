@@ -23,6 +23,8 @@ export default function LoginPage() {
     const authError = new URLSearchParams(window.location.search).get("error");
     if (authError === "oauth_callback_failed") {
       setError("로그인 처리 중 문제가 발생했습니다. 다시 로그인해 주세요.");
+    } else if (authError === "oauth_email_missing") {
+      setError("소셜 로그인에서 이메일 정보를 가져오지 못했습니다. Google 또는 이메일 로그인을 사용해 주세요.");
     } else if (authError === "oauth_not_configured") {
       setError("소셜 로그인 설정이 아직 준비되지 않았습니다. 관리자에게 문의해 주세요.");
     }

@@ -12,7 +12,9 @@ $$;
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
+  email text,
   display_name text not null,
+  avatar_url text,
   role text not null default '기타',
   custom_role text,
   church_name text,
@@ -22,6 +24,12 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+add column if not exists email text;
+
+alter table public.profiles
+add column if not exists avatar_url text;
 
 alter table public.profiles
 add column if not exists praise_team_name text;
