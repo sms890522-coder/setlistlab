@@ -99,7 +99,7 @@ export function NewSetlistCreator() {
       {!loaded ? (
         <div className="card p-8 text-sm text-slate-500">새 콘티 화면을 준비하는 중입니다.</div>
       ) : (
-        <form onSubmit={handleCreate} className="card space-y-4 p-5">
+        <form data-guide-shot="create-setlist" onSubmit={handleCreate} className="card space-y-4 p-5">
           <label className="block space-y-1">
             <span className="field-label">콘티 제목</span>
             <input value={title} onChange={(event) => setTitle(event.target.value)} className="field-input" placeholder="이번 주 예배 콘티" />

@@ -58,7 +58,7 @@ export function SongForm({
   }
 
   return (
-    <details className="card group overflow-hidden" open>
+    <details data-guide-shot="song-form-editor" className="card group overflow-hidden" open>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-slate-100 bg-white/80 p-4">
         <div className="min-w-0">
           <p className="text-xs font-bold text-blue-700">곡 {index + 1}</p>

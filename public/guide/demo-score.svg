@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200" role="img" aria-labelledby="title desc">
+  <title id="title">가이드용 코드 악보 이미지</title>
+  <desc id="desc">콘티연습실 사용설명서 캡처에 쓰는 샘플 악보 이미지입니다.</desc>
+  <rect width="900" height="1200" rx="24" fill="#ffffff"/>
+  <rect x="56" y="56" width="788" height="1088" rx="20" fill="#f8fafc" stroke="#dbeafe" stroke-width="4"/>
+  <text x="96" y="132" fill="#0f172a" font-family="Arial, sans-serif" font-size="46" font-weight="800">주님 말씀하시면</text>
+  <text x="96" y="204" fill="#2563eb" font-family="Arial, sans-serif" font-size="30" font-weight="800">Key G · BPM 72</text>
+  <text x="96" y="270" fill="#334155" font-family="Arial, sans-serif" font-size="32" font-weight="800">G - D - Em - C</text>
+  <text x="96" y="325" fill="#475569" font-family="Arial, sans-serif" font-size="26" font-weight="700">Intro - Verse 1 - Chorus - Bridge - Chorus</text>
+  <g stroke="#e2e8f0" stroke-width="8">
+    <line x1="96" y1="405" x2="804" y2="405"/>
+    <line x1="96" y1="485" x2="804" y2="485"/>
+    <line x1="96" y1="565" x2="804" y2="565"/>
+    <line x1="96" y1="645" x2="804" y2="645"/>
+    <line x1="96" y1="725" x2="804" y2="725"/>
+    <line x1="96" y1="805" x2="804" y2="805"/>
+    <line x1="96" y1="885" x2="804" y2="885"/>
+    <line x1="96" y1="965" x2="804" y2="965"/>
+  </g>
+  <g fill="#1e293b" font-family="Arial, sans-serif" font-size="24" font-weight="700">
+    <text x="106" y="390">Verse</text>
+    <text x="106" y="470">Chorus</text>
+    <text x="106" y="550">Bridge</text>
+    <text x="106" y="630">Chorus</text>
+  </g>
+  <g fill="#64748b" font-family="Arial, sans-serif" font-size="22" font-weight="600">
+    <text x="96" y="1060">보컬: 후렴 화음은 두 번째 반복부터 얇게</text>
+    <text x="96" y="1102">일렉: 딜레이 1/8D 느낌으로 공간 만들기</text>
+  </g>
+</svg>

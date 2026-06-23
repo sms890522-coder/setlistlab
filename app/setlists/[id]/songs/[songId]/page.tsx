@@ -208,7 +208,7 @@ export default function SongPracticePage() {
       )}
 
       <section className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-        <div className="card p-5">
+        <div data-guide-shot="song-form-navigation" className="card p-5">
           <h2 className="font-bold text-slate-950">곡 구성 및 구간이동</h2>
           {song.sections.length === 0 ? (
             <p className="mt-2 text-sm text-slate-500">아직 곡 구성 구간이 없습니다.</p>

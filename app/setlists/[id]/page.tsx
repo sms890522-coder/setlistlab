@@ -115,7 +115,7 @@ export default function SetlistDetailPage() {
   const completedCount = setlist.songs.filter((song) => completedSongs[song.id]).length;
 
   return (
-    <div className="page-shell space-y-6">
+    <div data-guide-shot="view-setlist" className="page-shell space-y-6">
       <section className="card overflow-hidden">
         <div className="bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5 sm:p-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

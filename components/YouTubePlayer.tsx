@@ -99,7 +99,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   }
 
   return (
-    <div className="space-y-4">
+    <div data-guide-shot="youtube-practice" className="space-y-4">
       <div className={onSectionsChange ? "grid gap-4 lg:grid-cols-2 lg:items-start" : ""}>
         {onSectionsChange ? (
           <div className="card order-1 p-4 lg:order-2">
@@ -184,7 +184,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         </div>
       </div>
 
-      <div className="card p-4">
+      <div data-guide-shot="playback-speed" className="card p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-bold text-slate-950">재생속도</h3>
@@ -247,7 +247,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         </div>
         {player.speedNotice ? <p className="mt-2 text-xs font-semibold text-amber-700">{player.speedNotice}</p> : null}
 
-        <div className="mt-4 flex flex-col gap-3 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div data-guide-shot="loop-control" className="mt-4 flex flex-col gap-3 rounded-lg bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-bold text-slate-900">구간반복</p>
             <p className="field-help">

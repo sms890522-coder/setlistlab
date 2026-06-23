@@ -11,7 +11,7 @@ export function SongImageGallery({ imageLinks = [] }: SongImageGalleryProps) {
   if (links.length === 0) return null;
 
   return (
-    <section className="card p-5">
+    <section data-guide-shot="score-image" className="card p-5">
       <h2 className="font-bold text-slate-950">곡 이미지</h2>
       <p className="mt-1 text-xs leading-5 text-slate-500">외부에 저장된 이미지를 링크로 불러옵니다.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">

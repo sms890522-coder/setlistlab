@@ -203,7 +203,7 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
 
   return (
     <div className="pdf-preview-shell">
-      <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div data-guide-shot="pdf-export" className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-bold text-blue-700">콘티 PDF 미리보기</p>
           <h1 className="mt-1 text-2xl font-black text-slate-950">{setlist.title || "제목 없는 콘티"}</h1>
@@ -233,7 +233,7 @@ function SetlistPdfPreview({ setlist }: { setlist: Setlist }) {
         </p>
       ) : null}
 
-      <article className="pdf-document">
+      <article data-guide-shot="pdf-customize" className="pdf-document">
         <section
           className={`pdf-cover-page ${hasVisibleCoverContent && setlist.songs.length > 0 ? "pdf-cover-page-with-songs" : ""} ${
             hasVisibleCoverContent ? "" : "no-print pdf-cover-page-hidden"

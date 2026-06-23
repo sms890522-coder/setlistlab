@@ -240,7 +240,7 @@ export function MetronomeTool({ initialBpm, initialBeats }: MetronomeToolProps) 
   const beats = Array.from({ length: timeSignature.beats }, (_, index) => index + 1);
 
   return (
-    <div className="space-y-6">
+    <div data-guide-shot="metronome" className="space-y-6">
       <section className="card overflow-hidden">
         <div className="border-b border-slate-100 bg-blue-50/60 p-5">
           <p className="text-xs font-bold text-blue-700">메트로놈</p>
