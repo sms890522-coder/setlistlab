@@ -117,41 +117,54 @@ export default async function GuideDemoPage({ params }: GuideDemoPageProps) {
 }
 
 function DemoPage({ children }: { children: React.ReactNode }) {
-  return <div className="page-shell space-y-5 pb-20">{children}</div>;
+  return <div className="page-shell space-y-5 pb-20 lg:space-y-8">{children}</div>;
 }
 
 function CreateSetlistDemo() {
   return (
     <DemoPage>
-      <section data-guide-shot="create-setlist" className="card overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5">
+      <section data-guide-shot="create-setlist" className="card overflow-hidden lg:grid lg:grid-cols-[0.9fr_1.35fr]">
+        <div className="bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5 lg:flex lg:flex-col lg:justify-between lg:p-8">
+          <div>
           <p className="text-sm font-black text-blue-700">새 콘티 만들기</p>
           <h1 className="mt-2 text-2xl font-black text-slate-950">6월 21일 주일예배 콘티</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">저장 버튼을 누르기 전까지 팀원들에게 알림이 가지 않습니다.</p>
-        </div>
-        <div className="space-y-4 p-5">
-          <Field label="콘티 제목" value="6월 21일 주일예배 콘티" />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="예배 날짜" value="2026-06-21" />
-            <Field label="예배 이름" value="주일 2부예배" />
           </div>
+          <div className="mt-6 hidden rounded-2xl border border-blue-100 bg-white/80 p-4 lg:block">
+            <p className="text-xs font-black text-blue-700">작성 흐름</p>
+            <p className="mt-2 text-sm font-bold leading-6 text-slate-700">콘티 정보 입력 → 곡 추가 → 송폼 정리 → 팀에 저장</p>
+          </div>
+        </div>
+        <div className="grid gap-4 p-5 lg:grid-cols-2 lg:p-6">
+          <Field label="콘티 제목" value="6월 21일 주일예배 콘티" />
           <Field label="저장 위치" value="은혜교회 / 주일 2부 찬양팀" />
-          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold leading-6 text-blue-800">
+          <Field label="예배 날짜" value="2026-06-21" />
+          <Field label="예배 이름" value="주일 2부예배" />
+          <Field label="전체 설명" value="고백에서 선포로 이어지는 흐름" />
+          <Field label="전체 강조사항" value="첫 곡은 절제하고 후반부에 다이내믹 넓히기" />
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold leading-6 text-blue-800 lg:col-span-2">
             팀에 저장하면 승인된 팀원에게 새 콘티 알림이 전송됩니다.
           </div>
-          <button type="button" className="btn-primary w-full">콘티 초안 만들기</button>
+          <button type="button" className="btn-primary w-full lg:col-span-2">콘티 초안 만들기</button>
         </div>
       </section>
 
-      <section data-guide-shot="song-form-editor" className="card overflow-hidden">
-        <div className="border-b border-slate-100 bg-white/80 p-4">
+      <section data-guide-shot="song-form-editor" className="card overflow-hidden lg:grid lg:grid-cols-[0.72fr_1.28fr]">
+        <div className="border-b border-slate-100 bg-white/80 p-4 lg:border-b-0 lg:border-r lg:p-6">
           <p className="text-xs font-bold text-blue-700">곡 1</p>
           <h2 className="mt-1 text-xl font-black text-slate-950">주님 말씀하시면</h2>
+          <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">유튜브 링크 확인 후 바로 아래에서 송폼을 만들 수 있습니다.</p>
+          <div className="mt-5 hidden space-y-2 text-sm font-bold text-slate-600 lg:block">
+            <p>Key G · BPM 72</p>
+            <p>어쿠스틱 G폼 · 카포 0</p>
+          </div>
         </div>
-        <div className="space-y-5 p-4">
-          <div className="grid gap-3">
+        <div className="grid gap-5 p-4 lg:grid-cols-[0.85fr_1.15fr] lg:p-6">
+          <div className="grid content-start gap-3">
             <Field label="곡 제목" value="주님 말씀하시면" />
             <Field label="유튜브 링크" value="https://www.youtube.com/watch?v=..." action="확인" />
+            <Field label="연습키" value="G" />
+            <Field label="BPM" value="72" />
           </div>
           <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -169,20 +182,22 @@ function CreateSetlistDemo() {
               ))}
             </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 lg:col-span-2">
             <div className="flex items-center justify-between">
               <h3 className="font-black text-slate-950">곡 구성</h3>
               <button type="button" className="btn-secondary min-h-10 px-3">구간 추가</button>
             </div>
-            {demoSongs[0].sections.slice(0, 3).map((section) => (
-              <div key={section.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-black text-slate-950">{section.name}</p>
-                  <p className="text-xs font-bold text-blue-700">{formatTime(section.startTime)} - {formatTime(section.endTime)}</p>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {demoSongs[0].sections.slice(0, 3).map((section) => (
+                <div key={section.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-black text-slate-950">{section.name}</p>
+                    <p className="text-xs font-bold text-blue-700">{formatTime(section.startTime)} - {formatTime(section.endTime)}</p>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{section.memo}</p>
                 </div>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{section.memo}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -193,8 +208,8 @@ function CreateSetlistDemo() {
 function ViewSetlistDemo() {
   return (
     <DemoPage>
-      <section data-guide-shot="view-setlist" className="space-y-4">
-        <div className="card overflow-hidden">
+      <section data-guide-shot="view-setlist" className="space-y-4 lg:grid lg:grid-cols-[1.4fr_0.8fr] lg:items-start lg:gap-4 lg:space-y-0">
+        <div className="card overflow-hidden lg:col-span-2">
           <div className="bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5">
             <p className="text-sm font-bold text-blue-700">{demoSetlist.worshipDate} · {demoSetlist.serviceName}</p>
             <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{demoSetlist.title}</h1>
@@ -226,11 +241,12 @@ function YoutubePracticeDemo() {
 
   return (
     <DemoPage>
-      <section data-guide-shot="youtube-practice" className="space-y-4">
-        <div>
+      <section data-guide-shot="youtube-practice" className="space-y-4 lg:grid lg:grid-cols-[0.75fr_1.25fr] lg:items-center lg:gap-5 lg:space-y-0">
+        <div className="card p-5">
           <p className="text-sm font-bold text-blue-700">{demoSetlist.title}</p>
           <h1 className="mt-2 text-3xl font-black text-slate-950">{demoSongs[0].title}</h1>
           <p className="mt-2 text-sm text-slate-500">연습키 G · 원키 G · BPM 72</p>
+          <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">팀원은 영상과 송폼을 함께 보면서 필요한 구간을 바로 연습할 수 있습니다.</p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-950">
           <div className="flex aspect-video items-center justify-center rounded-lg bg-gradient-to-br from-slate-950 to-slate-800 text-center text-white">
@@ -242,8 +258,8 @@ function YoutubePracticeDemo() {
         </div>
       </section>
 
-      <section data-guide-shot="playback-speed" className="card p-4">
-        <div className="flex flex-col gap-3">
+      <section data-guide-shot="playback-speed" className="card p-4 lg:p-5">
+        <div className="grid gap-3 lg:grid-cols-[0.8fr_1fr_1.25fr] lg:items-center">
           <div>
             <h2 className="font-bold text-slate-950">재생속도</h2>
             <p className="mt-1 text-sm font-bold text-slate-700">현재 00:56 / 03:24</p>
@@ -271,7 +287,7 @@ function YoutubePracticeDemo() {
         </div>
       </section>
 
-      <section data-guide-shot="loop-control" className="card p-4">
+      <section data-guide-shot="loop-control" className="card p-4 lg:max-w-3xl lg:p-5">
         <div className="rounded-lg bg-slate-50 p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -283,9 +299,12 @@ function YoutubePracticeDemo() {
         </div>
       </section>
 
-      <section data-guide-shot="song-form-navigation" className="card p-5">
-        <h2 className="font-bold text-slate-950">곡 구성 및 구간이동</h2>
-        <div className="mt-4 space-y-3">
+      <section data-guide-shot="song-form-navigation" className="card p-5 lg:grid lg:grid-cols-[0.55fr_1.45fr] lg:gap-5">
+        <div>
+          <h2 className="font-bold text-slate-950">곡 구성 및 구간이동</h2>
+          <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">구간을 누르면 저장된 시작 시간으로 이동합니다.</p>
+        </div>
+        <div className="mt-4 grid gap-3 lg:mt-0 lg:grid-cols-2">
           {demoSongs[0].sections.slice(0, 4).map((section) => (
             <div
               key={section.id}
@@ -301,9 +320,11 @@ function YoutubePracticeDemo() {
         </div>
       </section>
 
-      <section data-guide-shot="score-image" className="card p-5">
-        <h2 className="font-bold text-slate-950">곡 이미지</h2>
-        <p className="mt-1 text-xs leading-5 text-slate-500">외부에 저장된 이미지를 링크로 불러옵니다.</p>
+      <section data-guide-shot="score-image" className="card p-5 lg:grid lg:grid-cols-[0.65fr_1fr] lg:items-start lg:gap-5">
+        <div>
+          <h2 className="font-bold text-slate-950">곡 이미지</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">외부에 저장된 이미지를 링크로 불러옵니다.</p>
+        </div>
         <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
           <div className="aspect-[4/5] rounded-md bg-[linear-gradient(#f8fafc_24px,#e2e8f0_25px)] bg-[length:100%_32px] p-4">
             <p className="text-lg font-black text-slate-900">주님 말씀하시면</p>
@@ -320,16 +341,18 @@ function YoutubePracticeDemo() {
 function PdfExportDemo() {
   return (
     <DemoPage>
-      <section data-guide-shot="pdf-export" className="card overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5">
+      <section data-guide-shot="pdf-export" className="card overflow-hidden lg:grid lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5 lg:flex lg:flex-col lg:justify-between lg:p-7">
+          <div>
           <p className="text-sm font-bold text-blue-700">콘티 PDF 미리보기</p>
           <h1 className="mt-2 text-2xl font-black text-slate-950">{demoSetlist.title}</h1>
+          </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="btn-primary">PDF로 저장/인쇄</span>
             <span className="btn-secondary">콘티로 돌아가기</span>
           </div>
         </div>
-        <div className="space-y-3 p-4 text-sm">
+        <div className="grid gap-3 p-4 text-sm lg:grid-cols-2 lg:p-6">
           {["콘티 이름", "예배 날짜/이름", "이번 주 팀원", "곡 설명", "강조사항", "파트별 메모"].map((label) => (
             <label key={label} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 font-bold text-slate-700">
               {label}
@@ -339,14 +362,17 @@ function PdfExportDemo() {
         </div>
       </section>
 
-      <section data-guide-shot="pdf-customize" className="card p-4">
+      <section data-guide-shot="pdf-customize" className="card p-4 lg:grid lg:grid-cols-[0.8fr_1.2fr] lg:items-start lg:gap-5 lg:p-5">
+        <div>
         <h2 className="font-black text-slate-950">악보 이미지</h2>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">악보가 잘리지 않도록 출력 방식을 고를 수 있습니다.</p>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-black">
           {["비율 맞춰 줄이기", "위아래만 줄이기", "다음 장", "나눠서 넣기"].map((label, index) => (
             <span key={label} className={index === 1 ? "rounded-lg bg-blue-600 px-3 py-2 text-center text-white" : "rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-slate-700"}>
               {label}
             </span>
           ))}
+        </div>
         </div>
         <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
           <div className="h-72 rounded-md bg-[linear-gradient(#f8fafc_20px,#e2e8f0_21px)] bg-[length:100%_28px]" />
@@ -364,19 +390,19 @@ function TeamDashboardDemo() {
   return (
     <DemoPage>
       <TeamNavTabs teamId={teamId} active="dashboard" />
-      <section data-guide-shot="team-dashboard" className="space-y-4">
+      <section data-guide-shot="team-dashboard" className="space-y-4 lg:grid lg:grid-cols-[0.9fr_1.35fr_0.85fr] lg:items-start lg:gap-4 lg:space-y-0">
         <div className="card p-5">
           <p className="text-sm font-bold text-blue-700">은혜교회</p>
           <h1 className="mt-2 text-2xl font-black text-slate-950">주일 2부 찬양팀 대시보드</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">이번 주 예배 준비에 필요한 콘티, 공지, 일정, 채팅을 한곳에서 확인하세요.</p>
         </div>
-        <div className="grid gap-3">
+        <div className="grid gap-3 lg:grid-cols-2">
           <DashboardCard title="이번 주 콘티" value="6월 21일 주일예배 콘티" meta="3곡 · 주일 2부예배" action="콘티 보기" />
           <DashboardCard title="다가오는 일정" value="6월 21일 주일예배" meta="가능 6 · 어려움 1 · 미정 1" action="일정 보기" />
           <DashboardCard title="최근 공지사항" value="이번 주 주일예배 연습 안내" meta="읽지 않음" action="공지 보기" />
           <DashboardCard title="팀 채팅" value="새 메시지 2개" meta="정현우: 인트로 톤 공유드립니다." action="팀 채팅 열기" />
         </div>
-        <div className="card p-4">
+        <div className="card p-4 lg:row-span-2">
           <h2 className="font-black text-slate-950">팀원 현황</h2>
           <div className="mt-3 space-y-2">
             <MemberRow name="김민수" part="찬양인도자" role="owner" />
@@ -386,7 +412,8 @@ function TeamDashboardDemo() {
         </div>
       </section>
 
-      <section data-guide-shot="team-invite" className="card p-5">
+      <section data-guide-shot="team-invite" className="card p-5 lg:grid lg:grid-cols-[0.8fr_1.2fr] lg:gap-5">
+        <div>
         <h2 className="section-title">팀원 초대</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">초대코드는 팀을 찾기 위한 고유 코드입니다. 리더가 승인해야 팀원이 됩니다.</p>
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
@@ -396,6 +423,7 @@ function TeamDashboardDemo() {
         <div className="mt-4 flex gap-2">
           <span className="btn-primary flex-1 text-center">초대링크 복사</span>
           <span className="btn-secondary flex-1 text-center">코드 재발급</span>
+        </div>
         </div>
         <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-4">
           <p className="font-black text-amber-900">새로운 팀 참여 요청이 있습니다.</p>
@@ -414,7 +442,18 @@ function TeamCommunicationDemo() {
   return (
     <DemoPage>
       <TeamNavTabs teamId={teamId} active="chat" />
-      <section data-guide-shot="team-chat" className="card flex h-[680px] flex-col overflow-hidden">
+      <section data-guide-shot="team-chat" className="card grid h-[680px] grid-cols-1 overflow-hidden lg:h-[620px] lg:grid-cols-[300px_1fr]">
+        <aside className="hidden border-r border-slate-100 bg-slate-50 p-4 lg:block">
+          <h2 className="font-black text-slate-950">대화</h2>
+          <div className="mt-4 space-y-2">
+            {["팀 전체 채팅", "정현우 · 일렉기타", "최수진 · 건반"].map((label, index) => (
+              <div key={label} className={index === 0 ? "rounded-xl bg-blue-600 p-3 text-sm font-black text-white" : "rounded-xl bg-white p-3 text-sm font-bold text-slate-700 shadow-sm"}>
+                {label}
+              </div>
+            ))}
+          </div>
+        </aside>
+        <div className="flex min-h-0 flex-col">
         <div className="border-b border-slate-100 p-4">
           <h1 className="text-xl font-black text-slate-950">팀 채팅</h1>
           <p className="mt-1 text-xs font-semibold text-emerald-700">온라인 4명 · 읽지 않은 메시지 2개</p>
@@ -429,6 +468,7 @@ function TeamCommunicationDemo() {
             <div className="min-h-11 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-400">메시지를 입력하세요</div>
             <span className="btn-primary">전송</span>
           </div>
+        </div>
         </div>
       </section>
 
@@ -487,10 +527,13 @@ function TeamCalendarDemo() {
         </div>
       </section>
 
-      <section data-guide-shot="availability-check" className="card p-5">
-        <p className="text-sm font-bold text-blue-700">6월 21일</p>
-        <h1 className="mt-1 text-2xl font-black text-slate-950">주일예배</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">가능 여부는 실제 섬김 배정이 아니라 리더가 콘티 팀원을 정할 때 참고하는 정보입니다.</p>
+      <section data-guide-shot="availability-check" className="card p-5 lg:grid lg:grid-cols-[0.8fr_1.2fr] lg:gap-5">
+        <div>
+          <p className="text-sm font-bold text-blue-700">6월 21일</p>
+          <h1 className="mt-1 text-2xl font-black text-slate-950">주일예배</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">가능 여부는 실제 섬김 배정이 아니라 리더가 콘티 팀원을 정할 때 참고하는 정보입니다.</p>
+        </div>
+        <div>
         <div className="mt-4 grid grid-cols-3 gap-2">
           <span className="rounded-xl bg-emerald-600 px-3 py-3 text-center text-sm font-black text-white">가능해요</span>
           <span className="rounded-xl border border-rose-200 bg-white px-3 py-3 text-center text-sm font-black text-rose-700">어려워요</span>
@@ -503,6 +546,7 @@ function TeamCalendarDemo() {
           <span className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">미정 1</span>
           <span className="rounded-lg bg-slate-100 px-3 py-2 text-slate-600">미응답 2</span>
         </div>
+        </div>
       </section>
     </DemoPage>
   );
@@ -511,9 +555,14 @@ function TeamCalendarDemo() {
 function PracticeToolsDemo() {
   return (
     <DemoPage>
-      <section data-guide-shot="tuner" className="card p-5">
+      <section data-guide-shot="tuner" className="card p-5 lg:grid lg:grid-cols-[0.75fr_1.25fr] lg:items-center lg:gap-5">
+        <div>
         <p className="text-sm font-bold text-blue-700">튜너</p>
         <h1 className="mt-1 text-2xl font-black text-slate-950">악기 튜닝</h1>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">기기 마이크를 악기 가까이에 두고 튜닝합니다.</p>
+        <button type="button" className="btn-primary mt-4 hidden w-full lg:inline-flex">튜너 시작하기</button>
+        </div>
+        <div>
         <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-5 text-center">
           <p className="text-6xl font-black text-blue-700">G</p>
           <p className="mt-2 text-sm font-bold text-slate-600">196.00 Hz · -3 cents</p>
@@ -521,12 +570,19 @@ function PracticeToolsDemo() {
             <div className="mx-auto h-3 w-2 rounded-full bg-blue-600" />
           </div>
         </div>
-        <button type="button" className="btn-primary mt-4 w-full">튜너 시작하기</button>
+        <button type="button" className="btn-primary mt-4 w-full lg:hidden">튜너 시작하기</button>
+        </div>
       </section>
 
-      <section data-guide-shot="metronome" className="card p-5">
+      <section data-guide-shot="metronome" className="card p-5 lg:grid lg:grid-cols-[0.75fr_1.25fr] lg:items-center lg:gap-5">
+        <div>
         <p className="text-sm font-bold text-blue-700">메트로놈</p>
         <h1 className="mt-1 text-2xl font-black text-slate-950">BPM 72</h1>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">합주 전 템포를 맞추고 탭 템포로 BPM을 잡습니다.</p>
+        <button type="button" className="btn-primary mt-4 hidden w-full lg:inline-flex">시작</button>
+        <button type="button" className="btn-secondary mt-2 hidden w-full lg:inline-flex">탭으로 BPM 맞추기</button>
+        </div>
+        <div>
         <div className="mt-5 grid grid-cols-4 gap-2">
           {[1, 2, 3, 4].map((beat) => (
             <span
@@ -544,8 +600,9 @@ function PracticeToolsDemo() {
             </span>
           ))}
         </div>
-        <button type="button" className="btn-primary mt-4 w-full">시작</button>
-        <button type="button" className="btn-secondary mt-2 w-full">탭으로 BPM 맞추기</button>
+        <button type="button" className="btn-primary mt-4 w-full lg:hidden">시작</button>
+        <button type="button" className="btn-secondary mt-2 w-full lg:hidden">탭으로 BPM 맞추기</button>
+        </div>
       </section>
     </DemoPage>
   );
