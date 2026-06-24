@@ -7,10 +7,11 @@ type SongCardProps = {
   index: number;
   song: Song;
   completed?: boolean;
+  hasGuideTrack?: boolean;
   onCompletionChange?: (completed: boolean) => void;
 };
 
-export function SongCard({ href, index, song, completed = false, onCompletionChange }: SongCardProps) {
+export function SongCard({ href, index, song, completed = false, hasGuideTrack = false, onCompletionChange }: SongCardProps) {
   const sectionSummary = song.sections.map((section) => section.name).filter(Boolean).join(" - ");
   const highlightSummary = song.highlights.filter(Boolean).slice(0, 2).join(" / ");
   const imageLink = getFirstImageLink(song.imageLinks);
@@ -44,11 +45,18 @@ export function SongCard({ href, index, song, completed = false, onCompletionCha
                   </p>
                 ) : null}
               </div>
-              {song.youtubeVideoId ? (
-                <span className="w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
-                  YouTube
-                </span>
-              ) : null}
+              <div className="flex flex-wrap gap-1.5">
+                {song.youtubeVideoId ? (
+                  <span className="w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                    YouTube
+                  </span>
+                ) : null}
+                {hasGuideTrack ? (
+                  <span className="w-fit rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
+                    가이드 트랙 있음
+                  </span>
+                ) : null}
+              </div>
             </div>
             {song.description ? (
               <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-700">{song.description}</p>

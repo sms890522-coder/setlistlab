@@ -7,8 +7,11 @@ import { SongImageGallery } from "@/components/SongImageGallery";
 import { SongLibrarySaveButton } from "@/components/SongLibrarySaveButton";
 import { YouTubePlayer, type YouTubePlayerHandle } from "@/components/YouTubePlayer";
 import { getCurrentUser } from "@/lib/auth";
+import { getFirstGuideTrackForSong } from "@/lib/db/teamGuideTracks";
+import { getMyProfile } from "@/lib/db/profiles";
 import { getCloudSetlist, saveCloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
+import { canUseFeature } from "@/lib/features";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import {
   getPracticeCompletion,
@@ -34,6 +37,8 @@ export default function SongPracticePage() {
   const [storageMode, setStorageMode] = useState<"local" | "cloud">("local");
   const [loadError, setLoadError] = useState("");
   const [canEdit, setCanEdit] = useState(true);
+  const [canUseGuideTrack, setCanUseGuideTrack] = useState(false);
+  const [existingGuideTrackId, setExistingGuideTrackId] = useState<string | null>(null);
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const lastSavedPositionRef = useRef(0);
 
@@ -46,10 +51,16 @@ export default function SongPracticePage() {
       if (isSupabaseConfigured()) {
         const user = await getCurrentUser();
         if (user) {
-          const cloudSetlist = await getCloudSetlist(params.id);
+          const [profile, cloudSetlist] = await Promise.all([getMyProfile().catch(() => null), getCloudSetlist(params.id)]);
           if (cloudSetlist) {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
             setCanEdit(Boolean(cloudSetlist.ownerId === user.id || canManageTeamSetlist(membership)));
+            setCanUseGuideTrack(canUseFeature(profile, "teamGuideTrack"));
+            const foundSong = cloudSetlist.songs.find((item) => item.id === params.songId) ?? null;
+            if (foundSong) {
+              const guideTrack = await getFirstGuideTrackForSong(cloudSetlist.id, foundSong.id).catch(() => null);
+              setExistingGuideTrackId(guideTrack?.id ?? null);
+            }
             foundSetlist = cloudSetlist;
             setStorageMode("cloud");
           }
@@ -59,6 +70,8 @@ export default function SongPracticePage() {
       if (!foundSetlist) {
         foundSetlist = getSetlist(params.id) ?? null;
         setCanEdit(true);
+        setCanUseGuideTrack(false);
+        setExistingGuideTrackId(null);
         setStorageMode("local");
       }
 
@@ -80,6 +93,8 @@ export default function SongPracticePage() {
       setInitialPosition(savedPosition);
       lastSavedPositionRef.current = Math.round(savedPosition);
       setStorageMode("local");
+      setCanUseGuideTrack(false);
+      setExistingGuideTrackId(null);
       setLoaded(true);
     });
   }, [params.id, params.songId]);
@@ -142,6 +157,16 @@ export default function SongPracticePage() {
     currentSongIndex >= 0 && currentSongIndex < setlist.songs.length - 1
       ? setlist.songs[currentSongIndex + 1]
       : undefined;
+  const hasScoreImage = Boolean(song.imageLinks?.some((link) => /^https?:\/\/\S+$/i.test(link.url.trim())));
+  const hasSongForm = song.sections.length > 0;
+  const canCreateGuideTrack = canUseGuideTrack && storageMode === "cloud" && canEdit && hasScoreImage && hasSongForm;
+  const guideTrackDisabledReason = !hasScoreImage
+    ? "악보 이미지가 필요합니다."
+    : !hasSongForm
+      ? "송폼을 먼저 입력해 주세요."
+      : !canEdit
+        ? "생성은 리더/부리더 또는 콘티 작성자만 할 수 있습니다."
+        : "";
 
   return (
     <div className="page-shell space-y-6 pb-20">
@@ -174,6 +199,21 @@ export default function SongPracticePage() {
             콘티 수정
           </Link>
           <SongLibrarySaveButton song={song} />
+          {canUseGuideTrack && storageMode === "cloud" ? (
+            existingGuideTrackId ? (
+              <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-secondary">
+                가이드 트랙 보기
+              </Link>
+            ) : canCreateGuideTrack ? (
+              <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary">
+                팀 가이드 트랙 만들기
+              </Link>
+            ) : (
+              <button type="button" disabled className="btn-secondary" title={guideTrackDisabledReason}>
+                팀 가이드 트랙 만들기
+              </button>
+            )
+          ) : null}
         </div>
       </section>
 
@@ -295,6 +335,24 @@ export default function SongPracticePage() {
       ) : null}
 
       <SongImageGallery imageLinks={song.imageLinks} />
+
+      {canUseGuideTrack && storageMode === "cloud" ? (
+        <section className="rounded-2xl border border-violet-100 bg-violet-50/70 p-5">
+          <p className="text-sm font-black text-violet-700">실험실 · 팀 가이드 트랙</p>
+          <h2 className="mt-1 text-lg font-black text-slate-950">악보 이미지와 송폼을 바탕으로 팀 연습용 가이드 트랙을 만들 수 있습니다.</h2>
+          {existingGuideTrackId ? (
+            <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary mt-4">
+              가이드 트랙 보기
+            </Link>
+          ) : canCreateGuideTrack ? (
+            <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary mt-4">
+              팀 가이드 트랙 만들기
+            </Link>
+          ) : (
+            <p className="mt-3 rounded-xl bg-white p-3 text-sm font-semibold text-violet-800">{guideTrackDisabledReason}</p>
+          )}
+        </section>
+      ) : null}
 
       <CapoTransposeHelper song={song} editable={false} />
 

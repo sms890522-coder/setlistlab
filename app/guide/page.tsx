@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 export const metadata: Metadata = {
   title: "콘티연습실 사용설명서 | 콘티 만들기와 연습 기능 가이드",
   description:
-    "콘티연습실 사용법을 안내합니다. 콘티 만들기, 콘티 보는 방법, 송폼 작성, 유튜브 연습 영상, 구간 반복, 재생속도 조절, 악보 이미지, PDF 만들기, 팀 채팅, 공지사항, 캘린더 사용법을 확인하세요.",
+    "콘티연습실 사용법을 안내합니다. 콘티 만들기, 콘티 보는 방법, 송폼 작성, 유튜브 연습 영상, 구간 반복, 재생속도 조절, 악보 이미지, PDF 만들기, 팀 채팅, 공지사항, 캘린더, 실험실과 팀 가이드 트랙 사용법을 확인하세요.",
 };
 
 const guideImages = {
@@ -115,6 +115,7 @@ const guideSections = [
   ["posts", "공지사항"],
   ["calendar", "팀 캘린더와 가능 여부 체크"],
   ["notifications", "알림"],
+  ["lab", "실험실과 팀 가이드 트랙"],
   ["tools", "튜너 & 메트로놈"],
   ["mobile", "휴대폰에서 사용하기"],
   ["faq", "자주 묻는 질문"],
@@ -169,6 +170,16 @@ const guideFaqItems = [
     question: "곡 태그는 팀원들과 공유되나요?",
     answer:
       "기본적으로 곡 태그는 개인별로 저장됩니다. 같은 곡이라도 각자 자신만의 기준으로 태그를 관리할 수 있습니다.",
+  },
+  {
+    question: "실험실 기능은 무엇인가요?",
+    answer:
+      "내 계정에서 실험실을 켜면 테스트 중인 새 기능을 먼저 사용할 수 있습니다. 실험실 기능은 변경되거나 일시적으로 동작하지 않을 수 있습니다.",
+  },
+  {
+    question: "팀 가이드 트랙은 실제 음원을 만들어주나요?",
+    answer:
+      "현재 MVP에서는 악보 이미지와 송폼을 바탕으로 코드 진행과 가이드 트랙 데이터를 만들고 브라우저에서 간단히 미리듣는 기능을 제공합니다. 완성 오디오 파일 생성은 이후 팀 녹음실 기능에서 확장할 수 있습니다.",
   },
   {
     question: "휴대폰으로도 사용할 수 있나요?",
@@ -542,7 +553,32 @@ export default function GuidePage() {
         </Callout>
       </GuideSection>
 
-      <GuideSection id="tools" index={14} title="튜너 & 메트로놈">
+      <GuideSection id="lab" index={14} title="실험실과 팀 가이드 트랙">
+        <p>
+          <InlineCode>내 계정</InlineCode>의 <InlineCode>실험실 기능 사용</InlineCode>을 켜면 테스트 중인 새 기능을
+          먼저 사용할 수 있습니다. 실험실 기능은 변경되거나 일시적으로 동작하지 않을 수 있습니다.
+        </p>
+        <p>
+          팀 가이드 트랙 만들기는 실험실 기능입니다. 곡 상세 화면에서 악보 이미지가 있고 송폼이 정의되어 있으면
+          <InlineCode>팀 가이드 트랙 만들기</InlineCode> 버튼으로 이동할 수 있습니다.
+        </p>
+        <StepList
+          items={[
+            ["준비 확인", "곡 제목, 키, BPM, 송폼과 악보 이미지를 확인합니다."],
+            ["코드 추출", "코드 추출 API가 설정되어 있으면 악보 이미지에서 코드를 추출하고, 설정이 없으면 수동 입력 모드로 진행합니다."],
+            ["코드 검수", "추출된 코드가 정확하지 않을 수 있으므로 사용자가 직접 추가, 삭제, 수정합니다."],
+            ["송폼 배치", "Intro, Verse, Chorus 같은 송폼 구간별로 코드, 마디 수, 반복 횟수, 메모를 입력합니다."],
+            ["가이드 설정", "BPM, Key, 박자, 사운드, 카운트인, 클릭음 포함 여부를 정합니다."],
+            ["데이터 저장", "가이드 트랙 데이터를 저장하고, 브라우저에서 간단히 미리 들을 수 있습니다."],
+          ]}
+        />
+        <Callout tone="warning">
+          코드 자동 추출 결과는 정확하지 않을 수 있으므로 반드시 사용자가 확인하고 수정해야 합니다. 저작권이 있는
+          악보 이미지는 권리자의 허락 범위 안에서만 사용해 주세요.
+        </Callout>
+      </GuideSection>
+
+      <GuideSection id="tools" index={15} title="튜너 & 메트로놈">
         <p>
           상단 메뉴 <InlineCode>연습도구</InlineCode>는 <InlineCode>/tools/tuner</InlineCode> 페이지로 연결됩니다.
           페이지 안에서 <InlineCode>튜너</InlineCode>와 <InlineCode>메트로놈</InlineCode> 탭을 전환합니다.
@@ -564,7 +600,7 @@ export default function GuidePage() {
         </Callout>
       </GuideSection>
 
-      <GuideSection id="mobile" index={15} title="휴대폰에서 사용하기">
+      <GuideSection id="mobile" index={16} title="휴대폰에서 사용하기">
         <p>
           휴대폰에서도 콘티 보기, 곡 상세 연습, 팀 채팅, 1:1 대화, 공지 확인, 가능 여부 체크, 튜너와 메트로놈을
           사용할 수 있습니다. PDF 미리보기와 인쇄 저장 화면도 모바일 화면에 맞춰 표시됩니다.
@@ -575,7 +611,7 @@ export default function GuidePage() {
         </p>
       </GuideSection>
 
-      <GuideSection id="faq" index={16} title="자주 묻는 질문">
+      <GuideSection id="faq" index={17} title="자주 묻는 질문">
         <div className="grid gap-3">
           {guideFaqItems.map((item) => (
             <details key={item.question} className="rounded-xl border border-slate-200 bg-white p-4">

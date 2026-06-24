@@ -37,6 +37,9 @@ add column if not exists praise_team_name text;
 alter table public.profiles
 add column if not exists share_practice_presence boolean not null default true;
 
+alter table public.profiles
+add column if not exists lab_enabled boolean not null default false;
+
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at
 before update on public.profiles
@@ -745,6 +748,50 @@ before update on public.setlist_assignments
 for each row
 execute function public.set_updated_at();
 
+create table if not exists public.team_guide_tracks (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid references public.teams(id) on delete cascade,
+  setlist_id uuid not null references public.setlists(id) on delete cascade,
+  song_id text not null,
+  created_by uuid references auth.users(id) on delete set null,
+  title text not null,
+  status text not null default 'draft',
+  source_score_image_url text,
+  extraction_status text not null default 'pending',
+  extracted_chords jsonb not null default '[]'::jsonb,
+  song_form_map jsonb not null default '[]'::jsonb,
+  guide_track_data jsonb not null default '{}'::jsonb,
+  audio_url text,
+  midi_url text,
+  error_message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_guide_tracks_status_check check (status in ('draft', 'ready', 'generated', 'failed')),
+  constraint team_guide_tracks_extraction_status_check check (extraction_status in ('pending', 'extracting', 'extracted', 'failed', 'manual'))
+);
+
+create index if not exists team_guide_tracks_team_idx
+on public.team_guide_tracks (team_id)
+where team_id is not null;
+
+create index if not exists team_guide_tracks_setlist_idx
+on public.team_guide_tracks (setlist_id);
+
+create index if not exists team_guide_tracks_song_idx
+on public.team_guide_tracks (song_id);
+
+create index if not exists team_guide_tracks_created_by_idx
+on public.team_guide_tracks (created_by);
+
+create index if not exists team_guide_tracks_status_idx
+on public.team_guide_tracks (status);
+
+drop trigger if exists team_guide_tracks_set_updated_at on public.team_guide_tracks;
+create trigger team_guide_tracks_set_updated_at
+before update on public.team_guide_tracks
+for each row
+execute function public.set_updated_at();
+
 create table if not exists public.shared_setlists (
   id uuid primary key default gen_random_uuid(),
   share_slug text not null unique,
@@ -917,6 +964,7 @@ alter table public.song_tags enable row level security;
 alter table public.setlists enable row level security;
 alter table public.setlist_comments enable row level security;
 alter table public.setlist_assignments enable row level security;
+alter table public.team_guide_tracks enable row level security;
 alter table public.shared_setlists enable row level security;
 alter table public.notifications enable row level security;
 alter table public.push_subscriptions enable row level security;
@@ -3060,6 +3108,107 @@ using (
     where public.setlists.id = public.setlist_assignments.setlist_id
       and public.setlists.team_id is not null
       and public.is_team_admin(public.setlists.team_id, auth.uid())
+  )
+);
+
+drop policy if exists "team_guide_tracks_select_accessible_setlist" on public.team_guide_tracks;
+create policy "team_guide_tracks_select_accessible_setlist"
+on public.team_guide_tracks
+for select
+using (
+  exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.team_guide_tracks.setlist_id
+      and (
+        (
+          setlists.team_id is null
+          and public.team_guide_tracks.team_id is null
+          and (
+            setlists.user_id = auth.uid()
+            or public.team_guide_tracks.created_by = auth.uid()
+          )
+        )
+        or (
+          setlists.team_id is not null
+          and public.team_guide_tracks.team_id = setlists.team_id
+          and public.is_team_approved_member(setlists.team_id, auth.uid())
+          and (
+            setlists.status = 'published'
+            or setlists.user_id = auth.uid()
+            or public.is_team_admin(setlists.team_id, auth.uid())
+          )
+        )
+      )
+  )
+);
+
+drop policy if exists "team_guide_tracks_insert_manager" on public.team_guide_tracks;
+create policy "team_guide_tracks_insert_manager"
+on public.team_guide_tracks
+for insert
+with check (
+  auth.uid() = created_by
+  and exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.team_guide_tracks.setlist_id
+      and setlists.team_id is not distinct from public.team_guide_tracks.team_id
+      and (
+        (
+          setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+        or (
+          setlists.team_id is not null
+          and public.is_team_admin(setlists.team_id, auth.uid())
+        )
+      )
+  )
+);
+
+drop policy if exists "team_guide_tracks_update_author_or_admin" on public.team_guide_tracks;
+create policy "team_guide_tracks_update_author_or_admin"
+on public.team_guide_tracks
+for update
+using (
+  created_by = auth.uid()
+  or (
+    team_id is not null
+    and public.is_team_admin(team_id, auth.uid())
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.team_guide_tracks.setlist_id
+      and setlists.team_id is not distinct from public.team_guide_tracks.team_id
+      and (
+        (
+          setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+        or (
+          setlists.team_id is not null
+          and (
+            public.team_guide_tracks.created_by = auth.uid()
+            or public.is_team_admin(setlists.team_id, auth.uid())
+          )
+        )
+      )
+  )
+);
+
+drop policy if exists "team_guide_tracks_delete_author_or_admin" on public.team_guide_tracks;
+create policy "team_guide_tracks_delete_author_or_admin"
+on public.team_guide_tracks
+for delete
+using (
+  created_by = auth.uid()
+  or (
+    team_id is not null
+    and public.is_team_admin(team_id, auth.uid())
   )
 );
 

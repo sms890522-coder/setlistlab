@@ -22,6 +22,7 @@ export default function AccountPage() {
   const [praiseTeamName, setPraiseTeamName] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [sharePracticePresence, setSharePracticePresence] = useState(true);
+  const [labEnabled, setLabEnabled] = useState(false);
   const [stats, setStats] = useState({ setlists: 0, songs: 0, teamMembers: 0 });
   const [upcomingEvents, setUpcomingEvents] = useState<TeamCalendarEventWithAvailability[]>([]);
   const [message, setMessage] = useState("");
@@ -55,6 +56,7 @@ export default function AccountPage() {
       setPraiseTeamName(profile?.praiseTeamName || "");
       setServiceName(profile?.serviceName || "");
       setSharePracticePresence(profile?.sharePracticePresence ?? true);
+      setLabEnabled(profile?.labEnabled ?? false);
       setStats({ setlists: cloudSetlists.length, songs: cloudSongs.length, teamMembers: teamMembers.length });
       setUpcomingEvents(teamEvents);
       setLoaded(true);
@@ -72,7 +74,7 @@ export default function AccountPage() {
     setError("");
 
     try {
-      await upsertMyProfile({ displayName, role, customRole, churchName, praiseTeamName, serviceName, sharePracticePresence });
+      await upsertMyProfile({ displayName, role, customRole, churchName, praiseTeamName, serviceName, sharePracticePresence, labEnabled });
       setMessage("프로필을 저장했습니다.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "프로필을 저장하지 못했습니다.");
@@ -224,6 +226,23 @@ export default function AccountPage() {
                   <span className="block text-sm font-bold text-blue-950">연습중 표시 공유</span>
                   <span className="mt-1 block text-xs leading-5 text-blue-800">
                     내가 속한 승인된 팀의 팀원에게 어떤 곡을 연습 중인지 보여줍니다.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-lg border border-violet-100 bg-violet-50/70 p-4 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={labEnabled}
+                  onChange={(event) => setLabEnabled(event.target.checked)}
+                  className="mt-1 size-4 accent-violet-600"
+                />
+                <span>
+                  <span className="block text-sm font-bold text-violet-950">실험실 기능 사용</span>
+                  <span className="mt-1 block text-xs leading-5 text-violet-800">
+                    아직 테스트 중인 새로운 기능을 먼저 사용해볼 수 있습니다. 실험실을 켜면 팀 가이드 트랙 만들기 같은 기능을 사용할 수 있습니다.
+                  </span>
+                  <span className="mt-2 block text-xs leading-5 text-violet-700">
+                    실험실 기능은 변경되거나 일시적으로 동작하지 않을 수 있으니 중요한 작업 전에는 기존 기능도 함께 확인해 주세요.
                   </span>
                 </span>
               </label>

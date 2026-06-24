@@ -17,6 +17,7 @@ export type Profile = {
   praiseTeamName?: string;
   serviceName?: string;
   sharePracticePresence: boolean;
+  labEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -31,11 +32,14 @@ type ProfileRow = {
   praise_team_name: string | null;
   service_name: string | null;
   share_practice_presence: boolean | null;
+  lab_enabled: boolean | null;
   created_at: string;
   updated_at: string;
 };
 
 const PROFILE_SELECT =
+  "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, lab_enabled, created_at, updated_at";
+const PROFILE_SELECT_LEGACY =
   "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, created_at, updated_at";
 
 export async function getMyProfile() {
@@ -47,7 +51,13 @@ export async function getMyProfile() {
 
 export async function getProfile(userId: string) {
   const supabase = getSupabaseBrowserClient();
-  const { data, error } = await supabase.from("profiles").select(PROFILE_SELECT).eq("id", userId).maybeSingle<ProfileRow>();
+  let { data, error } = await supabase.from("profiles").select(PROFILE_SELECT).eq("id", userId).maybeSingle<ProfileRow>();
+
+  if (isMissingProfileMetadataColumnError(error)) {
+    const legacyResult = await supabase.from("profiles").select(PROFILE_SELECT_LEGACY).eq("id", userId).maybeSingle<ProfileRow>();
+    data = legacyResult.data;
+    error = legacyResult.error;
+  }
 
   if (error) {
     throw new Error(error.message || "프로필을 불러오지 못했습니다.");
@@ -78,6 +88,7 @@ export async function ensureUserProfile(user?: User | null) {
     praise_team_name: existingProfile?.praiseTeamName ?? null,
     service_name: existingProfile?.serviceName ?? null,
     share_practice_presence: existingProfile?.sharePracticePresence ?? true,
+    lab_enabled: existingProfile?.labEnabled ?? false,
     updated_at: now,
   });
 
@@ -96,6 +107,7 @@ export async function upsertMyProfile(input: {
   praiseTeamName?: string;
   serviceName?: string;
   sharePracticePresence?: boolean;
+  labEnabled?: boolean;
 }) {
   const user = await getProfileUser();
   if (!user) {
@@ -112,6 +124,7 @@ export async function upsertMyProfile(input: {
     praiseTeamName: input.praiseTeamName?.trim() || null,
     serviceName: input.serviceName?.trim() || null,
     sharePracticePresence: input.sharePracticePresence ?? true,
+    labEnabled: input.labEnabled ?? existingProfile?.labEnabled ?? false,
   };
   const { data, error } = await upsertProfileRow({
     id: user.id,
@@ -124,6 +137,7 @@ export async function upsertMyProfile(input: {
     praise_team_name: normalizedInput.praiseTeamName,
     service_name: normalizedInput.serviceName,
     share_practice_presence: normalizedInput.sharePracticePresence,
+    lab_enabled: normalizedInput.labEnabled,
     updated_at: now,
   });
 
@@ -199,6 +213,7 @@ function rowToProfile(row: ProfileRow): Profile {
     praiseTeamName: row.praise_team_name ?? undefined,
     serviceName: row.service_name ?? undefined,
     sharePracticePresence: row.share_practice_presence ?? true,
+    labEnabled: row.lab_enabled ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -215,6 +230,7 @@ async function upsertProfileRow(row: {
   praise_team_name: string | null;
   service_name: string | null;
   share_practice_presence: boolean;
+  lab_enabled: boolean;
   updated_at: string;
 }) {
   const supabase = getSupabaseBrowserClient();
@@ -224,14 +240,14 @@ async function upsertProfileRow(row: {
     return result;
   }
 
-  const { email: _email, avatar_url: _avatarUrl, ...legacyRow } = row;
-  return supabase.from("profiles").upsert(legacyRow).select(PROFILE_SELECT).single<ProfileRow>();
+  const { email: _email, avatar_url: _avatarUrl, lab_enabled: _labEnabled, ...legacyRow } = row;
+  return supabase.from("profiles").upsert(legacyRow).select(PROFILE_SELECT_LEGACY).single<ProfileRow>();
 }
 
 function isMissingProfileMetadataColumnError(error: { message?: string; code?: string } | null) {
   if (!error) return false;
   const message = error.message?.toLowerCase() ?? "";
-  return error.code === "42703" || message.includes("email") || message.includes("avatar_url");
+  return error.code === "42703" || message.includes("email") || message.includes("avatar_url") || message.includes("lab_enabled");
 }
 
 async function syncPracticePresenceProfile(

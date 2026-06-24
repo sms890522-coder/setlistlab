@@ -12,8 +12,11 @@ import {
   type AvailabilityStatus,
   type TeamCalendarEventWithAvailability,
 } from "@/lib/db/teamCalendar";
+import { getGuideTrackSongIds } from "@/lib/db/teamGuideTracks";
+import { getMyProfile } from "@/lib/db/profiles";
 import { duplicateCloudSetlist, getCloudSetlist, type CloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
+import { canUseFeature } from "@/lib/features";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -35,6 +38,7 @@ export default function SetlistDetailPage() {
   const [canEdit, setCanEdit] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [teamMembership, setTeamMembership] = useState<TeamMembership | null>(null);
+  const [guideTrackSongIds, setGuideTrackSongIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setLoadError("");
@@ -44,14 +48,18 @@ export default function SetlistDetailPage() {
         const user = await getCurrentUser();
         if (user) {
           setCurrentUserId(user.id);
-          const cloudSetlist = await getCloudSetlist(params.id);
+          const [profile, cloudSetlist] = await Promise.all([getMyProfile().catch(() => null), getCloudSetlist(params.id)]);
           if (cloudSetlist) {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
             const calendarEvents = cloudSetlist.teamId ? await getLinkedCalendarEventsForSetlist(cloudSetlist.id).catch(() => []) : [];
+            const nextGuideTrackSongIds = canUseFeature(profile, "teamGuideTrack")
+              ? await getGuideTrackSongIds(cloudSetlist.id).catch(() => new Set<string>())
+              : new Set<string>();
             setCanEdit(Boolean(cloudSetlist.ownerId === user.id || canManageTeamSetlist(membership)));
             setTeamMembership(membership);
             setSetlist(cloudSetlist);
             setLinkedEvents(calendarEvents);
+            setGuideTrackSongIds(nextGuideTrackSongIds);
             setStorageMode("cloud");
             setCompletedSongs(getPracticeCompletions(params.id));
             setLoaded(true);
@@ -65,6 +73,7 @@ export default function SetlistDetailPage() {
       setTeamMembership(null);
       setSetlist(getSetlist(params.id) ?? null);
       setLinkedEvents([]);
+      setGuideTrackSongIds(new Set());
       setStorageMode("local");
       setCompletedSongs(getPracticeCompletions(params.id));
       setLoaded(true);
@@ -76,6 +85,7 @@ export default function SetlistDetailPage() {
       setTeamMembership(null);
       setSetlist(getSetlist(params.id) ?? null);
       setLinkedEvents([]);
+      setGuideTrackSongIds(new Set());
       setStorageMode("local");
       setCompletedSongs(getPracticeCompletions(params.id));
       setLoaded(true);
@@ -214,6 +224,7 @@ export default function SetlistDetailPage() {
                   index={index}
                   href={`/setlists/${setlist.id}/songs/${song.id}`}
                   completed={Boolean(completedSongs[song.id])}
+                  hasGuideTrack={guideTrackSongIds.has(song.id)}
                   onCompletionChange={(completed) => toggleCompletion(song.id, completed)}
                 />
                 {song.transitionNote ? (
