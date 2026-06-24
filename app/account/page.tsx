@@ -8,6 +8,7 @@ import { getCloudSongLibrary } from "@/lib/db/savedSongs";
 import { getMyProfile, upsertMyProfile } from "@/lib/db/profiles";
 import { getTeamMembers } from "@/lib/db/teamMembers";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -15,6 +16,7 @@ export default function AccountPage() {
   const router = useRouter();
   const [loaded, setLoaded] = useState(false);
   const [email, setEmail] = useState("");
+  const [authProviderMessage, setAuthProviderMessage] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState("기타");
   const [customRole, setCustomRole] = useState("");
@@ -49,6 +51,7 @@ export default function AccountPage() {
         getMyUpcomingTeamEvents().catch(() => []),
       ]);
       setEmail(user.email ?? "");
+      setAuthProviderMessage(getAuthProviderMessage(user));
       setDisplayName(profile?.displayName || user.email?.split("@")[0] || "");
       setRole(profile?.role || "기타");
       setCustomRole(profile?.customRole || "");
@@ -177,7 +180,10 @@ export default function AccountPage() {
 
           <section className="card p-6">
             <h2 className="section-title">프로필</h2>
-            <p className="mt-1 text-sm text-slate-500">{email}</p>
+            <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-bold text-slate-950">{email || "이메일 정보가 없습니다."}</p>
+              {authProviderMessage ? <p className="mt-1 text-xs font-semibold text-slate-500">{authProviderMessage}</p> : null}
+            </div>
             <form onSubmit={handleSubmit} className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="space-y-1 sm:col-span-2">
                 <span className="field-label">이름</span>
@@ -257,6 +263,34 @@ export default function AccountPage() {
       )}
     </div>
   );
+}
+
+function getAuthProviderMessage(user: User) {
+  const providers = getAuthProviders(user);
+
+  if (providers.some((provider) => provider.includes("google"))) {
+    return "구글로 가입한 계정이에요.";
+  }
+
+  if (providers.some((provider) => provider.includes("naver"))) {
+    return "네이버로 가입한 계정이에요.";
+  }
+
+  if (providers.some((provider) => provider.includes("email"))) {
+    return "이메일로 가입한 계정이에요.";
+  }
+
+  return "";
+}
+
+function getAuthProviders(user: User) {
+  const providers = [
+    user.app_metadata?.provider,
+    user.user_metadata?.provider,
+    ...(Array.isArray(user.identities) ? user.identities.map((identity) => identity.provider) : []),
+  ];
+
+  return providers.filter((provider): provider is string => typeof provider === "string" && Boolean(provider.trim())).map((provider) => provider.trim().toLowerCase());
 }
 
 function formatEventDate(value: string) {
