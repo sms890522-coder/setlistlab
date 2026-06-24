@@ -56,6 +56,7 @@ export default function SongGuideTrackPage() {
   const [extractedChords, setExtractedChords] = useState<ExtractedChord[]>([]);
   const [manualChord, setManualChord] = useState("");
   const [sections, setSections] = useState<SectionDraft[]>([]);
+  const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const [bpm, setBpm] = useState(72);
   const [key, setKey] = useState("");
   const [timeSignature, setTimeSignature] = useState("4/4");
@@ -116,6 +117,14 @@ export default function SongGuideTrackPage() {
       sections,
     ],
   );
+  const chordCandidates = useMemo(() => cleanExtractedChords(extractedChords), [extractedChords]);
+  const activeSection = sections[activeSectionIndex] ?? sections[0] ?? null;
+
+  useEffect(() => {
+    if (sections.length > 0 && activeSectionIndex >= sections.length) {
+      setActiveSectionIndex(0);
+    }
+  }, [activeSectionIndex, sections.length]);
 
   useEffect(() => {
     async function load() {
@@ -157,6 +166,7 @@ export default function SongGuideTrackPage() {
       setTrack(nextTrack);
       setExtractedChords(nextTrack?.extractedChords ?? []);
       setSections(createSectionDrafts(nextSong, nextTrack));
+      setActiveSectionIndex(0);
       const normalizedGuideData = normalizeGuideTrackData(nextTrack?.guideTrackData);
       setBpm(normalizedGuideData.bpm ?? nextSong.bpm ?? 72);
       setKey(normalizedGuideData.key ?? nextSong.practiceKey ?? nextSong.originalKey ?? "");
@@ -205,13 +215,10 @@ export default function SongGuideTrackPage() {
       setExtractedChords(nextChords);
       setWarnings(result.warnings);
       setOcrRawText(result.rawText);
-      if (nextChords.length > 0) {
-        setSections((current) => distributeChordsToSections(current, nextChords));
-      }
       if (result.manualMode) {
         setMessage("코드를 자동으로 찾지 못했습니다. 송폼별 코드를 직접 입력해 주세요.");
       } else {
-        setMessage(`${nextChords.length}개의 코드 후보를 찾았습니다. 저장 전 반드시 확인해 주세요.`);
+        setMessage(`${nextChords.length}개의 코드 후보를 찾았습니다. 송폼 구간을 선택한 뒤 코드를 눌러 넣어 주세요.`);
       }
     } catch (extractError) {
       setWarnings(["자동 추출에 실패했습니다. 송폼별 코드를 직접 입력해 주세요."]);
@@ -249,14 +256,60 @@ export default function SongGuideTrackPage() {
     setExtractedChords((current) => current.filter((item) => item.chord !== chord));
   }
 
+  function addChordToActiveSection(chord: string) {
+    const normalized = parseChordLine(chord)[0] ?? chord.trim();
+    if (!normalized || sections.length === 0) return;
+
+    const targetIndex = sections[activeSectionIndex] ? activeSectionIndex : 0;
+    setSections((current) =>
+      current.map((section, index) =>
+        index === targetIndex
+          ? {
+              ...section,
+              chordText: appendChordText(section.chordText, normalized),
+            }
+          : section,
+      ),
+    );
+  }
+
   function updateSection(index: number, patch: Partial<SectionDraft>) {
     setSections((current) => current.map((section, sectionIndex) => (sectionIndex === index ? { ...section, ...patch } : section)));
   }
 
   function applyExtractedChords() {
-    const cleanedChords = cleanExtractedChords(extractedChords);
+    const cleanedChords = chordCandidates;
     setExtractedChords(cleanedChords);
     setSections((current) => distributeChordsToSections(current, cleanedChords));
+  }
+
+  function copyPreviousSection(index: number) {
+    if (index <= 0) return;
+    const previousSection = sections[index - 1];
+    if (!previousSection) return;
+    updateSection(index, { chordText: previousSection.chordText });
+  }
+
+  function clearSectionChords(index: number) {
+    updateSection(index, { chordText: "" });
+  }
+
+  function applyToSameLabel(index: number) {
+    const sourceSection = sections[index];
+    if (!sourceSection) return;
+    const normalizedLabel = normalizeSectionLabel(sourceSection.label);
+    setSections((current) =>
+      current.map((section) =>
+        normalizeSectionLabel(section.label) === normalizedLabel
+          ? {
+              ...section,
+              chordText: sourceSection.chordText,
+              bars: sourceSection.bars,
+              repeat: sourceSection.repeat,
+            }
+          : section,
+      ),
+    );
   }
 
   async function handleSaveGuideTrack() {
@@ -287,7 +340,8 @@ export default function SongGuideTrackPage() {
         },
       });
       setTrack(saved);
-      setMessage("가이드 트랙이 생성되었습니다.");
+      setExtractedChords(cleanedExtractedChords);
+      setMessage(track ? "가이드 트랙 수정사항을 저장했습니다." : "가이드 트랙이 생성되었습니다.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "가이드 트랙을 저장하지 못했습니다.");
     } finally {
@@ -296,7 +350,7 @@ export default function SongGuideTrackPage() {
   }
 
   async function handleDownloadWav() {
-    const data = track?.guideTrackData ?? guideData;
+    const data = guideData;
     setDownloading(true);
     setError("");
     setMessage("");
@@ -317,7 +371,7 @@ export default function SongGuideTrackPage() {
   }
 
   function handleDownloadJson() {
-    const data = track?.guideTrackData ?? guideData;
+    const data = guideData;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     downloadBlob(blob, createGuideTrackFilename(song?.title || "guide-track", "json"));
   }
@@ -449,7 +503,7 @@ export default function SongGuideTrackPage() {
                 className="field-input"
                 placeholder="예: G D/F# Em7 C"
               />
-              <button type="button" onClick={addManualChord} className="btn-secondary shrink-0">코드 추가</button>
+              <button type="button" onClick={addManualChord} className="btn-secondary shrink-0">후보 추가</button>
             </div>
             {extractedChords.length === 0 ? (
               <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
@@ -482,19 +536,76 @@ export default function SongGuideTrackPage() {
                 <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-500">{ocrRawText}</pre>
               </details>
             ) : null}
-            <button type="button" onClick={applyExtractedChords} disabled={extractedChords.length === 0} className="btn-secondary mt-4 w-full">
-              추출 코드를 송폼에 자동 배치
+            <button type="button" onClick={applyExtractedChords} disabled={chordCandidates.length === 0} className="btn-secondary mt-4 w-full">
+              대략 배치해보기
             </button>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              정확한 배치는 다음 단계에서 송폼 구간을 선택하고 코드 후보를 눌러 직접 넣는 방식이 가장 안전합니다.
+            </p>
           </StepCard>
         </div>
 
         <div className="space-y-4">
           <StepCard step="4" title="송폼별 코드 배치">
+            <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-black text-slate-950">
+                    선택한 구간: {activeSection ? activeSection.label : "구간 없음"}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    코드 후보를 누르면 선택한 구간 끝에 추가됩니다. 같은 코드는 여러 번 눌러 <span className="font-black">G G C C</span>처럼 넣을 수 있어요.
+                  </p>
+                </div>
+                {activeSection ? (
+                  <button type="button" onClick={() => clearSectionChords(activeSectionIndex)} className="btn-secondary min-h-10 shrink-0">
+                    선택 구간 비우기
+                  </button>
+                ) : null}
+              </div>
+              {chordCandidates.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {chordCandidates.map((item) => (
+                    <button
+                      key={`add-${item.chord}`}
+                      type="button"
+                      onClick={() => addChordToActiveSection(item.chord)}
+                      disabled={!activeSection}
+                      className="rounded-full bg-white px-3 py-2 text-sm font-black text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {item.chord}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 rounded-xl border border-dashed border-blue-100 bg-white/70 p-3 text-sm text-slate-500">
+                  코드 후보를 먼저 추출하거나 직접 추가하면 여기에 표시됩니다.
+                </p>
+              )}
+            </div>
             <div className="space-y-3">
               {sections.map((section, index) => (
-                <div key={section.sectionId} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div
+                  key={section.sectionId}
+                  className={`rounded-2xl border p-4 transition ${
+                    activeSectionIndex === index ? "border-blue-300 bg-blue-50/40 ring-2 ring-blue-100" : "border-slate-200 bg-white"
+                  }`}
+                >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="font-black text-slate-950">{section.label}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-black text-slate-950">{section.label}</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSectionIndex(index)}
+                        className={
+                          activeSectionIndex === index
+                            ? "rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white"
+                            : "rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600"
+                        }
+                      >
+                        {activeSectionIndex === index ? "선택됨" : "여기에 넣기"}
+                      </button>
+                    </div>
                     <div className="grid grid-cols-2 gap-2 sm:w-44">
                       <label className="space-y-1">
                         <span className="text-[11px] font-black text-slate-500">마디</span>
@@ -510,6 +621,17 @@ export default function SongGuideTrackPage() {
                     <span className="field-label">코드 진행</span>
                     <input value={section.chordText} onChange={(event) => updateSection(index, { chordText: event.target.value })} className="field-input" placeholder="G D/F# Em7 C" />
                   </label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => copyPreviousSection(index)} disabled={index === 0} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 disabled:opacity-40">
+                      이전 구간 복사
+                    </button>
+                    <button type="button" onClick={() => applyToSameLabel(index)} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+                      같은 이름 구간에 적용
+                    </button>
+                    <button type="button" onClick={() => clearSectionChords(index)} className="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700">
+                      비우기
+                    </button>
+                  </div>
                   <label className="mt-3 block space-y-1">
                     <span className="field-label">메모</span>
                     <input value={section.memo} onChange={(event) => updateSection(index, { memo: event.target.value })} className="field-input" placeholder="후렴 2번 반복 등" />
@@ -643,10 +765,10 @@ export default function SongGuideTrackPage() {
               </p>
             ) : null}
             <button type="button" onClick={handleSaveGuideTrack} disabled={!canSave || saving} className="btn-primary mt-4 w-full">
-              {saving ? "저장 중..." : "가이드 트랙 만들기"}
+              {saving ? "저장 중..." : track ? "가이드 트랙 수정 저장" : "가이드 트랙 만들기"}
             </button>
             <div className="mt-4">
-              <GuideTrackPreviewPlayer data={track?.guideTrackData ?? guideData} />
+              <GuideTrackPreviewPlayer data={guideData} />
             </div>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
               <h3 className="font-black text-slate-950">다운로드</h3>
@@ -783,6 +905,15 @@ function distributeChordsToSections(sections: SectionDraft[], chords: ExtractedC
 
 function cleanExtractedChords(chords: ExtractedChord[]) {
   return dedupeChords(chords.filter((item) => parseChordLine(item.chord).length > 0)) as ExtractedChord[];
+}
+
+function appendChordText(current: string, chord: string) {
+  const currentText = current.trim();
+  return currentText ? `${currentText} ${chord}` : chord;
+}
+
+function normalizeSectionLabel(label: string) {
+  return label.trim().toLowerCase();
 }
 
 function clampNumber(value: string, fallback: number, min: number, max: number) {
