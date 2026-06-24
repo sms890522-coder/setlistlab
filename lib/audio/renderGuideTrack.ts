@@ -80,7 +80,7 @@ function scheduleClick(context: BaseAudioContext, time: number, strong: boolean,
   oscillator.type = "square";
   oscillator.frequency.value = strong ? 1200 : 820;
   gain.gain.setValueAtTime(0.0001, time);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.01, volume) * 0.16, time + 0.005);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.01, volume) * 0.22, time + 0.005);
   gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.08);
   oscillator.connect(gain).connect(context.destination);
   oscillator.start(time);
