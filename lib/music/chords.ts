@@ -16,14 +16,12 @@ export function normalizeChord(chord: string) {
 }
 
 export function parseChordLine(input: string): string[] {
-  const tokens = input
+  return input
     .replace(/\|/g, " ")
     .replace(/,/g, " ")
     .split(/\s+/)
     .map((token) => normalizeChord(token))
     .filter(Boolean);
-
-  return Array.from(new Set(tokens));
 }
 
 export function isLikelyChord(token: string) {
