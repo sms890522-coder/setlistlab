@@ -417,7 +417,7 @@ export default function SongGuideTrackPage() {
   const canSave = canManage && hasScoreImage && hasSongForm;
 
   return (
-    <div className="page-shell space-y-6 pb-20">
+    <div className="page-shell space-y-6 pb-40 md:pb-20">
       <section className="card overflow-hidden">
         <div className="bg-gradient-to-r from-violet-50 via-white to-blue-50 p-5 sm:p-7">
           <Link href={`/setlists/${setlist.id}/songs/${song.id}`} className="text-sm font-bold text-blue-700">
@@ -619,7 +619,13 @@ export default function SongGuideTrackPage() {
                   </div>
                   <label className="mt-3 block space-y-1">
                     <span className="field-label">코드 진행</span>
-                    <input value={section.chordText} onChange={(event) => updateSection(index, { chordText: event.target.value })} className="field-input" placeholder="G D/F# Em7 C" />
+                    <input
+                      value={section.chordText}
+                      onFocus={() => setActiveSectionIndex(index)}
+                      onChange={(event) => updateSection(index, { chordText: event.target.value })}
+                      className="field-input"
+                      placeholder="G D/F# Em7 C"
+                    />
                   </label>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" onClick={() => copyPreviousSection(index)} disabled={index === 0} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 disabled:opacity-40">
@@ -632,10 +638,6 @@ export default function SongGuideTrackPage() {
                       비우기
                     </button>
                   </div>
-                  <label className="mt-3 block space-y-1">
-                    <span className="field-label">메모</span>
-                    <input value={section.memo} onChange={(event) => updateSection(index, { memo: event.target.value })} className="field-input" placeholder="후렴 2번 반복 등" />
-                  </label>
                 </div>
               ))}
             </div>
@@ -787,6 +789,32 @@ export default function SongGuideTrackPage() {
           </StepCard>
         </div>
       </section>
+
+      {activeSection && chordCandidates.length > 0 ? (
+        <div className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-blue-200 bg-white/95 p-3 shadow-2xl backdrop-blur md:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-black text-slate-950">선택한 구간: {activeSection.label}</p>
+              <p className="text-[11px] font-semibold text-slate-500">코드를 누르면 이 구간에 추가됩니다.</p>
+            </div>
+            <button type="button" onClick={() => clearSectionChords(activeSectionIndex)} className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-black text-slate-600">
+              비우기
+            </button>
+          </div>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {chordCandidates.map((item) => (
+              <button
+                key={`mobile-add-${item.chord}`}
+                type="button"
+                onClick={() => addChordToActiveSection(item.chord)}
+                className="shrink-0 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-sm"
+              >
+                {item.chord}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -832,7 +860,7 @@ function sectionDraftToGuideSection(section: SectionDraft): GuideTrackSection {
     chords: parseChordLine(section.chordText),
     bars: Math.max(1, section.bars),
     repeat: Math.max(1, section.repeat),
-    memo: section.memo.trim(),
+    memo: "",
   };
 }
 

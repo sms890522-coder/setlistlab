@@ -172,7 +172,6 @@ export async function saveGuideTrack(input: TeamGuideTrackInput) {
     team_id: input.teamId || null,
     setlist_id: input.setlistId,
     song_id: input.songId,
-    created_by: user.id,
     title: input.title.trim() || "팀 가이드 트랙",
     status: input.status ?? "ready",
     source_score_image_url: input.sourceScoreImageUrl || null,
@@ -187,20 +186,24 @@ export async function saveGuideTrack(input: TeamGuideTrackInput) {
   };
 
   if (input.id) {
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from("team_guide_tracks")
-      .update(payload)
-      .eq("id", input.id)
-      .select("*")
-      .single<TeamGuideTrackRow>();
+      .update(payload, { count: "exact" })
+      .eq("id", input.id);
 
     if (error) throw new Error(error.message || "가이드 트랙을 저장하지 못했습니다.");
-    return rowToGuideTrack(data);
+    if (count === 0) {
+      throw new Error("가이드 트랙을 수정할 권한이 없거나 저장할 대상을 찾지 못했습니다.");
+    }
+
+    const updated = await getGuideTrack(input.id);
+    if (!updated) throw new Error("저장한 가이드 트랙을 다시 불러오지 못했습니다.");
+    return updated;
   }
 
   const { data, error } = await supabase
     .from("team_guide_tracks")
-    .insert(payload)
+    .insert({ ...payload, created_by: user.id })
     .select("*")
     .single<TeamGuideTrackRow>();
 
