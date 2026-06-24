@@ -10,7 +10,8 @@ export type ExtractedChord = {
   chord: string;
   rawText?: string;
   confidence?: number;
-  source: "image" | "manual";
+  source: "image" | "manual" | "tesseract";
+  needsReview?: boolean;
 };
 
 export type GuideTrackSection = {
@@ -54,6 +55,7 @@ export type GuideTrackData = {
   key?: string;
   timeSignature: string;
   sound: "piano" | "pad" | "piano_pad" | "click_only";
+  extractionProvider?: "tesseract" | "none" | "custom";
   metronome: GuideTrackMetronome;
   countIn: GuideTrackCountIn;
   voiceCue: GuideTrackVoiceCue;
@@ -276,6 +278,7 @@ export function normalizeGuideTrackData(value: unknown): GuideTrackData {
     key: typeof value.key === "string" ? value.key : undefined,
     timeSignature: typeof value.timeSignature === "string" && value.timeSignature ? value.timeSignature : base.timeSignature,
     sound: isGuideTrackSound(value.sound) ? value.sound : base.sound,
+    extractionProvider: isGuideTrackExtractionProvider(value.extractionProvider) ? value.extractionProvider : undefined,
     metronome,
     countIn,
     voiceCue,
@@ -358,6 +361,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isGuideTrackSound(value: unknown): value is GuideTrackData["sound"] {
   return value === "piano" || value === "pad" || value === "piano_pad" || value === "click_only";
+}
+
+function isGuideTrackExtractionProvider(value: unknown): value is NonNullable<GuideTrackData["extractionProvider"]> {
+  return value === "tesseract" || value === "none" || value === "custom";
 }
 
 function normalizeInteger(value: unknown, fallback: number, min: number, max: number) {

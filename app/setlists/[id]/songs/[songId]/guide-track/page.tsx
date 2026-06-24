@@ -18,8 +18,9 @@ import { getMyProfile, type Profile } from "@/lib/db/profiles";
 import { getCloudSetlist, type CloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { canUseFeature } from "@/lib/features";
+import { extractChordsWithTesseract, getGuideTrackOcrProvider } from "@/lib/guide-track/tesseractChordExtraction";
 import { getFirstImageLink, getImagePreviewUrl } from "@/lib/images";
-import { parseChordLine } from "@/lib/music/chords";
+import { dedupeChords, parseChordLine } from "@/lib/music/chords";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Song } from "@/lib/types";
@@ -48,6 +49,9 @@ export default function SongGuideTrackPage() {
   const [message, setMessage] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrStatus, setOcrStatus] = useState("");
+  const [ocrRawText, setOcrRawText] = useState("");
   const [saving, setSaving] = useState(false);
   const [extractedChords, setExtractedChords] = useState<ExtractedChord[]>([]);
   const [manualChord, setManualChord] = useState("");
@@ -184,31 +188,31 @@ export default function SongGuideTrackPage() {
     setError("");
     setMessage("");
     setWarnings([]);
+    setOcrProgress(0);
+    setOcrStatus("OCR 준비 중입니다.");
+    setOcrRawText("");
 
     try {
-      const response = await fetch("/api/guide-track/extract-chords", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: sourceImage.url, songTitle: song.title, key }),
+      const result = await extractChordsWithTesseract({
+        imageUrl: sourceImage.url,
+        onProgress: (progress, status) => {
+          setOcrProgress(progress);
+          setOcrStatus(status ?? "OCR을 진행하는 중입니다.");
+        },
       });
-      const data = (await response.json()) as {
-        chords?: ExtractedChord[];
-        manualMode?: boolean;
-        warnings?: string[];
-        error?: string;
-      };
 
-      if (!response.ok) {
-        throw new Error(data.error || "코드 추출에 실패했습니다.");
-      }
-
-      const nextChords = dedupeChords(data.chords ?? []);
+      const nextChords = dedupeChords(result.chords) as ExtractedChord[];
       setExtractedChords(nextChords);
-      setWarnings(data.warnings ?? []);
+      setWarnings(result.warnings);
+      setOcrRawText(result.rawText);
       if (nextChords.length > 0) {
         setSections((current) => distributeChordsToSections(current, nextChords));
       }
-      setMessage(data.manualMode ? "자동 추출 설정이 없어 수동 입력 모드로 진행합니다." : "코드 추출 결과를 불러왔습니다.");
+      if (result.manualMode) {
+        setMessage("코드를 자동으로 찾지 못했습니다. 송폼별 코드를 직접 입력해 주세요.");
+      } else {
+        setMessage(`${nextChords.length}개의 코드 후보를 찾았습니다. 저장 전 반드시 확인해 주세요.`);
+      }
     } catch (extractError) {
       setWarnings(["자동 추출에 실패했습니다. 송폼별 코드를 직접 입력해 주세요."]);
       setError(extractError instanceof Error ? extractError.message : "코드 추출에 실패했습니다.");
@@ -224,6 +228,23 @@ export default function SongGuideTrackPage() {
     setManualChord("");
   }
 
+  function updateExtractedChord(index: number, value: string) {
+    const normalized = parseChordLine(value)[0] ?? value.trim();
+    setExtractedChords((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              chord: normalized,
+              rawText: value,
+              needsReview: true,
+              confidence: Math.min(item.confidence ?? 0.65, 0.69),
+            }
+          : item,
+      ),
+    );
+  }
+
   function removeChord(chord: string) {
     setExtractedChords((current) => current.filter((item) => item.chord !== chord));
   }
@@ -233,7 +254,9 @@ export default function SongGuideTrackPage() {
   }
 
   function applyExtractedChords() {
-    setSections((current) => distributeChordsToSections(current, extractedChords));
+    const cleanedChords = cleanExtractedChords(extractedChords);
+    setExtractedChords(cleanedChords);
+    setSections((current) => distributeChordsToSections(current, cleanedChords));
   }
 
   async function handleSaveGuideTrack() {
@@ -243,6 +266,7 @@ export default function SongGuideTrackPage() {
     setMessage("");
 
     try {
+      const cleanedExtractedChords = cleanExtractedChords(extractedChords);
       const songFormMap = sections.map(sectionDraftToGuideSection);
       const saved = await saveGuideTrack({
         id: track?.id,
@@ -252,11 +276,12 @@ export default function SongGuideTrackPage() {
         title: `${song.title || "곡"} 가이드 트랙`,
         status: "ready",
         sourceScoreImageUrl: sourceImage.url,
-        extractionStatus: extractedChords.length > 0 ? "extracted" : "manual",
-        extractedChords,
+        extractionStatus: cleanedExtractedChords.length > 0 ? "extracted" : "manual",
+        extractedChords: cleanedExtractedChords,
         songFormMap,
         guideTrackData: {
           ...guideData,
+          extractionProvider: cleanedExtractedChords.some((item) => item.source === "tesseract") ? "tesseract" : getGuideTrackOcrProvider(),
           sections: songFormMap,
           totalBars: calculateTotalBars(songFormMap),
         },
@@ -382,17 +407,32 @@ export default function SongGuideTrackPage() {
               </a>
             ) : null}
             <p className="mt-4 text-xs leading-5 text-slate-500">
-              저작권이 있는 악보 이미지는 권리자의 허락 범위 안에서만 사용해 주세요. 외부 코드 추출 API를 연결하면 이미지 URL이 해당 API로 전송될 수 있습니다.
+              저작권이 있는 악보 이미지는 권리자의 허락 범위 안에서만 사용해 주세요. 코드 추출은 브라우저에서 Tesseract.js로 처리되며 별도의 유료 AI API를 사용하지 않습니다.
             </p>
           </StepCard>
 
           <StepCard step="2" title="이미지에서 코드 추출">
             <p className="text-sm leading-7 text-slate-600">
-              악보 이미지에서 코드를 찾습니다. 자동 추출 API가 설정되어 있지 않으면 수동 입력 모드로 진행합니다.
+              악보 이미지에서 코드를 찾습니다. 이미지가 흐리거나 코드가 작으면 누락될 수 있으니 추출 결과를 꼭 확인해 주세요.
             </p>
             <button type="button" onClick={handleExtractChords} disabled={!hasScoreImage || extracting} className="btn-primary mt-4 w-full">
-              {extracting ? "추출 중입니다..." : "코드 추출 시작"}
+              {extracting ? "추출 중입니다..." : "이미지에서 코드 추출"}
             </button>
+            {extracting ? (
+              <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                <div className="flex items-center justify-between gap-3 text-xs font-black text-blue-800">
+                  <span>{ocrStatus || "악보 이미지에서 코드를 찾고 있습니다."}</span>
+                  <span>{Math.max(0, Math.min(100, ocrProgress))}%</span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                  <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(3, Math.min(100, ocrProgress))}%` }} />
+                </div>
+                <p className="mt-3 text-xs leading-5 text-slate-500">모바일에서는 이미지 상태에 따라 잠시 시간이 걸릴 수 있습니다.</p>
+              </div>
+            ) : null}
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              자동 추출이 어렵다면 다음 단계에서 코드를 직접 입력할 수 있습니다.
+            </p>
           </StepCard>
 
           <StepCard step="3" title="추출된 코드 확인">
@@ -417,20 +457,31 @@ export default function SongGuideTrackPage() {
               </p>
             ) : (
               <div className="mt-4 flex flex-wrap gap-2">
-                {extractedChords.map((item) => (
-                  <button
-                    key={item.chord}
-                    type="button"
-                    onClick={() => removeChord(item.chord)}
-                    className={item.confidence !== undefined && item.confidence < 0.75 ? "rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-800 ring-1 ring-amber-100" : "rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100"}
-                    title="눌러서 삭제"
+                {extractedChords.map((item, index) => (
+                  <span
+                    key={`${item.chord}-${index}`}
+                    className={item.needsReview || (item.confidence !== undefined && item.confidence < 0.75) ? "inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-800 ring-1 ring-amber-100" : "inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100"}
                   >
-                    {item.chord}
-                    {item.confidence !== undefined && item.confidence < 0.75 ? " · 확인 필요" : ""}
-                  </button>
+                    <input
+                      value={item.chord}
+                      onChange={(event) => updateExtractedChord(index, event.target.value)}
+                      className="w-16 bg-transparent font-black outline-none"
+                      aria-label={`${item.chord} 코드 수정`}
+                    />
+                    {item.needsReview || (item.confidence !== undefined && item.confidence < 0.75) ? <span>확인 필요</span> : null}
+                    <button type="button" onClick={() => removeChord(item.chord)} className="text-slate-400 hover:text-rose-600" aria-label={`${item.chord} 코드 삭제`}>
+                      ×
+                    </button>
+                  </span>
                 ))}
               </div>
             )}
+            {ocrRawText ? (
+              <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <summary className="cursor-pointer text-xs font-black text-slate-600">OCR 원문 보기</summary>
+                <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-500">{ocrRawText}</pre>
+              </details>
+            ) : null}
             <button type="button" onClick={applyExtractedChords} disabled={extractedChords.length === 0} className="btn-secondary mt-4 w-full">
               추출 코드를 송폼에 자동 배치
             </button>
@@ -730,12 +781,8 @@ function distributeChordsToSections(sections: SectionDraft[], chords: ExtractedC
   });
 }
 
-function dedupeChords(chords: ExtractedChord[]) {
-  const map = new Map<string, ExtractedChord>();
-  chords.forEach((item) => {
-    if (item.chord) map.set(item.chord, item);
-  });
-  return Array.from(map.values());
+function cleanExtractedChords(chords: ExtractedChord[]) {
+  return dedupeChords(chords.filter((item) => parseChordLine(item.chord).length > 0)) as ExtractedChord[];
 }
 
 function clampNumber(value: string, fallback: number, min: number, max: number) {
