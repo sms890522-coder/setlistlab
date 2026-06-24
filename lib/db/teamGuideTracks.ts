@@ -18,6 +18,7 @@ export type GuideTrackSection = {
   sectionId: string;
   label: string;
   chords: string[];
+  chordBars?: string[][];
   bars: number;
   repeat: number;
   memo?: string;
@@ -348,14 +349,24 @@ function createDefaultVoiceCue(): GuideTrackVoiceCue {
 function normalizeGuideTrackSection(value: unknown): GuideTrackSection | null {
   if (!isRecord(value)) return null;
   const label = typeof value.label === "string" && value.label.trim() ? value.label.trim() : "Section";
+  const chordBars = normalizeChordBars(value.chordBars);
   return {
     sectionId: typeof value.sectionId === "string" && value.sectionId.trim() ? value.sectionId.trim() : label,
     label,
     chords: Array.isArray(value.chords) ? value.chords.filter((chord): chord is string => typeof chord === "string" && Boolean(chord.trim())) : [],
-    bars: normalizeInteger(value.bars, 4, 1, 64),
+    chordBars,
+    bars: Math.max(normalizeInteger(value.bars, 4, 1, 64), chordBars?.length ?? 0),
     repeat: normalizeInteger(value.repeat, 1, 1, 32),
     memo: typeof value.memo === "string" ? value.memo : "",
   };
+}
+
+function normalizeChordBars(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const bars = value
+    .map((bar) => (Array.isArray(bar) ? bar.filter((chord): chord is string => typeof chord === "string" && Boolean(chord.trim())) : []));
+
+  return bars.some((bar) => bar.length > 0) ? bars : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

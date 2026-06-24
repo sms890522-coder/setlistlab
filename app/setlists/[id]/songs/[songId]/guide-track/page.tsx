@@ -57,6 +57,7 @@ export default function SongGuideTrackPage() {
   const [manualChord, setManualChord] = useState("");
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
+  const [activeBarIndex, setActiveBarIndex] = useState(0);
   const [bpm, setBpm] = useState(72);
   const [key, setKey] = useState("");
   const [timeSignature, setTimeSignature] = useState("4/4");
@@ -119,12 +120,20 @@ export default function SongGuideTrackPage() {
   );
   const chordCandidates = useMemo(() => cleanExtractedChords(extractedChords), [extractedChords]);
   const activeSection = sections[activeSectionIndex] ?? sections[0] ?? null;
+  const activeBarNumber = activeBarIndex + 1;
 
   useEffect(() => {
     if (sections.length > 0 && activeSectionIndex >= sections.length) {
       setActiveSectionIndex(0);
     }
   }, [activeSectionIndex, sections.length]);
+
+  useEffect(() => {
+    const activeBarCount = activeSection ? getSectionChordBars(activeSection).length : 0;
+    if (activeBarCount > 0 && activeBarIndex >= activeBarCount) {
+      setActiveBarIndex(0);
+    }
+  }, [activeBarIndex, activeSection]);
 
   useEffect(() => {
     async function load() {
@@ -167,6 +176,7 @@ export default function SongGuideTrackPage() {
       setExtractedChords(nextTrack?.extractedChords ?? []);
       setSections(createSectionDrafts(nextSong, nextTrack));
       setActiveSectionIndex(0);
+      setActiveBarIndex(0);
       const normalizedGuideData = normalizeGuideTrackData(nextTrack?.guideTrackData);
       setBpm(normalizedGuideData.bpm ?? nextSong.bpm ?? 72);
       setKey(normalizedGuideData.key ?? nextSong.practiceKey ?? nextSong.originalKey ?? "");
@@ -261,12 +271,23 @@ export default function SongGuideTrackPage() {
     if (!normalized || sections.length === 0) return;
 
     const targetIndex = sections[activeSectionIndex] ? activeSectionIndex : 0;
+    const targetSection = sections[targetIndex];
+    if (!targetSection) return;
+
+    const bars = getSectionChordBars(targetSection);
+    const targetBarIndex = bars[activeBarIndex] ? activeBarIndex : 0;
+    const targetBar = bars[targetBarIndex] ?? [];
+    if (targetBar.length >= 4) {
+      setMessage("한 마디에는 최대 4개 코드까지 넣을 수 있어요.");
+      return;
+    }
+
     setSections((current) =>
       current.map((section, index) =>
         index === targetIndex
           ? {
               ...section,
-              chordText: appendChordText(section.chordText, normalized),
+              chordText: addChordToBarText(section.chordText, section.bars, targetBarIndex, normalized),
             }
           : section,
       ),
@@ -287,7 +308,7 @@ export default function SongGuideTrackPage() {
     if (index <= 0) return;
     const previousSection = sections[index - 1];
     if (!previousSection) return;
-    updateSection(index, { chordText: previousSection.chordText });
+    updateSection(index, { chordText: previousSection.chordText, bars: Math.max(1, getSectionChordBars(previousSection).length) });
   }
 
   function clearSectionChords(index: number) {
@@ -304,7 +325,7 @@ export default function SongGuideTrackPage() {
           ? {
               ...section,
               chordText: sourceSection.chordText,
-              bars: sourceSection.bars,
+              bars: Math.max(sourceSection.bars, getSectionChordBars(sourceSection).length),
               repeat: sourceSection.repeat,
             }
           : section,
@@ -554,7 +575,10 @@ export default function SongGuideTrackPage() {
                     선택한 구간: {activeSection ? activeSection.label : "구간 없음"}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-600">
-                    코드 후보를 누르면 선택한 구간 끝에 추가됩니다. 같은 코드는 여러 번 눌러 <span className="font-black">G G C C</span>처럼 넣을 수 있어요.
+                    코드 후보를 누르면 선택한 마디에 추가됩니다. 한 마디에 최대 4개 코드까지 넣을 수 있어요.
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    <span className="font-black">|</span> 는 마디 구분입니다. 예: <span className="font-black">G D/F# | Em7 C | Am7 D | G</span>
                   </p>
                 </div>
                 {activeSection ? (
@@ -573,7 +597,7 @@ export default function SongGuideTrackPage() {
                       disabled={!activeSection}
                       className="rounded-full bg-white px-3 py-2 text-sm font-black text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {item.chord}
+                      {item.chord} <span className="font-semibold opacity-70">→ {activeBarNumber}마디</span>
                     </button>
                   ))}
                 </div>
@@ -596,7 +620,10 @@ export default function SongGuideTrackPage() {
                       <p className="font-black text-slate-950">{section.label}</p>
                       <button
                         type="button"
-                        onClick={() => setActiveSectionIndex(index)}
+                        onClick={() => {
+                          setActiveSectionIndex(index);
+                          setActiveBarIndex(0);
+                        }}
                         className={
                           activeSectionIndex === index
                             ? "rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white"
@@ -622,11 +649,36 @@ export default function SongGuideTrackPage() {
                     <input
                       value={section.chordText}
                       onFocus={() => setActiveSectionIndex(index)}
-                      onChange={(event) => updateSection(index, { chordText: event.target.value })}
+                      onChange={(event) => {
+                        const nextChordText = event.target.value;
+                        const nextBars = parseChordTextToBars(nextChordText, section.bars);
+                        updateSection(index, { chordText: nextChordText, bars: Math.max(section.bars, nextBars.length) });
+                      }}
                       className="field-input"
-                      placeholder="G D/F# Em7 C"
+                      placeholder="G D/F# | Em7 C | Am7 D | G"
                     />
                   </label>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {getSectionChordBars(section).map((barChords, barIndex) => {
+                      const active = activeSectionIndex === index && activeBarIndex === barIndex;
+                      return (
+                        <button
+                          key={`${section.sectionId}-bar-${barIndex}`}
+                          type="button"
+                          onClick={() => {
+                            setActiveSectionIndex(index);
+                            setActiveBarIndex(barIndex);
+                          }}
+                          className={`min-h-12 rounded-xl border px-3 py-2 text-left text-xs font-bold transition ${
+                            active ? "border-blue-300 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-slate-50 text-slate-600"
+                          }`}
+                        >
+                          <span className="block text-[11px] font-black opacity-80">{barIndex + 1}마디</span>
+                          <span className="mt-1 block break-words text-sm">{barChords.length > 0 ? barChords.join("  ") : "코드 없음"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" onClick={() => copyPreviousSection(index)} disabled={index === 0} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600 disabled:opacity-40">
                       이전 구간 복사
@@ -794,8 +846,8 @@ export default function SongGuideTrackPage() {
         <div className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-blue-200 bg-white/95 p-3 shadow-2xl backdrop-blur md:hidden">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-xs font-black text-slate-950">선택한 구간: {activeSection.label}</p>
-              <p className="text-[11px] font-semibold text-slate-500">코드를 누르면 이 구간에 추가됩니다.</p>
+              <p className="truncate text-xs font-black text-slate-950">선택한 구간: {activeSection.label} · {activeBarNumber}마디</p>
+              <p className="text-[11px] font-semibold text-slate-500">코드를 누르면 선택한 마디에 추가됩니다.</p>
             </div>
             <button type="button" onClick={() => clearSectionChords(activeSectionIndex)} className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-black text-slate-600">
               비우기
@@ -836,7 +888,7 @@ function createSectionDrafts(song: Song, track: TeamGuideTrack | null): SectionD
     return track.songFormMap.map((section) => ({
       sectionId: section.sectionId,
       label: section.label,
-      chordText: section.chords.join(" "),
+      chordText: section.chordBars?.length ? formatChordBars(section.chordBars) : section.chords.join(" "),
       bars: section.bars,
       repeat: section.repeat,
       memo: section.memo ?? "",
@@ -854,11 +906,13 @@ function createSectionDrafts(song: Song, track: TeamGuideTrack | null): SectionD
 }
 
 function sectionDraftToGuideSection(section: SectionDraft): GuideTrackSection {
+  const chordBars = parseChordTextToBars(section.chordText, section.bars);
   return {
     sectionId: section.sectionId,
     label: section.label,
-    chords: parseChordLine(section.chordText),
-    bars: Math.max(1, section.bars),
+    chords: chordBars.flat(),
+    chordBars,
+    bars: Math.max(1, section.bars, chordBars.length),
     repeat: Math.max(1, section.repeat),
     memo: "",
   };
@@ -935,9 +989,31 @@ function cleanExtractedChords(chords: ExtractedChord[]) {
   return dedupeChords(chords.filter((item) => parseChordLine(item.chord).length > 0)) as ExtractedChord[];
 }
 
-function appendChordText(current: string, chord: string) {
-  const currentText = current.trim();
-  return currentText ? `${currentText} ${chord}` : chord;
+function parseChordTextToBars(chordText: string, minBars = 1) {
+  const hasExplicitBars = chordText.includes("|");
+  const rawBars = hasExplicitBars ? chordText.split("|") : parseChordLine(chordText).map((chord) => chord);
+  const parsedBars = rawBars.map((bar) => parseChordLine(bar).slice(0, 4));
+  const targetLength = Math.max(1, minBars, parsedBars.length);
+
+  return Array.from({ length: targetLength }, (_, index) => parsedBars[index] ?? []);
+}
+
+function getSectionChordBars(section: SectionDraft) {
+  return parseChordTextToBars(section.chordText, section.bars);
+}
+
+function addChordToBarText(current: string, minBars: number, barIndex: number, chord: string) {
+  const bars = parseChordTextToBars(current, minBars);
+  const nextBars = bars.map((bar) => [...bar]);
+  const targetBar = nextBars[barIndex] ?? [];
+  if (targetBar.length >= 4) return formatChordBars(nextBars);
+
+  nextBars[barIndex] = [...targetBar, chord];
+  return formatChordBars(nextBars);
+}
+
+function formatChordBars(chordBars: string[][]) {
+  return chordBars.map((bar) => bar.join(" ")).join(" | ");
 }
 
 function normalizeSectionLabel(label: string) {

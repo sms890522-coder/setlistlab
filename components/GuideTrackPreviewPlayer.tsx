@@ -314,8 +314,17 @@ function buildPlaybackTimeline(data: GuideTrackData): PlaybackTimeline {
 
     for (let repeat = 0; repeat < Math.max(1, section.repeat); repeat += 1) {
       for (let bar = 0; bar < Math.max(1, section.bars); bar += 1) {
-        const chord = getBarChord(section, bar);
-        events.push({ timeSec: cursorSec, type: "chord", chord, sectionLabel: section.label, durationSec: beatSec * beatsPerBar * 0.9 });
+        const barChords = getBarChords(section, bar);
+        const chordDurationSec = (beatSec * beatsPerBar) / barChords.length;
+        barChords.forEach((chord, chordIndex) => {
+          events.push({
+            timeSec: cursorSec + chordIndex * chordDurationSec,
+            type: "chord",
+            chord,
+            sectionLabel: section.label,
+            durationSec: chordDurationSec * 0.9,
+          });
+        });
         if (data.metronome.enabled) {
           for (let beat = 0; beat < beatsPerBar; beat += 1) {
             events.push({
@@ -346,9 +355,14 @@ function buildPlaybackTimeline(data: GuideTrackData): PlaybackTimeline {
   };
 }
 
-function getBarChord(section: GuideTrackSection, bar: number) {
+function getBarChords(section: GuideTrackSection, bar: number) {
+  if (section.chordBars?.length) {
+    const barChords = section.chordBars[bar % section.chordBars.length] ?? [];
+    return barChords.length > 0 ? barChords : ["N.C."];
+  }
+
   const chords = section.chords.length > 0 ? section.chords : ["N.C."];
-  return chords[bar % chords.length];
+  return [chords[bar % chords.length] ?? "N.C."];
 }
 
 function getBeatsPerBar(timeSignature: string) {
