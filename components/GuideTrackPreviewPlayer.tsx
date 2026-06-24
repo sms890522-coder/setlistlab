@@ -27,6 +27,8 @@ const NOTE_OFFSETS: Record<string, number> = {
   B: 11,
 };
 
+const PLAYBACK_START_DELAY_SEC = 0.18;
+
 type PlaybackEvent =
   | { timeSec: number; type: "click"; strong: boolean; volume: number }
   | { timeSec: number; type: "chord"; chord: string; sectionLabel: string; durationSec: number }
@@ -64,6 +66,7 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
   const [beatInBar, setBeatInBar] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const timeoutRefs = useRef<number[]>([]);
+  const scheduledSourcesRef = useRef<AudioScheduledSourceNode[]>([]);
   const animationRef = useRef<number | null>(null);
   const playbackRef = useRef<PlaybackSession | null>(null);
 
@@ -80,6 +83,7 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
   function stop() {
     timeoutRefs.current.forEach((timerId) => window.clearTimeout(timerId));
     timeoutRefs.current = [];
+    stopScheduledSources();
     if (animationRef.current !== null) {
       window.cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
@@ -90,6 +94,23 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
     setCurrentLabel("");
     setPhase("idle");
     setBeatInBar(0);
+  }
+
+  function stopScheduledSources() {
+    const stopAt = audioContextRef.current?.currentTime ?? 0;
+    scheduledSourcesRef.current.forEach((source) => {
+      try {
+        source.stop(stopAt);
+      } catch {
+        // 이미 종료된 노드는 브라우저가 예외를 던질 수 있으므로 무시한다.
+      }
+      try {
+        source.disconnect();
+      } catch {
+        // 연결 해제 실패도 재생 정지 흐름을 막지 않는다.
+      }
+    });
+    scheduledSourcesRef.current = [];
   }
 
   async function start() {
@@ -108,7 +129,7 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
     setCurrentLabel(data.countIn.enabled ? "카운트인" : "재생 준비");
 
     const context = audioContextRef.current;
-    const startAt = context.currentTime + 0.08;
+    const startAt = context.currentTime + PLAYBACK_START_DELAY_SEC;
     const session: PlaybackSession = {
       startAt,
       songStartAt: startAt + timeline.countInSec,
@@ -120,10 +141,10 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
     timeline.events.forEach((event) => {
       const eventTime = startAt + event.timeSec;
       if (event.type === "click") {
-        playClick(context, eventTime, event.strong, event.volume);
+        trackScheduledSources(playClick(context, eventTime, event.strong, event.volume));
       } else if (event.type === "chord") {
         if (data.sound !== "click_only") {
-          playChord(context, eventTime, event.chord, data.sound, event.durationSec);
+          trackScheduledSources(playChord(context, eventTime, event.chord, data.sound, event.durationSec));
         }
       } else if (event.type === "speech") {
         const delayMs = Math.max(0, (eventTime - context.currentTime) * 1000);
@@ -136,6 +157,19 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
 
     const endDelayMs = Math.max(0, (session.endAt - context.currentTime) * 1000) + 250;
     timeoutRefs.current.push(window.setTimeout(stop, endDelayMs));
+  }
+
+  function trackScheduledSources(sources: AudioScheduledSourceNode[]) {
+    sources.forEach((source) => {
+      scheduledSourcesRef.current.push(source);
+      source.addEventListener(
+        "ended",
+        () => {
+          scheduledSourcesRef.current = scheduledSourcesRef.current.filter((item) => item !== source);
+        },
+        { once: true },
+      );
+    });
   }
 
   function startVisualCounter() {
@@ -350,21 +384,23 @@ function playClick(context: AudioContext, time: number, strong: boolean, volume:
   oscillator.type = "square";
   oscillator.frequency.value = strong ? 1200 : 820;
   gain.gain.setValueAtTime(0.0001, time);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.01, volume) * 0.16, time + 0.005);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.01, volume) * 0.22, time + 0.005);
   gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.08);
   oscillator.connect(gain).connect(context.destination);
   oscillator.start(time);
   oscillator.stop(time + 0.09);
+  return [oscillator];
 }
 
 function playChord(context: AudioContext, time: number, chord: string, sound: GuideTrackData["sound"], duration: number) {
   const root = chord.match(/^([A-G](?:#|b)?)/)?.[1];
-  if (!root || chord === "N.C.") return;
+  if (!root || chord === "N.C.") return [];
 
   const rootFrequency = noteToFrequency(root, 3);
   const minor = /m(?!aj)/.test(chord);
   const tones = minor ? [0, 3, 7] : [0, 4, 7];
   const oscillatorType: OscillatorType = sound === "pad" ? "sine" : "triangle";
+  const sources: AudioScheduledSourceNode[] = [];
 
   tones.forEach((offset, index) => {
     const oscillator = context.createOscillator();
@@ -377,7 +413,10 @@ function playChord(context: AudioContext, time: number, chord: string, sound: Gu
     oscillator.connect(gain).connect(context.destination);
     oscillator.start(time);
     oscillator.stop(time + Math.max(0.25, duration) + 0.05);
+    sources.push(oscillator);
   });
+
+  return sources;
 }
 
 function noteToFrequency(note: string, octave: number) {
