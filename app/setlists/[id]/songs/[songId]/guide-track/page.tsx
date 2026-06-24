@@ -281,7 +281,7 @@ export default function SongGuideTrackPage() {
       const wav = audioBufferToWav(buffer);
       const blob = new Blob([wav], { type: "audio/wav" });
       downloadBlob(blob, createGuideTrackFilename(song?.title || "guide-track", "wav"));
-      setMessage("가이드 트랙 WAV 파일을 내려받았습니다. 카운트인 화면 카운터는 재생 화면에서만 표시됩니다.");
+      setMessage("가이드 트랙 WAV 파일을 내려받았습니다. 송폼 구간 음성 안내는 파일에 포함되고, 화면 카운터는 재생 화면에서만 표시됩니다.");
     } catch (downloadError) {
       handleDownloadJson();
       setMessage("WAV 다운로드가 어려워 가이드 트랙 데이터 JSON을 내려받았습니다.");
@@ -600,7 +600,7 @@ export default function SongGuideTrackPage() {
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
               <h3 className="font-black text-slate-950">다운로드</h3>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                생성한 가이드 트랙을 파일로 내려받아 연습이나 팀 녹음실 준비에 사용할 수 있습니다. 음성 카운트는 현재 제공하지 않으며, 카운트인은 메트로놈 클릭과 화면 카운터로 제공됩니다. 다운로드 파일에는 화면 카운터가 포함되지 않습니다.
+                생성한 가이드 트랙을 파일로 내려받아 연습이나 팀 녹음실 준비에 사용할 수 있습니다. 송폼 구간 음성 안내와 클릭은 WAV에 포함되고, 화면 카운터는 재생 화면에서만 표시됩니다.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <button type="button" onClick={handleDownloadWav} disabled={downloading} className="btn-primary">
