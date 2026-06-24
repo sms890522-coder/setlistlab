@@ -38,6 +38,7 @@ export default function SongPracticePage() {
   const [loadError, setLoadError] = useState("");
   const [canEdit, setCanEdit] = useState(true);
   const [canUseGuideTrack, setCanUseGuideTrack] = useState(false);
+  const [canUseRecordingStudio, setCanUseRecordingStudio] = useState(false);
   const [existingGuideTrackId, setExistingGuideTrackId] = useState<string | null>(null);
   const playerRef = useRef<YouTubePlayerHandle>(null);
   const lastSavedPositionRef = useRef(0);
@@ -56,6 +57,7 @@ export default function SongPracticePage() {
             const membership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
             setCanEdit(Boolean(cloudSetlist.ownerId === user.id || canManageTeamSetlist(membership)));
             setCanUseGuideTrack(canUseFeature(profile, "teamGuideTrack"));
+            setCanUseRecordingStudio(canUseFeature(profile, "teamRecordingStudio"));
             const foundSong = cloudSetlist.songs.find((item) => item.id === params.songId) ?? null;
             if (foundSong) {
               const guideTrack = await getFirstGuideTrackForSong(cloudSetlist.id, foundSong.id).catch(() => null);
@@ -71,6 +73,7 @@ export default function SongPracticePage() {
         foundSetlist = getSetlist(params.id) ?? null;
         setCanEdit(true);
         setCanUseGuideTrack(false);
+        setCanUseRecordingStudio(false);
         setExistingGuideTrackId(null);
         setStorageMode("local");
       }
@@ -94,6 +97,7 @@ export default function SongPracticePage() {
       lastSavedPositionRef.current = Math.round(savedPosition);
       setStorageMode("local");
       setCanUseGuideTrack(false);
+      setCanUseRecordingStudio(false);
       setExistingGuideTrackId(null);
       setLoaded(true);
     });
@@ -201,9 +205,16 @@ export default function SongPracticePage() {
           <SongLibrarySaveButton song={song} />
           {canUseGuideTrack && storageMode === "cloud" ? (
             existingGuideTrackId ? (
-              <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-secondary">
-                가이드 트랙 보기
-              </Link>
+              <>
+                <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-secondary">
+                  가이드 트랙 보기
+                </Link>
+                {canUseRecordingStudio ? (
+                  <Link href={`/guide-tracks/${existingGuideTrackId}/studio`} className="btn-primary">
+                    팀 녹음실
+                  </Link>
+                ) : null}
+              </>
             ) : canCreateGuideTrack ? (
               <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary">
                 팀 가이드 트랙 만들기
@@ -341,9 +352,16 @@ export default function SongPracticePage() {
           <p className="text-sm font-black text-violet-700">실험실 · 팀 가이드 트랙</p>
           <h2 className="mt-1 text-lg font-black text-slate-950">악보 이미지와 송폼을 바탕으로 팀 연습용 가이드 트랙을 만들 수 있습니다.</h2>
           {existingGuideTrackId ? (
-            <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary mt-4">
-              가이드 트랙 보기
-            </Link>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary">
+                가이드 트랙 보기
+              </Link>
+              {canUseRecordingStudio ? (
+                <Link href={`/guide-tracks/${existingGuideTrackId}/studio`} className="btn-secondary">
+                  팀 녹음실 열기
+                </Link>
+              ) : null}
+            </div>
           ) : canCreateGuideTrack ? (
             <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary mt-4">
               팀 가이드 트랙 만들기

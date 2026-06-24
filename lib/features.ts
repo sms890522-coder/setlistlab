@@ -8,6 +8,11 @@ export const FEATURES = {
     label: "팀 가이드 트랙",
     status: "lab",
   },
+  teamRecordingStudio: {
+    key: "teamRecordingStudio",
+    label: "팀 녹음실",
+    status: "lab",
+  },
 } as const satisfies Record<string, { key: string; label: string; status: FeatureStatus }>;
 
 export type FeatureKey = keyof typeof FEATURES;

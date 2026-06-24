@@ -77,6 +77,7 @@ export default function SongGuideTrackPage() {
 
   const sourceImage = getFirstImageLink(song?.imageLinks);
   const canUseGuideTrack = canUseFeature(profile, "teamGuideTrack");
+  const canUseRecordingStudio = canUseFeature(profile, "teamRecordingStudio");
   const hasScoreImage = Boolean(sourceImage?.url);
   const hasSongForm = Boolean(song?.sections?.length);
   const guideData = useMemo(
@@ -453,6 +454,11 @@ export default function SongGuideTrackPage() {
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">
               {track ? "저장된 가이드 트랙 있음" : "새 가이드 트랙"}
             </span>
+            {track && canUseRecordingStudio ? (
+              <Link href={`/guide-tracks/${track.id}/studio`} className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white">
+                팀 녹음실 열기
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>
@@ -838,6 +844,27 @@ export default function SongGuideTrackPage() {
                 </button>
               </div>
             </div>
+            {track ? (
+              <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                <h3 className="font-black text-slate-950">팀 녹음실</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  가이드 트랙을 기준으로 팀원들이 각자 파트를 녹음할 수 있습니다. 녹음 파일은 Supabase Storage가 아닌 R2에 저장됩니다.
+                </p>
+                {canUseRecordingStudio ? (
+                  <Link href={`/guide-tracks/${track.id}/studio`} className="btn-primary mt-3">
+                    팀 녹음실 열기
+                  </Link>
+                ) : (
+                  <p className="mt-3 rounded-xl bg-white p-3 text-sm font-semibold text-violet-800">
+                    팀 녹음실은 실험실 기능입니다. 내 계정에서 실험실 기능을 켜면 사용할 수 있습니다.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-600">
+                팀 녹음실을 열려면 가이드 트랙을 먼저 저장해 주세요.
+              </p>
+            )}
           </StepCard>
         </div>
       </section>

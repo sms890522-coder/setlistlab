@@ -11,6 +11,8 @@
     "guide:screenshots": "playwright test tests/guide-screenshots.spec.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
+    "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "@supabase/supabase-js": "^2.107.0",
     "next": "latest",
     "react": "latest",

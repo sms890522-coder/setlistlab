@@ -245,7 +245,7 @@ export default function AccountPage() {
                 <span>
                   <span className="block text-sm font-bold text-violet-950">실험실 기능 사용</span>
                   <span className="mt-1 block text-xs leading-5 text-violet-800">
-                    아직 테스트 중인 새로운 기능을 먼저 사용해볼 수 있습니다. 실험실을 켜면 팀 가이드 트랙 만들기 같은 기능을 사용할 수 있습니다.
+                    아직 테스트 중인 새로운 기능을 먼저 사용해볼 수 있습니다. 실험실을 켜면 팀 가이드 트랙 만들기와 팀 녹음실 같은 기능을 사용할 수 있습니다.
                   </span>
                   <span className="mt-2 block text-xs leading-5 text-violet-700">
                     실험실 기능은 변경되거나 일시적으로 동작하지 않을 수 있으니 중요한 작업 전에는 기존 기능도 함께 확인해 주세요.

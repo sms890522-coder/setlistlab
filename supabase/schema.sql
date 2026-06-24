@@ -792,6 +792,94 @@ before update on public.team_guide_tracks
 for each row
 execute function public.set_updated_at();
 
+create table if not exists public.team_recording_sessions (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid references public.teams(id) on delete cascade,
+  setlist_id uuid not null references public.setlists(id) on delete cascade,
+  song_id text not null,
+  guide_track_id uuid not null references public.team_guide_tracks(id) on delete cascade,
+  title text not null,
+  status text not null default 'open',
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_recording_sessions_status_check check (status in ('open', 'closed', 'archived'))
+);
+
+create index if not exists team_recording_sessions_team_idx
+on public.team_recording_sessions (team_id)
+where team_id is not null;
+
+create index if not exists team_recording_sessions_setlist_idx
+on public.team_recording_sessions (setlist_id);
+
+create index if not exists team_recording_sessions_song_idx
+on public.team_recording_sessions (song_id);
+
+create index if not exists team_recording_sessions_guide_track_idx
+on public.team_recording_sessions (guide_track_id);
+
+drop trigger if exists team_recording_sessions_set_updated_at on public.team_recording_sessions;
+create trigger team_recording_sessions_set_updated_at
+before update on public.team_recording_sessions
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.team_recording_tracks (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.team_recording_sessions(id) on delete cascade,
+  team_id uuid references public.teams(id) on delete cascade,
+  guide_track_id uuid not null references public.team_guide_tracks(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
+  part text,
+  title text not null,
+  storage_provider text not null default 'r2',
+  bucket text,
+  object_key text,
+  audio_url text,
+  file_path text,
+  mime_type text,
+  duration_seconds numeric,
+  size_bytes bigint,
+  input_type text not null default 'mic',
+  device_label text,
+  latency_offset_ms integer not null default 0,
+  recording_offset_ms integer not null default 0,
+  guide_track_snapshot jsonb not null default '{}'::jsonb,
+  notes text,
+  status text not null default 'active',
+  error_message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_recording_tracks_input_type_check check (input_type in ('mic', 'line', 'interface', 'unknown')),
+  constraint team_recording_tracks_status_check check (status in ('pending_upload', 'uploading', 'active', 'replaced', 'failed', 'deleted'))
+);
+
+create index if not exists team_recording_tracks_session_idx
+on public.team_recording_tracks (session_id);
+
+create index if not exists team_recording_tracks_team_idx
+on public.team_recording_tracks (team_id)
+where team_id is not null;
+
+create index if not exists team_recording_tracks_guide_track_idx
+on public.team_recording_tracks (guide_track_id);
+
+create index if not exists team_recording_tracks_user_idx
+on public.team_recording_tracks (user_id);
+
+create index if not exists team_recording_tracks_part_idx
+on public.team_recording_tracks (part);
+
+create index if not exists team_recording_tracks_status_idx
+on public.team_recording_tracks (status);
+
+drop trigger if exists team_recording_tracks_set_updated_at on public.team_recording_tracks;
+create trigger team_recording_tracks_set_updated_at
+before update on public.team_recording_tracks
+for each row
+execute function public.set_updated_at();
+
 create table if not exists public.shared_setlists (
   id uuid primary key default gen_random_uuid(),
   share_slug text not null unique,
@@ -822,6 +910,7 @@ create table if not exists public.notifications (
       'team_notice_created',
       'team_notice_updated',
       'team_notice_comment_created',
+      'team_recording_track_uploaded',
       'team_setlist_created',
       'team_setlist_updated',
       'team_setlist_comment_created',
@@ -866,6 +955,7 @@ add constraint notifications_type_check check (
     'team_notice_created',
     'team_notice_updated',
     'team_notice_comment_created',
+    'team_recording_track_uploaded',
     'team_setlist_created',
     'team_setlist_updated',
     'team_setlist_comment_created',
@@ -965,6 +1055,8 @@ alter table public.setlists enable row level security;
 alter table public.setlist_comments enable row level security;
 alter table public.setlist_assignments enable row level security;
 alter table public.team_guide_tracks enable row level security;
+alter table public.team_recording_sessions enable row level security;
+alter table public.team_recording_tracks enable row level security;
 alter table public.shared_setlists enable row level security;
 alter table public.notifications enable row level security;
 alter table public.push_subscriptions enable row level security;
@@ -3206,6 +3298,205 @@ on public.team_guide_tracks
 for delete
 using (
   created_by = auth.uid()
+  or (
+    team_id is not null
+    and public.is_team_admin(team_id, auth.uid())
+  )
+);
+
+drop policy if exists "team_recording_sessions_select_accessible" on public.team_recording_sessions;
+create policy "team_recording_sessions_select_accessible"
+on public.team_recording_sessions
+for select
+using (
+  (
+    team_id is not null
+    and public.is_team_approved_member(team_id, auth.uid())
+  )
+  or exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.team_recording_sessions.setlist_id
+      and setlists.team_id is null
+      and public.team_recording_sessions.team_id is null
+      and setlists.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "team_recording_sessions_insert_manager" on public.team_recording_sessions;
+create policy "team_recording_sessions_insert_manager"
+on public.team_recording_sessions
+for insert
+with check (
+  auth.uid() = created_by
+  and exists (
+    select 1
+    from public.setlists setlists
+    join public.team_guide_tracks guide_tracks
+      on guide_tracks.id = public.team_recording_sessions.guide_track_id
+    where setlists.id = public.team_recording_sessions.setlist_id
+      and guide_tracks.setlist_id = setlists.id
+      and guide_tracks.song_id = public.team_recording_sessions.song_id
+      and setlists.team_id is not distinct from public.team_recording_sessions.team_id
+      and guide_tracks.team_id is not distinct from public.team_recording_sessions.team_id
+      and (
+        (
+          setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+        or (
+          setlists.team_id is not null
+          and (
+            public.is_team_admin(setlists.team_id, auth.uid())
+            or guide_tracks.created_by = auth.uid()
+          )
+        )
+      )
+  )
+);
+
+drop policy if exists "team_recording_sessions_update_manager" on public.team_recording_sessions;
+create policy "team_recording_sessions_update_manager"
+on public.team_recording_sessions
+for update
+using (
+  created_by = auth.uid()
+  or (
+    team_id is not null
+    and public.is_team_admin(team_id, auth.uid())
+  )
+  or exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.team_recording_sessions.setlist_id
+      and setlists.team_id is null
+      and public.team_recording_sessions.team_id is null
+      and setlists.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.setlists setlists
+    where setlists.id = public.team_recording_sessions.setlist_id
+      and setlists.team_id is not distinct from public.team_recording_sessions.team_id
+      and (
+        (
+          setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+        or (
+          setlists.team_id is not null
+          and public.is_team_admin(setlists.team_id, auth.uid())
+        )
+        or public.team_recording_sessions.created_by = auth.uid()
+      )
+  )
+);
+
+drop policy if exists "team_recording_sessions_delete_manager" on public.team_recording_sessions;
+create policy "team_recording_sessions_delete_manager"
+on public.team_recording_sessions
+for delete
+using (
+  created_by = auth.uid()
+  or (
+    team_id is not null
+    and public.is_team_admin(team_id, auth.uid())
+  )
+);
+
+drop policy if exists "team_recording_tracks_select_accessible" on public.team_recording_tracks;
+create policy "team_recording_tracks_select_accessible"
+on public.team_recording_tracks
+for select
+using (
+  (
+    team_id is not null
+    and public.is_team_approved_member(team_id, auth.uid())
+  )
+  or exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_tracks.session_id
+      and sessions.team_id is null
+      and public.team_recording_tracks.team_id is null
+      and setlists.team_id is null
+      and (
+        setlists.user_id = auth.uid()
+        or public.team_recording_tracks.user_id = auth.uid()
+      )
+  )
+);
+
+drop policy if exists "team_recording_tracks_insert_member" on public.team_recording_tracks;
+create policy "team_recording_tracks_insert_member"
+on public.team_recording_tracks
+for insert
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_tracks.session_id
+      and sessions.status = 'open'
+      and sessions.guide_track_id = public.team_recording_tracks.guide_track_id
+      and sessions.team_id is not distinct from public.team_recording_tracks.team_id
+      and (
+        (
+          sessions.team_id is not null
+          and public.is_team_approved_member(sessions.team_id, auth.uid())
+        )
+        or (
+          sessions.team_id is null
+          and setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+      )
+  )
+);
+
+drop policy if exists "team_recording_tracks_update_owner_or_admin" on public.team_recording_tracks;
+create policy "team_recording_tracks_update_owner_or_admin"
+on public.team_recording_tracks
+for update
+using (
+  user_id = auth.uid()
+  or (
+    team_id is not null
+    and public.is_team_admin(team_id, auth.uid())
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_tracks.session_id
+      and sessions.guide_track_id = public.team_recording_tracks.guide_track_id
+      and sessions.team_id is not distinct from public.team_recording_tracks.team_id
+      and (
+        public.team_recording_tracks.user_id = auth.uid()
+        or (
+          sessions.team_id is not null
+          and public.is_team_admin(sessions.team_id, auth.uid())
+        )
+        or (
+          sessions.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+      )
+  )
+);
+
+drop policy if exists "team_recording_tracks_delete_owner_or_admin" on public.team_recording_tracks;
+create policy "team_recording_tracks_delete_owner_or_admin"
+on public.team_recording_tracks
+for delete
+using (
+  user_id = auth.uid()
   or (
     team_id is not null
     and public.is_team_admin(team_id, auth.uid())
