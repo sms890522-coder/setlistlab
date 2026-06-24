@@ -1,4 +1,5 @@
 import type { GuideTrackData, GuideTrackSection } from "@/lib/db/teamGuideTracks";
+import { getGuideVoiceCueSlug, loadGuideVoiceCueBuffers, scheduleGuideVoiceCue } from "@/lib/audio/guideCueSamples";
 
 const NOTE_OFFSETS: Record<string, number> = {
   C: 0,
@@ -34,7 +35,7 @@ export async function renderGuideTrackToAudioBuffer(data: GuideTrackData) {
   const durationSec = Math.max(1, (countInBars + mainBars) * beatsPerBar * beatSec + 1);
   const context = new OfflineAudioContext(2, Math.ceil(durationSec * sampleRate), sampleRate);
   const countInSec = countInBars * beatsPerBar * beatSec;
-  const voiceCueBuffers = data.voiceCue.enabled && data.voiceCue.announceSections ? await loadVoiceCueBuffers(context, data) : new Map<string, AudioBuffer>();
+  const voiceCueBuffers = data.voiceCue.enabled && data.voiceCue.announceSections ? await loadGuideVoiceCueBuffers(context, data) : new Map<string, AudioBuffer>();
 
   if (data.countIn.enabled && data.countIn.click) {
     for (let beat = 0; beat < countInBars * beatsPerBar; beat += 1) {
@@ -47,9 +48,9 @@ export async function renderGuideTrackToAudioBuffer(data: GuideTrackData) {
   data.sections.forEach((section) => {
     if (data.voiceCue.enabled && data.voiceCue.announceSections) {
       const cueTime = Math.max(0, cursorSec - data.voiceCue.announceBeforeBeats * beatSec);
-      const cueBuffer = voiceCueBuffers.get(getVoiceCueSlug(section.label)) ?? voiceCueBuffers.get("section");
+      const cueBuffer = voiceCueBuffers.get(getGuideVoiceCueSlug(section.label)) ?? voiceCueBuffers.get("section");
       if (cueBuffer) {
-        scheduleVoiceCue(context, cueBuffer, cueTime, data.voiceCue.volume);
+        scheduleGuideVoiceCue(context, cueBuffer, cueTime, data.voiceCue.volume);
       }
     }
 
@@ -73,39 +74,6 @@ export async function renderGuideTrackToAudioBuffer(data: GuideTrackData) {
   return context.startRendering();
 }
 
-async function loadVoiceCueBuffers(context: BaseAudioContext, data: GuideTrackData) {
-  const language = data.voiceCue.language === "ko" ? "ko" : "en";
-  const slugs = Array.from(new Set(data.sections.map((section) => getVoiceCueSlug(section.label)).concat("section")));
-  const entries = await Promise.all(
-    slugs.map(async (slug) => {
-      const buffer = await fetchVoiceCueBuffer(context, language, slug);
-      return [slug, buffer] as const;
-    }),
-  );
-
-  const buffers = new Map<string, AudioBuffer>();
-  entries.forEach(([slug, buffer]) => {
-    if (buffer) buffers.set(slug, buffer);
-  });
-  return buffers;
-}
-
-async function fetchVoiceCueBuffer(context: BaseAudioContext, language: "en" | "ko", slug: string) {
-  const paths = [`/audio/guide-cues/${language}/${slug}.m4a`, `/audio/guide-cues/en/${slug}.m4a`, "/audio/guide-cues/en/section.m4a"];
-
-  for (const path of paths) {
-    try {
-      const response = await fetch(path);
-      if (!response.ok) continue;
-      return await context.decodeAudioData(await response.arrayBuffer());
-    } catch {
-      // 샘플이 없거나 브라우저 디코딩이 실패하면 다음 fallback을 시도한다.
-    }
-  }
-
-  return null;
-}
-
 function getBarChord(section: GuideTrackSection, bar: number) {
   const chords = section.chords.length > 0 ? section.chords : ["N.C."];
   return chords[bar % chords.length];
@@ -114,21 +82,6 @@ function getBarChord(section: GuideTrackSection, bar: number) {
 function getBeatsPerBar(timeSignature: string) {
   const top = Number(timeSignature.split("/")[0]);
   return Number.isFinite(top) && top > 0 ? top : 4;
-}
-
-function getVoiceCueSlug(label: string) {
-  const normalized = label.trim().toLowerCase();
-  if (/인트로|intro/.test(normalized)) return "intro";
-  if (/pre|프리/.test(normalized)) return "pre-chorus";
-  if (/후렴|chorus/.test(normalized)) return "chorus";
-  if (/브릿지|bridge/.test(normalized)) return "bridge";
-  if (/간주|interlude/.test(normalized)) return "interlude";
-  if (/아웃트로|outro/.test(normalized)) return "outro";
-  if (/엔딩|ending/.test(normalized)) return "ending";
-  if (/벌스\s*2|verse\s*2|2\s*절|둘째\s*절/.test(normalized)) return "verse-2";
-  if (/벌스\s*1|verse\s*1|1\s*절|첫\s*절|첫째\s*절/.test(normalized)) return "verse-1";
-  if (/벌스|절|verse/.test(normalized)) return "verse";
-  return "section";
 }
 
 function scheduleClick(context: BaseAudioContext, time: number, strong: boolean, volume: number) {
@@ -142,15 +95,6 @@ function scheduleClick(context: BaseAudioContext, time: number, strong: boolean,
   oscillator.connect(gain).connect(context.destination);
   oscillator.start(time);
   oscillator.stop(time + 0.09);
-}
-
-function scheduleVoiceCue(context: BaseAudioContext, buffer: AudioBuffer, time: number, volume: number) {
-  const source = context.createBufferSource();
-  const gain = context.createGain();
-  source.buffer = buffer;
-  gain.gain.setValueAtTime(Math.max(0, Math.min(1, volume)) * 0.95, time);
-  source.connect(gain).connect(context.destination);
-  source.start(time);
 }
 
 function scheduleChord(context: BaseAudioContext, chord: string, sound: GuideTrackData["sound"], time: number, duration: number) {

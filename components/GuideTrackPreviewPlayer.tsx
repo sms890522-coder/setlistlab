@@ -1,6 +1,7 @@
 "use client";
 
 import type { GuideTrackData, GuideTrackSection } from "@/lib/db/teamGuideTracks";
+import { getGuideVoiceCueSlug, loadGuideVoiceCueBuffers, scheduleGuideVoiceCue } from "@/lib/audio/guideCueSamples";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type GuideTrackPreviewPlayerProps = {
@@ -32,7 +33,7 @@ const PLAYBACK_START_DELAY_SEC = 0.18;
 type PlaybackEvent =
   | { timeSec: number; type: "click"; strong: boolean; volume: number }
   | { timeSec: number; type: "chord"; chord: string; sectionLabel: string; durationSec: number }
-  | { timeSec: number; type: "speech"; text: string; language: "en" | "ko"; volume: number };
+  | { timeSec: number; type: "voiceCue"; slug: string; volume: number };
 
 type SectionRange = {
   startSec: number;
@@ -61,7 +62,7 @@ type PlaybackPhase = "idle" | "countIn" | "playing";
 export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) {
   const [playing, setPlaying] = useState(false);
   const [currentLabel, setCurrentLabel] = useState("");
-  const [speechWarning, setSpeechWarning] = useState("");
+  const [voiceCueWarning, setVoiceCueWarning] = useState("");
   const [phase, setPhase] = useState<PlaybackPhase>("idle");
   const [beatInBar, setBeatInBar] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -88,7 +89,6 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
       window.cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
-    window.speechSynthesis?.cancel();
     playbackRef.current = null;
     setPlaying(false);
     setCurrentLabel("");
@@ -117,13 +117,24 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
     if (timeline.events.length === 0) return;
 
     stop();
-    setSpeechWarning("");
+    setVoiceCueWarning("");
 
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContextClass();
     }
     await audioContextRef.current.resume();
+
+    let voiceCueBuffers = new Map<string, AudioBuffer>();
+    if (data.voiceCue.enabled && data.voiceCue.announceSections) {
+      voiceCueBuffers = await loadGuideVoiceCueBuffers(audioContextRef.current, data).catch(() => {
+        setVoiceCueWarning("구간 음성 안내 샘플을 불러오지 못했습니다. 클릭과 코드 가이드는 계속 재생됩니다.");
+        return new Map<string, AudioBuffer>();
+      });
+      if (voiceCueBuffers.size === 0) {
+        setVoiceCueWarning("구간 음성 안내 샘플을 사용할 수 없습니다. 클릭과 코드 가이드는 계속 재생됩니다.");
+      }
+    }
 
     setPlaying(true);
     setCurrentLabel(data.countIn.enabled ? "카운트인" : "재생 준비");
@@ -146,10 +157,11 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
         if (data.sound !== "click_only") {
           trackScheduledSources(playChord(context, eventTime, event.chord, data.sound, event.durationSec));
         }
-      } else if (event.type === "speech") {
-        const delayMs = Math.max(0, (eventTime - context.currentTime) * 1000);
-        const timerId = window.setTimeout(() => speak(event.text, event.language, event.volume), delayMs);
-        timeoutRefs.current.push(timerId);
+      } else if (event.type === "voiceCue") {
+        const buffer = voiceCueBuffers.get(event.slug) ?? voiceCueBuffers.get("section");
+        if (buffer) {
+          trackScheduledSources([scheduleGuideVoiceCue(context, buffer, eventTime, event.volume)]);
+        }
       }
     });
 
@@ -202,25 +214,6 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
     };
 
     animationRef.current = window.requestAnimationFrame(update);
-  }
-
-  function speak(text: string, language: "en" | "ko", volume: number) {
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setSpeechWarning("현재 브라우저에서는 음성 안내를 지원하지 않습니다.");
-      return;
-    }
-
-    try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = language === "ko" ? "ko-KR" : "en-US";
-      utterance.rate = 1.15;
-      utterance.pitch = 1;
-      utterance.volume = Math.max(0, Math.min(1, volume));
-      // TODO: 다운로드까지 정확히 포함하려면 Web Speech 대신 샘플 기반 구간 안내로 교체한다.
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      setSpeechWarning("음성 안내를 재생하지 못했습니다. 클릭과 코드 가이드는 계속 재생됩니다.");
-    }
   }
 
   return (
@@ -280,7 +273,7 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
           </div>
         </div>
       ) : null}
-      {speechWarning ? <p className="mt-2 text-xs font-semibold text-amber-700">{speechWarning}</p> : null}
+      {voiceCueWarning ? <p className="mt-2 text-xs font-semibold text-amber-700">{voiceCueWarning}</p> : null}
     </div>
   );
 }
@@ -310,13 +303,11 @@ function buildPlaybackTimeline(data: GuideTrackData): PlaybackTimeline {
   let cursorSec = countInSec;
   data.sections.forEach((section) => {
     const sectionStartSec = cursorSec - countInSec;
-    const cueText = normalizeSectionCue(section.label);
     if (data.voiceCue.enabled && data.voiceCue.announceSections) {
       events.push({
         timeSec: Math.max(0, cursorSec - data.voiceCue.announceBeforeBeats * beatSec),
-        type: "speech",
-        text: cueText,
-        language: data.voiceCue.language,
+        type: "voiceCue",
+        slug: getGuideVoiceCueSlug(section.label),
         volume: data.voiceCue.volume,
       });
     }
@@ -363,19 +354,6 @@ function getBarChord(section: GuideTrackSection, bar: number) {
 function getBeatsPerBar(timeSignature: string) {
   const top = Number(timeSignature.split("/")[0]);
   return Number.isFinite(top) && top > 0 ? top : 4;
-}
-
-function normalizeSectionCue(label: string) {
-  const normalized = label.trim().toLowerCase();
-  if (/인트로|intro/.test(normalized)) return "Intro";
-  if (/pre|프리/.test(normalized)) return "Pre-Chorus";
-  if (/후렴|chorus/.test(normalized)) return "Chorus";
-  if (/브릿지|bridge/.test(normalized)) return "Bridge";
-  if (/간주|interlude/.test(normalized)) return "Interlude";
-  if (/아웃트로|outro/.test(normalized)) return "Outro";
-  if (/엔딩|ending/.test(normalized)) return "Ending";
-  if (/벌스|절|verse\s*2/.test(normalized)) return /2/.test(normalized) ? "Verse 2" : "Verse";
-  return label || "Section";
 }
 
 function playClick(context: AudioContext, time: number, strong: boolean, volume: number) {
