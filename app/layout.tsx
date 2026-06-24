@@ -122,6 +122,14 @@ export default function RootLayout({
           ·{" "}
           <Link href="/contact" className="font-semibold text-slate-500 transition hover:text-blue-600">
             문의/피드백
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terms" className="font-semibold text-slate-500 transition hover:text-blue-600">
+            이용약관
+          </Link>{" "}
+          ·{" "}
+          <Link href="/privacy" className="font-semibold text-slate-500 transition hover:text-blue-600">
+            개인정보처리방침
           </Link>
         </footer>
       </body>

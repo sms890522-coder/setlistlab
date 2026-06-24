@@ -1,6 +1,7 @@
 "use client";
 
 import type { Provider, User } from "@supabase/supabase-js";
+import type { LegalConsentRecord } from "./legalConsent";
 import { sanitizeRedirectPath } from "./routes";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "./supabase/client";
 
@@ -48,14 +49,26 @@ export async function signInWithEmail(email: string, password: string) {
   return data;
 }
 
-export async function signUpWithEmail(email: string, password: string, redirectTo = "/onboarding") {
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  redirectTo = "/onboarding",
+  legalConsent?: LegalConsentRecord,
+) {
   const supabase = getSupabaseBrowserClient();
   const safeRedirectTo = sanitizeRedirectPath(redirectTo, "/onboarding");
   const emailRedirectTo = typeof window !== "undefined" ? `${window.location.origin}${safeRedirectTo}` : undefined;
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo },
+    options: {
+      emailRedirectTo,
+      data: legalConsent
+        ? {
+            legal_consent: legalConsent,
+          }
+        : undefined,
+    },
   });
 
   if (error) {

@@ -12,6 +12,8 @@ const publicRoutes = [
   "/login",
   "/signup",
   "/contact",
+  "/terms",
+  "/privacy",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

@@ -74,6 +74,17 @@ export default function LoginPage() {
         <div className="mt-6">
           <SocialAuthButtons mode="login" redirectTo={`/onboarding?redirect=${encodeURIComponent(redirectPath)}`} />
         </div>
+        <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+          로그인 및 서비스 이용에는{" "}
+          <Link href="/terms" className="font-bold text-blue-700 hover:text-blue-800">
+            서비스 이용약관
+          </Link>
+          과{" "}
+          <Link href="/privacy" className="font-bold text-blue-700 hover:text-blue-800">
+            개인정보처리방침
+          </Link>
+          이 적용됩니다.
+        </p>
 
         <div className="my-6 flex items-center gap-3">
           <span className="h-px flex-1 bg-slate-200" />

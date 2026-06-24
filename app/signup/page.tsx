@@ -5,6 +5,7 @@ import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { sanitizeRedirectPath } from "@/lib/routes";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { signUpWithEmail } from "@/lib/auth";
+import { createLegalConsentRecord, storePendingLegalConsent } from "@/lib/legalConsent";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -16,6 +17,10 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [termsAgreed, setTermsAgreed] = useState(false);
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const requiredAgreementsAccepted = termsAgreed && privacyAgreed && ageConfirmed;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -31,11 +36,17 @@ export default function SignupPage() {
       setError("회원가입 기능이 아직 준비되지 않았습니다. 관리자에게 문의해 주세요.");
       return;
     }
+    if (!requiredAgreementsAccepted) {
+      setError("회원가입을 계속하려면 필수 약관에 동의해 주세요.");
+      return;
+    }
 
     try {
       setLoading(true);
+      const legalConsent = createLegalConsentRecord();
+      storePendingLegalConsent(legalConsent);
       const onboardingPath = `/onboarding?redirect=${encodeURIComponent(redirectPath)}`;
-      const data = await signUpWithEmail(email, password, onboardingPath);
+      const data = await signUpWithEmail(email, password, onboardingPath, legalConsent);
       if (data.session) {
         router.push(onboardingPath);
         return;
@@ -64,8 +75,39 @@ export default function SignupPage() {
           </div>
         ) : null}
 
-        <div className="mt-6">
-          <SocialAuthButtons mode="signup" redirectTo={`/onboarding?redirect=${encodeURIComponent(redirectPath)}`} />
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="space-y-3">
+            <AgreementCheckbox
+              checked={termsAgreed}
+              onChange={setTermsAgreed}
+              label="서비스 이용약관에 동의합니다."
+              href="/terms"
+            />
+            <AgreementCheckbox
+              checked={privacyAgreed}
+              onChange={setPrivacyAgreed}
+              label="개인정보 수집 및 이용에 동의합니다."
+              href="/privacy"
+            />
+            <AgreementCheckbox
+              checked={ageConfirmed}
+              onChange={setAgeConfirmed}
+              label="만 14세 이상입니다."
+            />
+          </div>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            Google 또는 네이버로 가입하는 경우에도 위 필수 항목에 동의한 뒤 진행해 주세요.
+          </p>
+        </section>
+
+        <div className="mt-4">
+          <SocialAuthButtons
+            mode="signup"
+            redirectTo={`/onboarding?redirect=${encodeURIComponent(redirectPath)}`}
+            disabled={!requiredAgreementsAccepted}
+            disabledReason="위 필수 약관에 동의하면 소셜 계정으로 가입할 수 있습니다."
+            onBeforeStart={() => storePendingLegalConsent(createLegalConsentRecord())}
+          />
         </div>
 
         <div className="my-6 flex items-center gap-3">
@@ -99,7 +141,8 @@ export default function SignupPage() {
             />
             <span className="field-help">6자 이상으로 입력해 주세요.</span>
           </label>
-          <button type="submit" disabled={loading || !isSupabaseConfigured()} className="btn-primary w-full">
+
+          <button type="submit" disabled={loading || !isSupabaseConfigured() || !requiredAgreementsAccepted} className="btn-primary w-full">
             {loading ? "가입 중" : "회원가입"}
           </button>
         </form>
@@ -115,5 +158,38 @@ export default function SignupPage() {
         {error ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
       </section>
     </div>
+  );
+}
+
+function AgreementCheckbox({
+  checked,
+  onChange,
+  label,
+  href,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  href?: string;
+}) {
+  return (
+    <label className="flex items-start gap-3 text-sm font-semibold text-slate-700">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1 size-4 accent-blue-600"
+      />
+      <span>
+        <span className="font-black text-slate-900">[필수]</span>{" "}
+        {href ? (
+          <Link href={href} target="_blank" className="font-black text-blue-700 hover:text-blue-800">
+            {label}
+          </Link>
+        ) : (
+          label
+        )}
+      </span>
+    </label>
   );
 }

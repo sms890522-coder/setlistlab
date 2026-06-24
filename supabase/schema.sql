@@ -40,6 +40,21 @@ add column if not exists share_practice_presence boolean not null default true;
 alter table public.profiles
 add column if not exists lab_enabled boolean not null default false;
 
+alter table public.profiles
+add column if not exists terms_accepted_at timestamptz;
+
+alter table public.profiles
+add column if not exists privacy_accepted_at timestamptz;
+
+alter table public.profiles
+add column if not exists age_confirmed_at timestamptz;
+
+alter table public.profiles
+add column if not exists terms_version text;
+
+alter table public.profiles
+add column if not exists privacy_version text;
+
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at
 before update on public.profiles

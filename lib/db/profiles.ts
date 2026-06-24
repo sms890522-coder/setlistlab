@@ -3,6 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import type { UserRole } from "@/lib/auth";
 import { getCurrentSession, getCurrentUser } from "@/lib/auth";
+import { clearPendingLegalConsent, getLegalConsentFromUserMetadata, getPendingLegalConsent } from "@/lib/legalConsent";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export const PROFILE_UPDATED_EVENT = "conti-practice-room:profile-updated";
@@ -18,6 +19,11 @@ export type Profile = {
   serviceName?: string;
   sharePracticePresence: boolean;
   labEnabled: boolean;
+  termsAcceptedAt?: string;
+  privacyAcceptedAt?: string;
+  ageConfirmedAt?: string;
+  termsVersion?: string;
+  privacyVersion?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -33,12 +39,17 @@ type ProfileRow = {
   service_name: string | null;
   share_practice_presence: boolean | null;
   lab_enabled: boolean | null;
+  terms_accepted_at: string | null;
+  privacy_accepted_at: string | null;
+  age_confirmed_at: string | null;
+  terms_version: string | null;
+  privacy_version: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const PROFILE_SELECT =
-  "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, lab_enabled, created_at, updated_at";
+  "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, lab_enabled, terms_accepted_at, privacy_accepted_at, age_confirmed_at, terms_version, privacy_version, created_at, updated_at";
 const PROFILE_SELECT_LEGACY =
   "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, created_at, updated_at";
 
@@ -75,6 +86,7 @@ export async function ensureUserProfile(user?: User | null) {
   const displayName = existingProfile?.displayName?.trim() || inferProfileDisplayName(currentUser);
   const avatarUrl = existingProfile?.avatarUrl?.trim() || inferProfileAvatarUrl(currentUser) || null;
   const role = existingProfile?.role?.trim() || "기타";
+  const legalConsent = getPendingLegalConsent() ?? getLegalConsentFromUserMetadata(currentUser);
   const now = new Date().toISOString();
 
   const { data, error } = await upsertProfileRow({
@@ -89,6 +101,11 @@ export async function ensureUserProfile(user?: User | null) {
     service_name: existingProfile?.serviceName ?? null,
     share_practice_presence: existingProfile?.sharePracticePresence ?? true,
     lab_enabled: existingProfile?.labEnabled ?? false,
+    terms_accepted_at: existingProfile?.termsAcceptedAt ?? legalConsent?.termsAcceptedAt ?? null,
+    privacy_accepted_at: existingProfile?.privacyAcceptedAt ?? legalConsent?.privacyAcceptedAt ?? null,
+    age_confirmed_at: existingProfile?.ageConfirmedAt ?? legalConsent?.ageConfirmedAt ?? null,
+    terms_version: existingProfile?.termsVersion ?? legalConsent?.termsVersion ?? null,
+    privacy_version: existingProfile?.privacyVersion ?? legalConsent?.privacyVersion ?? null,
     updated_at: now,
   });
 
@@ -96,6 +113,7 @@ export async function ensureUserProfile(user?: User | null) {
     throw new Error(error.message || "프로필을 준비하지 못했습니다.");
   }
 
+  if (legalConsent) clearPendingLegalConsent();
   return rowToProfile(data);
 }
 
@@ -116,6 +134,7 @@ export async function upsertMyProfile(input: {
 
   const now = new Date().toISOString();
   const existingProfile = await getProfile(user.id).catch(() => null);
+  const legalConsent = getPendingLegalConsent() ?? getLegalConsentFromUserMetadata(user);
   const normalizedInput = {
     displayName: input.displayName.trim(),
     role: input.role,
@@ -138,6 +157,11 @@ export async function upsertMyProfile(input: {
     service_name: normalizedInput.serviceName,
     share_practice_presence: normalizedInput.sharePracticePresence,
     lab_enabled: normalizedInput.labEnabled,
+    terms_accepted_at: existingProfile?.termsAcceptedAt ?? legalConsent?.termsAcceptedAt ?? null,
+    privacy_accepted_at: existingProfile?.privacyAcceptedAt ?? legalConsent?.privacyAcceptedAt ?? null,
+    age_confirmed_at: existingProfile?.ageConfirmedAt ?? legalConsent?.ageConfirmedAt ?? null,
+    terms_version: existingProfile?.termsVersion ?? legalConsent?.termsVersion ?? null,
+    privacy_version: existingProfile?.privacyVersion ?? legalConsent?.privacyVersion ?? null,
     updated_at: now,
   });
 
@@ -148,6 +172,7 @@ export async function upsertMyProfile(input: {
   await syncPracticePresenceProfile(user.id, normalizedInput, now).catch(() => undefined);
 
   const profile = rowToProfile(data);
+  if (legalConsent) clearPendingLegalConsent();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT, { detail: profile }));
   }
@@ -214,6 +239,11 @@ function rowToProfile(row: ProfileRow): Profile {
     serviceName: row.service_name ?? undefined,
     sharePracticePresence: row.share_practice_presence ?? true,
     labEnabled: row.lab_enabled ?? false,
+    termsAcceptedAt: row.terms_accepted_at ?? undefined,
+    privacyAcceptedAt: row.privacy_accepted_at ?? undefined,
+    ageConfirmedAt: row.age_confirmed_at ?? undefined,
+    termsVersion: row.terms_version ?? undefined,
+    privacyVersion: row.privacy_version ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -231,6 +261,11 @@ async function upsertProfileRow(row: {
   service_name: string | null;
   share_practice_presence: boolean;
   lab_enabled: boolean;
+  terms_accepted_at: string | null;
+  privacy_accepted_at: string | null;
+  age_confirmed_at: string | null;
+  terms_version: string | null;
+  privacy_version: string | null;
   updated_at: string;
 }) {
   const supabase = getSupabaseBrowserClient();
@@ -240,14 +275,34 @@ async function upsertProfileRow(row: {
     return result;
   }
 
-  const { email: _email, avatar_url: _avatarUrl, lab_enabled: _labEnabled, ...legacyRow } = row;
+  const {
+    email: _email,
+    avatar_url: _avatarUrl,
+    lab_enabled: _labEnabled,
+    terms_accepted_at: _termsAcceptedAt,
+    privacy_accepted_at: _privacyAcceptedAt,
+    age_confirmed_at: _ageConfirmedAt,
+    terms_version: _termsVersion,
+    privacy_version: _privacyVersion,
+    ...legacyRow
+  } = row;
   return supabase.from("profiles").upsert(legacyRow).select(PROFILE_SELECT_LEGACY).single<ProfileRow>();
 }
 
 function isMissingProfileMetadataColumnError(error: { message?: string; code?: string } | null) {
   if (!error) return false;
   const message = error.message?.toLowerCase() ?? "";
-  return error.code === "42703" || message.includes("email") || message.includes("avatar_url") || message.includes("lab_enabled");
+  return (
+    error.code === "42703" ||
+    message.includes("email") ||
+    message.includes("avatar_url") ||
+    message.includes("lab_enabled") ||
+    message.includes("terms_accepted_at") ||
+    message.includes("privacy_accepted_at") ||
+    message.includes("age_confirmed_at") ||
+    message.includes("terms_version") ||
+    message.includes("privacy_version")
+  );
 }
 
 async function syncPracticePresenceProfile(
