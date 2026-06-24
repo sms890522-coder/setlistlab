@@ -22,13 +22,44 @@ export type GuideTrackSection = {
   memo?: string;
 };
 
+export type GuideTrackMetronome = {
+  enabled: boolean;
+  sound: "click";
+  accentFirstBeat: boolean;
+  volume: number;
+};
+
+export type GuideTrackCountIn = {
+  enabled: boolean;
+  bars: number;
+  voice: boolean;
+  click: boolean;
+};
+
+export type GuideTrackVoiceCue = {
+  enabled: boolean;
+  language: "en" | "ko";
+  announceSections: boolean;
+  announceBeforeBeats: 1 | 4;
+  volume: number;
+};
+
+export type GuideTrackDownload = {
+  format: "wav" | "json";
+  lastExportedAt: string | null;
+};
+
 export type GuideTrackData = {
   bpm?: number;
   key?: string;
   timeSignature: string;
   sound: "piano" | "pad" | "piano_pad" | "click_only";
-  click: boolean;
-  countIn: number;
+  metronome: GuideTrackMetronome;
+  countIn: GuideTrackCountIn;
+  voiceCue: GuideTrackVoiceCue;
+  download: GuideTrackDownload;
+  /** @deprecated 이전 MVP 데이터 호환용. 새 저장에는 metronome.enabled를 사용한다. */
+  click?: boolean;
   // TODO: 팀 녹음실에서는 이 sections/timing 데이터를 기준 트랙 싱크 기준으로 재사용한다.
   sections: GuideTrackSection[];
   totalBars: number;
@@ -83,7 +114,7 @@ type TeamGuideTrackRow = {
   extraction_status: GuideTrackExtractionStatus;
   extracted_chords: ExtractedChord[] | null;
   song_form_map: GuideTrackSection[] | null;
-  guide_track_data: GuideTrackData | null;
+  guide_track_data: unknown;
   audio_url: string | null;
   midi_url: string | null;
   error_message: string | null;
@@ -146,7 +177,7 @@ export async function saveGuideTrack(input: TeamGuideTrackInput) {
     extraction_status: input.extractionStatus ?? "manual",
     extracted_chords: input.extractedChords ?? [],
     song_form_map: input.songFormMap ?? [],
-    guide_track_data: input.guideTrackData ?? createEmptyGuideTrackData(),
+    guide_track_data: normalizeGuideTrackData(input.guideTrackData),
     audio_url: input.audioUrl || null,
     midi_url: input.midiUrl || null,
     error_message: input.errorMessage || null,
@@ -175,14 +206,85 @@ export async function saveGuideTrack(input: TeamGuideTrackInput) {
   return rowToGuideTrack(data);
 }
 
-function createEmptyGuideTrackData(): GuideTrackData {
+export function createEmptyGuideTrackData(): GuideTrackData {
   return {
     timeSignature: "4/4",
     sound: "piano_pad",
-    click: true,
-    countIn: 1,
+    metronome: createDefaultMetronome(),
+    countIn: createDefaultCountIn(),
+    voiceCue: createDefaultVoiceCue(),
+    download: {
+      format: "wav",
+      lastExportedAt: null,
+    },
     sections: [],
     totalBars: 0,
+  };
+}
+
+export function normalizeGuideTrackData(value: unknown): GuideTrackData {
+  const base = createEmptyGuideTrackData();
+  if (!isRecord(value)) return base;
+
+  const legacyCountIn = typeof value.countIn === "number" ? value.countIn : undefined;
+  const legacyClick = typeof value.click === "boolean" ? value.click : undefined;
+  const sections = Array.isArray(value.sections)
+    ? value.sections.map(normalizeGuideTrackSection).filter((section): section is GuideTrackSection => Boolean(section))
+    : base.sections;
+  const metronome = isRecord(value.metronome)
+    ? {
+        enabled: typeof value.metronome.enabled === "boolean" ? value.metronome.enabled : legacyClick ?? true,
+        sound: "click" as const,
+        accentFirstBeat: typeof value.metronome.accentFirstBeat === "boolean" ? value.metronome.accentFirstBeat : true,
+        volume: normalizeVolume(value.metronome.volume, 0.7),
+      }
+    : {
+        ...createDefaultMetronome(),
+        enabled: legacyClick ?? true,
+      };
+  const countIn = isRecord(value.countIn)
+    ? {
+        enabled: typeof value.countIn.enabled === "boolean" ? value.countIn.enabled : true,
+        bars: normalizeInteger(value.countIn.bars, 1, 0, 2),
+        voice: typeof value.countIn.voice === "boolean" ? value.countIn.voice : true,
+        click: typeof value.countIn.click === "boolean" ? value.countIn.click : true,
+      }
+    : {
+        ...createDefaultCountIn(),
+        enabled: legacyCountIn !== undefined ? legacyCountIn > 0 : true,
+        bars: normalizeInteger(legacyCountIn ?? 1, 1, 0, 2),
+      };
+  const voiceCue: GuideTrackVoiceCue = isRecord(value.voiceCue)
+    ? {
+        enabled: typeof value.voiceCue.enabled === "boolean" ? value.voiceCue.enabled : true,
+        language: value.voiceCue.language === "ko" ? "ko" : "en",
+        announceSections: typeof value.voiceCue.announceSections === "boolean" ? value.voiceCue.announceSections : true,
+        announceBeforeBeats: value.voiceCue.announceBeforeBeats === 4 ? 4 : 1,
+        volume: normalizeVolume(value.voiceCue.volume, 0.9),
+      }
+    : createDefaultVoiceCue();
+  const download: GuideTrackDownload = isRecord(value.download)
+    ? {
+        format: value.download.format === "json" ? "json" : "wav",
+        lastExportedAt: typeof value.download.lastExportedAt === "string" ? value.download.lastExportedAt : null,
+      }
+    : base.download;
+
+  return {
+    bpm: typeof value.bpm === "number" && Number.isFinite(value.bpm) ? value.bpm : undefined,
+    key: typeof value.key === "string" ? value.key : undefined,
+    timeSignature: typeof value.timeSignature === "string" && value.timeSignature ? value.timeSignature : base.timeSignature,
+    sound: isGuideTrackSound(value.sound) ? value.sound : base.sound,
+    metronome,
+    countIn,
+    voiceCue,
+    download,
+    click: legacyClick,
+    sections,
+    totalBars:
+      typeof value.totalBars === "number" && Number.isFinite(value.totalBars)
+        ? value.totalBars
+        : sections.reduce((sum, section) => sum + section.bars * section.repeat, 0),
   };
 }
 
@@ -199,11 +301,72 @@ function rowToGuideTrack(row: TeamGuideTrackRow): TeamGuideTrack {
     extractionStatus: row.extraction_status,
     extractedChords: Array.isArray(row.extracted_chords) ? row.extracted_chords : [],
     songFormMap: Array.isArray(row.song_form_map) ? row.song_form_map : [],
-    guideTrackData: row.guide_track_data ?? createEmptyGuideTrackData(),
+    guideTrackData: normalizeGuideTrackData(row.guide_track_data),
     audioUrl: row.audio_url ?? undefined,
     midiUrl: row.midi_url ?? undefined,
     errorMessage: row.error_message ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function createDefaultMetronome(): GuideTrackMetronome {
+  return {
+    enabled: true,
+    sound: "click",
+    accentFirstBeat: true,
+    volume: 0.7,
+  };
+}
+
+function createDefaultCountIn(): GuideTrackCountIn {
+  return {
+    enabled: true,
+    bars: 1,
+    voice: true,
+    click: true,
+  };
+}
+
+function createDefaultVoiceCue(): GuideTrackVoiceCue {
+  return {
+    enabled: true,
+    language: "en",
+    announceSections: true,
+    announceBeforeBeats: 1,
+    volume: 0.9,
+  };
+}
+
+function normalizeGuideTrackSection(value: unknown): GuideTrackSection | null {
+  if (!isRecord(value)) return null;
+  const label = typeof value.label === "string" && value.label.trim() ? value.label.trim() : "Section";
+  return {
+    sectionId: typeof value.sectionId === "string" && value.sectionId.trim() ? value.sectionId.trim() : label,
+    label,
+    chords: Array.isArray(value.chords) ? value.chords.filter((chord): chord is string => typeof chord === "string" && Boolean(chord.trim())) : [],
+    bars: normalizeInteger(value.bars, 4, 1, 64),
+    repeat: normalizeInteger(value.repeat, 1, 1, 32),
+    memo: typeof value.memo === "string" ? value.memo : "",
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isGuideTrackSound(value: unknown): value is GuideTrackData["sound"] {
+  return value === "piano" || value === "pad" || value === "piano_pad" || value === "click_only";
+}
+
+function normalizeInteger(value: unknown, fallback: number, min: number, max: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+function normalizeVolume(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(1, Math.max(0, number));
 }

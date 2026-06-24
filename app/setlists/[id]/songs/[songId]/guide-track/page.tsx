@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { GuideTrackPreviewPlayer } from "@/components/GuideTrackPreviewPlayer";
+import { audioBufferToWav, downloadBlob } from "@/lib/audio/exportWav";
+import { renderGuideTrackToAudioBuffer } from "@/lib/audio/renderGuideTrack";
 import { getCurrentUser } from "@/lib/auth";
 import {
   getFirstGuideTrackForSong,
+  normalizeGuideTrackData,
   saveGuideTrack,
   type ExtractedChord,
   type GuideTrackData,
@@ -53,14 +56,62 @@ export default function SongGuideTrackPage() {
   const [key, setKey] = useState("");
   const [timeSignature, setTimeSignature] = useState("4/4");
   const [sound, setSound] = useState<GuideTrackData["sound"]>("piano_pad");
-  const [countIn, setCountIn] = useState(1);
-  const [click, setClick] = useState(true);
+  const [metronomeEnabled, setMetronomeEnabled] = useState(true);
+  const [metronomeAccent, setMetronomeAccent] = useState(true);
+  const [metronomeVolume, setMetronomeVolume] = useState(0.7);
+  const [countInEnabled, setCountInEnabled] = useState(true);
+  const [countInBars, setCountInBars] = useState(1);
+  const [countInClick, setCountInClick] = useState(true);
+  const [countInVoice, setCountInVoice] = useState(true);
+  const [voiceCueEnabled, setVoiceCueEnabled] = useState(true);
+  const [voiceLanguage, setVoiceLanguage] = useState<"en" | "ko">("en");
+  const [announceBeforeBeats, setAnnounceBeforeBeats] = useState<1 | 4>(1);
+  const [voiceVolume, setVoiceVolume] = useState(0.9);
+  const [downloading, setDownloading] = useState(false);
 
   const sourceImage = getFirstImageLink(song?.imageLinks);
   const canUseGuideTrack = canUseFeature(profile, "teamGuideTrack");
   const hasScoreImage = Boolean(sourceImage?.url);
   const hasSongForm = Boolean(song?.sections?.length);
-  const guideData = useMemo(() => buildGuideTrackData({ bpm, key, timeSignature, sound, countIn, click, sections }), [bpm, key, timeSignature, sound, countIn, click, sections]);
+  const guideData = useMemo(
+    () =>
+      buildGuideTrackData({
+        bpm,
+        key,
+        timeSignature,
+        sound,
+        metronomeEnabled,
+        metronomeAccent,
+        metronomeVolume,
+        countInEnabled,
+        countInBars,
+        countInClick,
+        countInVoice,
+        voiceCueEnabled,
+        voiceLanguage,
+        announceBeforeBeats,
+        voiceVolume,
+        sections,
+      }),
+    [
+      bpm,
+      key,
+      timeSignature,
+      sound,
+      metronomeEnabled,
+      metronomeAccent,
+      metronomeVolume,
+      countInEnabled,
+      countInBars,
+      countInClick,
+      countInVoice,
+      voiceCueEnabled,
+      voiceLanguage,
+      announceBeforeBeats,
+      voiceVolume,
+      sections,
+    ],
+  );
 
   useEffect(() => {
     async function load() {
@@ -102,12 +153,22 @@ export default function SongGuideTrackPage() {
       setTrack(nextTrack);
       setExtractedChords(nextTrack?.extractedChords ?? []);
       setSections(createSectionDrafts(nextSong, nextTrack));
-      setBpm(nextTrack?.guideTrackData.bpm ?? nextSong.bpm ?? 72);
-      setKey(nextTrack?.guideTrackData.key ?? nextSong.practiceKey ?? nextSong.originalKey ?? "");
-      setTimeSignature(nextTrack?.guideTrackData.timeSignature ?? "4/4");
-      setSound(nextTrack?.guideTrackData.sound ?? "piano_pad");
-      setCountIn(nextTrack?.guideTrackData.countIn ?? 1);
-      setClick(nextTrack?.guideTrackData.click ?? true);
+      const normalizedGuideData = normalizeGuideTrackData(nextTrack?.guideTrackData);
+      setBpm(normalizedGuideData.bpm ?? nextSong.bpm ?? 72);
+      setKey(normalizedGuideData.key ?? nextSong.practiceKey ?? nextSong.originalKey ?? "");
+      setTimeSignature(normalizedGuideData.timeSignature);
+      setSound(normalizedGuideData.sound);
+      setMetronomeEnabled(normalizedGuideData.metronome.enabled);
+      setMetronomeAccent(normalizedGuideData.metronome.accentFirstBeat);
+      setMetronomeVolume(normalizedGuideData.metronome.volume);
+      setCountInEnabled(normalizedGuideData.countIn.enabled);
+      setCountInBars(normalizedGuideData.countIn.bars);
+      setCountInClick(normalizedGuideData.countIn.click);
+      setCountInVoice(normalizedGuideData.countIn.voice);
+      setVoiceCueEnabled(normalizedGuideData.voiceCue.enabled);
+      setVoiceLanguage(normalizedGuideData.voiceCue.language);
+      setAnnounceBeforeBeats(normalizedGuideData.voiceCue.announceBeforeBeats);
+      setVoiceVolume(normalizedGuideData.voiceCue.volume);
       setLoaded(true);
     }
 
@@ -207,6 +268,33 @@ export default function SongGuideTrackPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleDownloadWav() {
+    const data = track?.guideTrackData ?? guideData;
+    setDownloading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const buffer = await renderGuideTrackToAudioBuffer(data);
+      const wav = audioBufferToWav(buffer);
+      const blob = new Blob([wav], { type: "audio/wav" });
+      downloadBlob(blob, createGuideTrackFilename(song?.title || "guide-track", "wav"));
+      setMessage("가이드 트랙 WAV 파일을 내려받았습니다. 브라우저 음성 안내는 다운로드 파일에 포함되지 않을 수 있습니다.");
+    } catch (downloadError) {
+      handleDownloadJson();
+      setMessage("WAV 다운로드가 어려워 가이드 트랙 데이터 JSON을 내려받았습니다.");
+      setError(downloadError instanceof Error ? downloadError.message : "WAV 다운로드에 실패했습니다.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  function handleDownloadJson() {
+    const data = track?.guideTrackData ?? guideData;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    downloadBlob(blob, createGuideTrackFilename(song?.title || "guide-track", "json"));
   }
 
   if (!loaded) {
@@ -408,18 +496,89 @@ export default function SongGuideTrackPage() {
                   <option value="click_only">Click only</option>
                 </select>
               </label>
-              <label className="space-y-1">
-                <span className="field-label">카운트인</span>
-                <select value={countIn} onChange={(event) => setCountIn(Number(event.target.value))} className="field-input">
-                  <option value={0}>없음</option>
-                  <option value={1}>1마디</option>
-                  <option value={2}>2마디</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <input type="checkbox" checked={click} onChange={(event) => setClick(event.target.checked)} className="size-4 accent-blue-600" />
-                <span className="text-sm font-bold text-slate-800">클릭음 포함</span>
-              </label>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+              <h3 className="font-black text-slate-950">연습용 안내 설정</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-600">
+                메트로놈, 카운트인, 음성 안내를 함께 저장해 팀 녹음실 기준 트랙으로 재사용할 수 있게 합니다.
+              </p>
+
+              <div className="mt-4 grid gap-3">
+                <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <input type="checkbox" checked={metronomeEnabled} onChange={(event) => setMetronomeEnabled(event.target.checked)} className="mt-1 size-4 accent-blue-600" />
+                  <span>
+                    <span className="block text-sm font-black text-slate-950">메트로놈 포함</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">가이드 트랙 재생 중 박자를 들을 수 있도록 클릭음을 함께 재생합니다.</span>
+                  </span>
+                </label>
+
+                <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+                  <label className="flex items-center gap-3">
+                    <input type="checkbox" checked={metronomeAccent} onChange={(event) => setMetronomeAccent(event.target.checked)} className="size-4 accent-blue-600" />
+                    <span className="text-sm font-bold text-slate-800">첫 박 강세</span>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="field-label">메트로놈 볼륨 {Math.round(metronomeVolume * 100)}%</span>
+                    <input type="range" min={0} max={1} step={0.05} value={metronomeVolume} onChange={(event) => setMetronomeVolume(Number(event.target.value))} className="w-full accent-blue-600" />
+                  </label>
+                </div>
+
+                <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <input type="checkbox" checked={countInEnabled} onChange={(event) => setCountInEnabled(event.target.checked)} className="mt-1 size-4 accent-blue-600" />
+                  <span>
+                    <span className="block text-sm font-black text-slate-950">시작 전 카운트인</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">곡 시작 전에 박자를 세어 팀원들이 함께 들어갈 수 있게 합니다.</span>
+                  </span>
+                </label>
+
+                <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="field-label">카운트인 길이</span>
+                    <select value={countInBars} onChange={(event) => setCountInBars(Number(event.target.value))} className="field-input">
+                      <option value={1}>1마디</option>
+                      <option value={2}>2마디</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-3">
+                    <input type="checkbox" checked={countInClick} onChange={(event) => setCountInClick(event.target.checked)} className="size-4 accent-blue-600" />
+                    <span className="text-sm font-bold text-slate-800">카운트인 클릭 포함</span>
+                  </label>
+                  <label className="flex items-center gap-3">
+                    <input type="checkbox" checked={countInVoice} onChange={(event) => setCountInVoice(event.target.checked)} className="size-4 accent-blue-600" />
+                    <span className="text-sm font-bold text-slate-800">음성 카운트 포함</span>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="field-label">음성 언어</span>
+                    <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value === "ko" ? "ko" : "en")} className="field-input">
+                      <option value="en">English · one, two, three, four</option>
+                      <option value="ko">Korean · 하나, 둘, 셋, 넷</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                  <input type="checkbox" checked={voiceCueEnabled} onChange={(event) => setVoiceCueEnabled(event.target.checked)} className="mt-1 size-4 accent-blue-600" />
+                  <span>
+                    <span className="block text-sm font-black text-slate-950">송폼 구간 음성 안내</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">각 송폼 구간이 시작되기 전에 Intro, Verse, Chorus 같은 구간명을 음성으로 알려줍니다.</span>
+                  </span>
+                </label>
+
+                <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="field-label">구간 시작 직전 안내</span>
+                    <select value={announceBeforeBeats} onChange={(event) => setAnnounceBeforeBeats(Number(event.target.value) === 4 ? 4 : 1)} className="field-input">
+                      <option value={1}>1박 전</option>
+                      <option value={4}>1마디 전</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="field-label">음성 안내 볼륨 {Math.round(voiceVolume * 100)}%</span>
+                    <input type="range" min={0} max={1} step={0.05} value={voiceVolume} onChange={(event) => setVoiceVolume(Number(event.target.value))} className="w-full accent-blue-600" />
+                  </label>
+                </div>
+              </div>
             </div>
           </StepCard>
 
@@ -434,6 +593,20 @@ export default function SongGuideTrackPage() {
             </button>
             <div className="mt-4">
               <GuideTrackPreviewPlayer data={track?.guideTrackData ?? guideData} />
+            </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="font-black text-slate-950">다운로드</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                생성한 가이드 트랙을 파일로 내려받아 연습이나 팀 녹음실 준비에 사용할 수 있습니다. 현재 다운로드 파일에는 브라우저 음성 안내가 포함되지 않을 수 있습니다.
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <button type="button" onClick={handleDownloadWav} disabled={downloading} className="btn-primary">
+                  {downloading ? "다운로드 준비 중..." : "가이드 트랙 다운로드"}
+                </button>
+                <button type="button" onClick={handleDownloadJson} className="btn-secondary">
+                  가이드 트랙 데이터 다운로드
+                </button>
+              </div>
             </div>
           </StepCard>
         </div>
@@ -492,8 +665,17 @@ function buildGuideTrackData(input: {
   key: string;
   timeSignature: string;
   sound: GuideTrackData["sound"];
-  countIn: number;
-  click: boolean;
+  metronomeEnabled: boolean;
+  metronomeAccent: boolean;
+  metronomeVolume: number;
+  countInEnabled: boolean;
+  countInBars: number;
+  countInClick: boolean;
+  countInVoice: boolean;
+  voiceCueEnabled: boolean;
+  voiceLanguage: "en" | "ko";
+  announceBeforeBeats: 1 | 4;
+  voiceVolume: number;
   sections: SectionDraft[];
 }): GuideTrackData {
   const sections = input.sections.map(sectionDraftToGuideSection);
@@ -502,8 +684,29 @@ function buildGuideTrackData(input: {
     key: input.key,
     timeSignature: input.timeSignature,
     sound: input.sound,
-    click: input.click,
-    countIn: input.countIn,
+    metronome: {
+      enabled: input.metronomeEnabled,
+      sound: "click",
+      accentFirstBeat: input.metronomeAccent,
+      volume: input.metronomeVolume,
+    },
+    countIn: {
+      enabled: input.countInEnabled,
+      bars: input.countInBars,
+      voice: input.countInVoice,
+      click: input.countInClick,
+    },
+    voiceCue: {
+      enabled: input.voiceCueEnabled,
+      language: input.voiceLanguage,
+      announceSections: true,
+      announceBeforeBeats: input.announceBeforeBeats,
+      volume: input.voiceVolume,
+    },
+    download: {
+      format: "wav",
+      lastExportedAt: null,
+    },
     sections,
     totalBars: calculateTotalBars(sections),
   };
@@ -540,4 +743,14 @@ function clampNumber(value: string, fallback: number, min: number, max: number) 
 
 function clampPositiveNumber(value: string, fallback: number) {
   return clampNumber(value, fallback, 1, 64);
+}
+
+function createGuideTrackFilename(title: string, extension: "wav" | "json") {
+  const safeTitle = title
+    .trim()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 48);
+  const date = new Date().toISOString().slice(0, 10);
+  return `setlistlab-guide-track-${safeTitle || "track"}-${date}.${extension}`;
 }
