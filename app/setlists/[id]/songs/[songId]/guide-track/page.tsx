@@ -62,7 +62,7 @@ export default function SongGuideTrackPage() {
   const [countInEnabled, setCountInEnabled] = useState(true);
   const [countInBars, setCountInBars] = useState(1);
   const [countInClick, setCountInClick] = useState(true);
-  const [countInVoice, setCountInVoice] = useState(true);
+  const [countInVisualCounter, setCountInVisualCounter] = useState(true);
   const [voiceCueEnabled, setVoiceCueEnabled] = useState(true);
   const [voiceLanguage, setVoiceLanguage] = useState<"en" | "ko">("en");
   const [announceBeforeBeats, setAnnounceBeforeBeats] = useState<1 | 4>(1);
@@ -86,7 +86,7 @@ export default function SongGuideTrackPage() {
         countInEnabled,
         countInBars,
         countInClick,
-        countInVoice,
+        countInVisualCounter,
         voiceCueEnabled,
         voiceLanguage,
         announceBeforeBeats,
@@ -104,7 +104,7 @@ export default function SongGuideTrackPage() {
       countInEnabled,
       countInBars,
       countInClick,
-      countInVoice,
+      countInVisualCounter,
       voiceCueEnabled,
       voiceLanguage,
       announceBeforeBeats,
@@ -164,7 +164,7 @@ export default function SongGuideTrackPage() {
       setCountInEnabled(normalizedGuideData.countIn.enabled);
       setCountInBars(normalizedGuideData.countIn.bars);
       setCountInClick(normalizedGuideData.countIn.click);
-      setCountInVoice(normalizedGuideData.countIn.voice);
+      setCountInVisualCounter(normalizedGuideData.countIn.visualCounter);
       setVoiceCueEnabled(normalizedGuideData.voiceCue.enabled);
       setVoiceLanguage(normalizedGuideData.voiceCue.language);
       setAnnounceBeforeBeats(normalizedGuideData.voiceCue.announceBeforeBeats);
@@ -281,7 +281,7 @@ export default function SongGuideTrackPage() {
       const wav = audioBufferToWav(buffer);
       const blob = new Blob([wav], { type: "audio/wav" });
       downloadBlob(blob, createGuideTrackFilename(song?.title || "guide-track", "wav"));
-      setMessage("가이드 트랙 WAV 파일을 내려받았습니다. 브라우저 음성 안내는 다운로드 파일에 포함되지 않을 수 있습니다.");
+      setMessage("가이드 트랙 WAV 파일을 내려받았습니다. 카운트인 화면 카운터는 재생 화면에서만 표시됩니다.");
     } catch (downloadError) {
       handleDownloadJson();
       setMessage("WAV 다운로드가 어려워 가이드 트랙 데이터 JSON을 내려받았습니다.");
@@ -501,7 +501,7 @@ export default function SongGuideTrackPage() {
             <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
               <h3 className="font-black text-slate-950">연습용 안내 설정</h3>
               <p className="mt-1 text-xs leading-5 text-slate-600">
-                메트로놈, 카운트인, 음성 안내를 함께 저장해 팀 녹음실 기준 트랙으로 재사용할 수 있게 합니다.
+                메트로놈, 카운트인, 화면 카운터와 구간 안내를 함께 저장해 팀 녹음실 기준 트랙으로 재사용할 수 있게 합니다.
               </p>
 
               <div className="mt-4 grid gap-3">
@@ -544,16 +544,12 @@ export default function SongGuideTrackPage() {
                     <input type="checkbox" checked={countInClick} onChange={(event) => setCountInClick(event.target.checked)} className="size-4 accent-blue-600" />
                     <span className="text-sm font-bold text-slate-800">카운트인 클릭 포함</span>
                   </label>
-                  <label className="flex items-center gap-3">
-                    <input type="checkbox" checked={countInVoice} onChange={(event) => setCountInVoice(event.target.checked)} className="size-4 accent-blue-600" />
-                    <span className="text-sm font-bold text-slate-800">음성 카운트 포함</span>
-                  </label>
-                  <label className="space-y-1">
-                    <span className="field-label">음성 언어</span>
-                    <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value === "ko" ? "ko" : "en")} className="field-input">
-                      <option value="en">English · one, two, three, four</option>
-                      <option value="ko">Korean · 하나, 둘, 셋, 넷</option>
-                    </select>
+                  <label className="flex items-start gap-3">
+                    <input type="checkbox" checked={countInVisualCounter} onChange={(event) => setCountInVisualCounter(event.target.checked)} className="mt-1 size-4 accent-blue-600" />
+                    <span>
+                      <span className="block text-sm font-bold text-slate-800">화면 카운터 표시</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">곡 시작 전과 재생 중에 현재 박자를 숫자로 보여줍니다.</span>
+                    </span>
                   </label>
                 </div>
 
@@ -566,6 +562,13 @@ export default function SongGuideTrackPage() {
                 </label>
 
                 <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="field-label">구간 안내 언어</span>
+                    <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value === "ko" ? "ko" : "en")} className="field-input">
+                      <option value="en">English</option>
+                      <option value="ko">Korean</option>
+                    </select>
+                  </label>
                   <label className="space-y-1">
                     <span className="field-label">구간 시작 직전 안내</span>
                     <select value={announceBeforeBeats} onChange={(event) => setAnnounceBeforeBeats(Number(event.target.value) === 4 ? 4 : 1)} className="field-input">
@@ -597,7 +600,7 @@ export default function SongGuideTrackPage() {
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
               <h3 className="font-black text-slate-950">다운로드</h3>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                생성한 가이드 트랙을 파일로 내려받아 연습이나 팀 녹음실 준비에 사용할 수 있습니다. 현재 다운로드 파일에는 브라우저 음성 안내가 포함되지 않을 수 있습니다.
+                생성한 가이드 트랙을 파일로 내려받아 연습이나 팀 녹음실 준비에 사용할 수 있습니다. 음성 카운트는 현재 제공하지 않으며, 카운트인은 메트로놈 클릭과 화면 카운터로 제공됩니다. 다운로드 파일에는 화면 카운터가 포함되지 않습니다.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <button type="button" onClick={handleDownloadWav} disabled={downloading} className="btn-primary">
@@ -671,7 +674,7 @@ function buildGuideTrackData(input: {
   countInEnabled: boolean;
   countInBars: number;
   countInClick: boolean;
-  countInVoice: boolean;
+  countInVisualCounter: boolean;
   voiceCueEnabled: boolean;
   voiceLanguage: "en" | "ko";
   announceBeforeBeats: 1 | 4;
@@ -693,8 +696,8 @@ function buildGuideTrackData(input: {
     countIn: {
       enabled: input.countInEnabled,
       bars: input.countInBars,
-      voice: input.countInVoice,
       click: input.countInClick,
+      visualCounter: input.countInVisualCounter,
     },
     voiceCue: {
       enabled: input.voiceCueEnabled,

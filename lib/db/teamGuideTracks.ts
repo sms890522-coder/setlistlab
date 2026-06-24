@@ -32,8 +32,8 @@ export type GuideTrackMetronome = {
 export type GuideTrackCountIn = {
   enabled: boolean;
   bars: number;
-  voice: boolean;
   click: boolean;
+  visualCounter: boolean;
 };
 
 export type GuideTrackVoiceCue = {
@@ -246,8 +246,9 @@ export function normalizeGuideTrackData(value: unknown): GuideTrackData {
     ? {
         enabled: typeof value.countIn.enabled === "boolean" ? value.countIn.enabled : true,
         bars: normalizeInteger(value.countIn.bars, 1, 0, 2),
-        voice: typeof value.countIn.voice === "boolean" ? value.countIn.voice : true,
         click: typeof value.countIn.click === "boolean" ? value.countIn.click : true,
+        // 이전 데이터의 countIn.voice는 브라우저별 지연 때문에 더 이상 사용하지 않는다.
+        visualCounter: typeof value.countIn.visualCounter === "boolean" ? value.countIn.visualCounter : true,
       }
     : {
         ...createDefaultCountIn(),
@@ -323,8 +324,8 @@ function createDefaultCountIn(): GuideTrackCountIn {
   return {
     enabled: true,
     bars: 1,
-    voice: true,
     click: true,
+    visualCounter: true,
   };
 }
 

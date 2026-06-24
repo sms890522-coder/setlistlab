@@ -28,23 +28,50 @@ const NOTE_OFFSETS: Record<string, number> = {
 };
 
 type PlaybackEvent =
-  | { timeMs: number; type: "click"; strong: boolean; volume: number }
-  | { timeMs: number; type: "chord"; chord: string; sectionLabel: string; durationMs: number }
-  | { timeMs: number; type: "label"; label: string }
-  | { timeMs: number; type: "speech"; text: string; language: "en" | "ko"; volume: number };
+  | { timeSec: number; type: "click"; strong: boolean; volume: number }
+  | { timeSec: number; type: "chord"; chord: string; sectionLabel: string; durationSec: number }
+  | { timeSec: number; type: "speech"; text: string; language: "en" | "ko"; volume: number };
+
+type SectionRange = {
+  startSec: number;
+  endSec: number;
+  label: string;
+};
+
+type PlaybackTimeline = {
+  events: PlaybackEvent[];
+  sectionRanges: SectionRange[];
+  beatSec: number;
+  beatsPerBar: number;
+  countInSec: number;
+  durationSec: number;
+};
+
+type PlaybackSession = {
+  startAt: number;
+  songStartAt: number;
+  endAt: number;
+  timeline: PlaybackTimeline;
+};
+
+type PlaybackPhase = "idle" | "countIn" | "playing";
 
 export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) {
   const [playing, setPlaying] = useState(false);
   const [currentLabel, setCurrentLabel] = useState("");
   const [speechWarning, setSpeechWarning] = useState("");
+  const [phase, setPhase] = useState<PlaybackPhase>("idle");
+  const [beatInBar, setBeatInBar] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const timeoutRefs = useRef<number[]>([]);
+  const animationRef = useRef<number | null>(null);
+  const playbackRef = useRef<PlaybackSession | null>(null);
 
   const bpm = data.bpm && data.bpm > 0 ? data.bpm : 72;
-  const beatMs = 60000 / bpm;
   const beatsPerBar = getBeatsPerBar(data.timeSignature);
-  const events = useMemo(() => buildPlaybackEvents(data), [data]);
+  const timeline = useMemo(() => buildPlaybackTimeline(data), [data]);
   const totalBars = data.totalBars || data.sections.reduce((sum, section) => sum + section.bars * section.repeat, 0);
+  const showVisualCounter = playing && data.countIn.visualCounter !== false;
 
   useEffect(() => {
     return () => stop();
@@ -53,13 +80,20 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
   function stop() {
     timeoutRefs.current.forEach((timerId) => window.clearTimeout(timerId));
     timeoutRefs.current = [];
+    if (animationRef.current !== null) {
+      window.cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
     window.speechSynthesis?.cancel();
+    playbackRef.current = null;
     setPlaying(false);
     setCurrentLabel("");
+    setPhase("idle");
+    setBeatInBar(0);
   }
 
   async function start() {
-    if (events.length === 0) return;
+    if (timeline.events.length === 0) return;
 
     stop();
     setSpeechWarning("");
@@ -71,41 +105,69 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
     await audioContextRef.current.resume();
 
     setPlaying(true);
-    setCurrentLabel(data.countIn.enabled ? "Count-in" : "Ready");
+    setCurrentLabel(data.countIn.enabled ? "카운트인" : "재생 준비");
 
-    const startAt = audioContextRef.current.currentTime + 0.05;
-    events.forEach((event) => {
-      const timerId = window.setTimeout(() => handlePlaybackEvent(event, startAt), event.timeMs);
-      timeoutRefs.current.push(timerId);
+    const context = audioContextRef.current;
+    const startAt = context.currentTime + 0.08;
+    const session: PlaybackSession = {
+      startAt,
+      songStartAt: startAt + timeline.countInSec,
+      endAt: startAt + timeline.durationSec,
+      timeline,
+    };
+    playbackRef.current = session;
+
+    timeline.events.forEach((event) => {
+      const eventTime = startAt + event.timeSec;
+      if (event.type === "click") {
+        playClick(context, eventTime, event.strong, event.volume);
+      } else if (event.type === "chord") {
+        if (data.sound !== "click_only") {
+          playChord(context, eventTime, event.chord, data.sound, event.durationSec);
+        }
+      } else if (event.type === "speech") {
+        const delayMs = Math.max(0, (eventTime - context.currentTime) * 1000);
+        const timerId = window.setTimeout(() => speak(event.text, event.language, event.volume), delayMs);
+        timeoutRefs.current.push(timerId);
+      }
     });
 
-    const endTimeMs = Math.max(...events.map((event) => event.timeMs), 0) + beatMs * beatsPerBar + 200;
-    timeoutRefs.current.push(window.setTimeout(stop, endTimeMs));
+    startVisualCounter();
+
+    const endDelayMs = Math.max(0, (session.endAt - context.currentTime) * 1000) + 250;
+    timeoutRefs.current.push(window.setTimeout(stop, endDelayMs));
   }
 
-  function handlePlaybackEvent(event: PlaybackEvent, startAt: number) {
-    const context = audioContextRef.current;
-    if (!context) return;
+  function startVisualCounter() {
+    const update = () => {
+      const context = audioContextRef.current;
+      const session = playbackRef.current;
+      if (!context || !session) return;
 
-    const eventTime = startAt + event.timeMs / 1000;
-    if (event.type === "click") {
-      playClick(context, eventTime, event.strong, event.volume);
-      return;
-    }
-    if (event.type === "chord") {
-      setCurrentLabel(`${event.sectionLabel} · ${event.chord}`);
-      if (data.sound !== "click_only") {
-        playChord(context, eventTime, event.chord, data.sound, event.durationMs / 1000);
+      const now = context.currentTime;
+      const { beatSec, beatsPerBar: timelineBeatsPerBar, sectionRanges } = session.timeline;
+      if (now < session.songStartAt && data.countIn.enabled) {
+        const elapsed = Math.max(0, now - session.startAt);
+        const beatIndex = Math.floor(elapsed / beatSec);
+        setPhase("countIn");
+        setBeatInBar((beatIndex % timelineBeatsPerBar) + 1);
+        setCurrentLabel("카운트인");
+      } else if (now <= session.endAt) {
+        const songElapsed = Math.max(0, now - session.songStartAt);
+        const beatIndex = Math.floor(songElapsed / beatSec);
+        const currentSection = sectionRanges.find((section) => songElapsed >= section.startSec && songElapsed < section.endSec);
+        setPhase("playing");
+        setBeatInBar((beatIndex % timelineBeatsPerBar) + 1);
+        setCurrentLabel(currentSection?.label ?? "재생 중");
+      } else {
+        stop();
+        return;
       }
-      return;
-    }
-    if (event.type === "label") {
-      setCurrentLabel(event.label);
-      return;
-    }
-    if (event.type === "speech") {
-      speak(event.text, event.language, event.volume);
-    }
+
+      animationRef.current = window.requestAnimationFrame(update);
+    };
+
+    animationRef.current = window.requestAnimationFrame(update);
   }
 
   function speak(text: string, language: "en" | "ko", volume: number) {
@@ -120,6 +182,7 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
       utterance.rate = 1.15;
       utterance.pitch = 1;
       utterance.volume = Math.max(0, Math.min(1, volume));
+      // TODO: 다운로드까지 정확히 포함하려면 Web Speech 대신 샘플 기반 구간 안내로 교체한다.
       window.speechSynthesis.speak(utterance);
     } catch {
       setSpeechWarning("음성 안내를 재생하지 못했습니다. 클릭과 코드 가이드는 계속 재생됩니다.");
@@ -132,11 +195,11 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
         <div>
           <p className="text-sm font-black text-slate-950">가이드 트랙 미리듣기</p>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            카운트인, 메트로놈, 코드 패드와 송폼 음성 안내를 브라우저에서 확인합니다.
+            카운트인, 메트로놈, 코드 패드와 화면 박자 카운터를 브라우저에서 확인합니다.
           </p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={playing ? stop : start} disabled={events.length === 0} className="btn-primary min-h-11">
+          <button type="button" onClick={playing ? stop : start} disabled={timeline.events.length === 0} className="btn-primary min-h-11">
             {playing ? "정지" : "재생"}
           </button>
           <button type="button" onClick={stop} className="btn-secondary min-h-11">
@@ -147,48 +210,76 @@ export function GuideTrackPreviewPlayer({ data }: GuideTrackPreviewPlayerProps) 
       <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800">
         {currentLabel || `BPM ${bpm} · ${data.timeSignature} · 총 ${totalBars}마디`}
       </p>
+      {showVisualCounter ? (
+        <div className="mt-3 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-blue-700">{phase === "countIn" ? "카운트인" : currentLabel || "재생 중"}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">현재 박자: {beatInBar || 1}</p>
+            </div>
+            <div className={`flex size-14 items-center justify-center rounded-full text-3xl font-black shadow-sm ${beatInBar === 1 ? "bg-blue-600 text-white" : "bg-white text-blue-700"}`}>
+              {beatInBar || 1}
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: `repeat(${beatsPerBar}, minmax(0, 1fr))` }}>
+            {Array.from({ length: beatsPerBar }, (_, index) => {
+              const number = index + 1;
+              const active = number === beatInBar;
+              const strong = number === 1;
+              return (
+                <div
+                  key={number}
+                  className={`flex min-h-10 items-center justify-center rounded-full text-sm font-black transition-all ${
+                    active
+                      ? strong
+                        ? "scale-105 bg-blue-600 text-white shadow-md"
+                        : "scale-105 bg-blue-100 text-blue-800 ring-2 ring-blue-300"
+                      : strong
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {number}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       {speechWarning ? <p className="mt-2 text-xs font-semibold text-amber-700">{speechWarning}</p> : null}
     </div>
   );
 }
 
-function buildPlaybackEvents(data: GuideTrackData): PlaybackEvent[] {
+function buildPlaybackTimeline(data: GuideTrackData): PlaybackTimeline {
   const bpm = data.bpm && data.bpm > 0 ? data.bpm : 72;
-  const beatMs = 60000 / bpm;
+  const beatSec = 60 / bpm;
   const beatsPerBar = getBeatsPerBar(data.timeSignature);
   const events: PlaybackEvent[] = [];
+  const sectionRanges: SectionRange[] = [];
   const countInBeats = data.countIn.enabled ? data.countIn.bars * beatsPerBar : 0;
-  const countWords = getCountWords(data.voiceCue.language, beatsPerBar);
 
   for (let beat = 0; beat < countInBeats; beat += 1) {
-    const timeMs = beat * beatMs;
+    const timeSec = beat * beatSec;
     const beatNumber = beat % beatsPerBar;
-    events.push({ timeMs, type: "label", label: `Count-in ${beatNumber + 1}` });
     if (data.countIn.click) {
       events.push({
-        timeMs,
+        timeSec,
         type: "click",
         strong: data.metronome.accentFirstBeat && beatNumber === 0,
         volume: data.metronome.volume,
       });
     }
-    if (data.countIn.voice) {
-      events.push({
-        timeMs: timeMs + 10,
-        type: "speech",
-        text: countWords[beatNumber] ?? String(beatNumber + 1),
-        language: data.voiceCue.language,
-        volume: data.voiceCue.volume,
-      });
-    }
   }
 
-  let cursorMs = countInBeats * beatMs;
+  const countInSec = countInBeats * beatSec;
+  let cursorSec = countInSec;
   data.sections.forEach((section) => {
+    const sectionStartSec = cursorSec - countInSec;
     const cueText = normalizeSectionCue(section.label);
     if (data.voiceCue.enabled && data.voiceCue.announceSections) {
       events.push({
-        timeMs: Math.max(0, cursorMs - data.voiceCue.announceBeforeBeats * beatMs),
+        timeSec: Math.max(0, cursorSec - data.voiceCue.announceBeforeBeats * beatSec),
         type: "speech",
         text: cueText,
         language: data.voiceCue.language,
@@ -199,23 +290,35 @@ function buildPlaybackEvents(data: GuideTrackData): PlaybackEvent[] {
     for (let repeat = 0; repeat < Math.max(1, section.repeat); repeat += 1) {
       for (let bar = 0; bar < Math.max(1, section.bars); bar += 1) {
         const chord = getBarChord(section, bar);
-        events.push({ timeMs: cursorMs, type: "chord", chord, sectionLabel: section.label, durationMs: beatMs * beatsPerBar * 0.9 });
+        events.push({ timeSec: cursorSec, type: "chord", chord, sectionLabel: section.label, durationSec: beatSec * beatsPerBar * 0.9 });
         if (data.metronome.enabled) {
           for (let beat = 0; beat < beatsPerBar; beat += 1) {
             events.push({
-              timeMs: cursorMs + beat * beatMs,
+              timeSec: cursorSec + beat * beatSec,
               type: "click",
               strong: data.metronome.accentFirstBeat && beat === 0,
               volume: data.metronome.volume,
             });
           }
         }
-        cursorMs += beatMs * beatsPerBar;
+        cursorSec += beatSec * beatsPerBar;
       }
     }
+    sectionRanges.push({
+      startSec: sectionStartSec,
+      endSec: Math.max(sectionStartSec, cursorSec - countInSec),
+      label: section.label,
+    });
   });
 
-  return events.sort((a, b) => a.timeMs - b.timeMs);
+  return {
+    events: events.sort((a, b) => a.timeSec - b.timeSec),
+    sectionRanges,
+    beatSec,
+    beatsPerBar,
+    countInSec,
+    durationSec: cursorSec,
+  };
 }
 
 function getBarChord(section: GuideTrackSection, bar: number) {
@@ -226,14 +329,6 @@ function getBarChord(section: GuideTrackSection, bar: number) {
 function getBeatsPerBar(timeSignature: string) {
   const top = Number(timeSignature.split("/")[0]);
   return Number.isFinite(top) && top > 0 ? top : 4;
-}
-
-function getCountWords(language: "en" | "ko", beatsPerBar: number) {
-  const words =
-    language === "ko"
-      ? ["하나", "둘", "셋", "넷", "다섯", "여섯", "일곱", "여덟"]
-      : ["one", "two", "three", "four", "five", "six", "seven", "eight"];
-  return words.slice(0, Math.max(1, beatsPerBar));
 }
 
 function normalizeSectionCue(label: string) {
