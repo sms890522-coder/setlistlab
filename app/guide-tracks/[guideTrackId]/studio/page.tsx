@@ -665,10 +665,10 @@ function StudioTrackRow({
   const volume = mix?.volume ?? 1;
 
   return (
-    <article className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${active ? "border-slate-200" : "border-slate-200 opacity-55"}`}>
+    <article className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition ${active ? "border-slate-200" : "border-slate-200 opacity-55"}`}>
       <div className="h-1" style={{ backgroundColor: theme.accent }} />
-      <div className="grid gap-3 p-3 lg:grid-cols-[210px_146px_1fr] lg:items-center">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="grid gap-3 p-3 lg:grid-cols-[210px_136px_minmax(0,1fr)_40px] lg:items-center">
+        <div className="flex min-w-0 items-center gap-3 pr-10 lg:pr-0">
           <span
             className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black"
             style={{ backgroundColor: theme.soft, color: theme.accent }}
@@ -726,18 +726,6 @@ function StudioTrackRow({
             <span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${muted ? "left-1" : "left-6"}`} />
           </button>
 
-          {canDelete ? (
-            <button
-              type="button"
-              onClick={onDelete}
-              className="size-9 rounded-xl text-lg font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-              aria-label={`${title} 삭제`}
-              title="삭제"
-            >
-              ⋮
-            </button>
-          ) : null}
-
           <label className="flex w-full items-center gap-2">
             <span className="w-9 shrink-0 text-[11px] font-black text-slate-400">{Math.round(volume * 100)}%</span>
             <input
@@ -752,6 +740,20 @@ function StudioTrackRow({
               aria-label={`${title} 볼륨`}
             />
           </label>
+        </div>
+
+        <div className="absolute right-3 top-4 lg:static lg:order-4 lg:flex lg:justify-end">
+          {canDelete ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="size-8 rounded-xl text-lg font-black leading-none text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+              aria-label={`${title} 삭제`}
+              title="삭제"
+            >
+              ⋮
+            </button>
+          ) : null}
         </div>
       </div>
     </article>
