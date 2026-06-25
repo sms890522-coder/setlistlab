@@ -9,6 +9,9 @@ type WaveformCanvasProps = {
   height?: number;
   muted?: boolean;
   solo?: boolean;
+  waveColor?: string;
+  backgroundColor?: string;
+  playheadColor?: string;
   loading?: boolean;
   error?: string;
   onSeek?: (time: number) => void;
@@ -21,6 +24,9 @@ export function WaveformCanvas({
   height = 72,
   muted = false,
   solo = false,
+  waveColor = "#64748b",
+  backgroundColor = "#f8fafc",
+  playheadColor = "#2563eb",
   loading = false,
   error,
   onSeek,
@@ -42,7 +48,7 @@ export function WaveformCanvas({
       context.scale(dpr, dpr);
       context.clearRect(0, 0, rect.width, height);
 
-      context.fillStyle = muted ? "#f1f5f9" : solo ? "#eff6ff" : "#f8fafc";
+      context.fillStyle = muted ? "#f1f5f9" : solo ? "#eff6ff" : backgroundColor;
       context.fillRect(0, 0, rect.width, height);
 
       if (loading) {
@@ -58,8 +64,7 @@ export function WaveformCanvas({
       const nextPeaks = peaks?.length ? peaks : createPlaceholderPeaks();
       const barWidth = Math.max(1, rect.width / nextPeaks.length);
       const centerY = height / 2;
-      const color = muted ? "#cbd5e1" : solo ? "#2563eb" : "#64748b";
-      context.fillStyle = color;
+      context.fillStyle = muted ? "#cbd5e1" : waveColor;
 
       nextPeaks.forEach((peak, index) => {
         const x = index * barWidth;
@@ -69,7 +74,7 @@ export function WaveformCanvas({
 
       if (duration > 0) {
         const progressX = Math.max(0, Math.min(1, currentTime / duration)) * rect.width;
-        context.fillStyle = "#ef4444";
+        context.fillStyle = playheadColor;
         context.fillRect(progressX, 0, 2, height);
       }
     };
@@ -78,7 +83,7 @@ export function WaveformCanvas({
     const resizeObserver = new ResizeObserver(draw);
     resizeObserver.observe(canvas);
     return () => resizeObserver.disconnect();
-  }, [currentTime, duration, error, height, loading, muted, peaks, solo]);
+  }, [backgroundColor, currentTime, duration, error, height, loading, muted, peaks, playheadColor, solo, waveColor]);
 
   function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!onSeek || duration <= 0) return;

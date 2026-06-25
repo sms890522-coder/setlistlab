@@ -37,6 +37,14 @@ import type { Song } from "@/lib/types";
 const GUIDE_TRACK_ID = "guide-track";
 const PART_OPTIONS = ["보컬", "싱어", "일렉", "어쿠스틱", "건반", "베이스", "드럼", "기타", "직접 입력"];
 
+type StudioTrackTheme = {
+  icon: string;
+  accent: string;
+  soft: string;
+  wave: string;
+  background: string;
+};
+
 export default function GuideTrackStudioPage() {
   const params = useParams<{ guideTrackId: string }>();
   const recorder = useAudioRecorder();
@@ -408,8 +416,8 @@ export default function GuideTrackStudioPage() {
       <section className="rounded-2xl border border-slate-200 bg-slate-100/80 p-3 sm:p-4">
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-lg font-black text-slate-950">Tracks</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">Guide Track은 항상 맨 위에 표시되고, 팀원 녹음은 아래에 쌓입니다.</p>
+            <h2 className="text-lg font-black text-slate-950">트랙</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">Guide는 맨 위에, 팀원 녹음은 파트별 색상으로 아래에 표시됩니다.</p>
           </div>
           <button type="button" onClick={refreshTracks} className="btn-secondary">목록 새로고침</button>
         </div>
@@ -417,10 +425,9 @@ export default function GuideTrackStudioPage() {
         <div className="space-y-3">
           <StudioTrackRow
             id={GUIDE_TRACK_ID}
-            title="가이드 트랙"
-            subtitle={`${guideTrack.title} · ${guideData.sound}`}
-            badge="Guide"
-            color="blue"
+            title="Guide"
+            subtitle="기준 트랙"
+            theme={GUIDE_TRACK_THEME}
             duration={guideAudioDuration || fallbackGuideDuration}
             currentTime={player.currentTime}
             mix={player.mixState[GUIDE_TRACK_ID]}
@@ -436,6 +443,9 @@ export default function GuideTrackStudioPage() {
               currentTime={player.currentTime}
               muted={player.mixState[GUIDE_TRACK_ID]?.muted}
               solo={player.mixState[GUIDE_TRACK_ID]?.solo}
+              waveColor={GUIDE_TRACK_THEME.wave}
+              backgroundColor={GUIDE_TRACK_THEME.background}
+              height={56}
               onSeek={player.seek}
             />
           </StudioTrackRow>
@@ -449,10 +459,10 @@ export default function GuideTrackStudioPage() {
               <StudioTrackRow
                 key={track.id}
                 id={track.id}
-                title={track.profile?.displayName || "팀원"}
-                subtitle={`${track.part || "파트 미지정"} · ${track.title} · ${formatDuration(track.durationSeconds ?? 0)}`}
-                badge={track.userId === myUserId ? "내 녹음" : "팀원"}
-                color={track.userId === myUserId ? "emerald" : "slate"}
+                title={track.part || "파트 미지정"}
+                subtitle={`${track.profile?.displayName || "팀원"} · ${formatDuration(track.durationSeconds ?? 0)}`}
+                badge={track.userId === myUserId ? "내 녹음" : undefined}
+                theme={getTrackTheme(track.part || track.title || track.id)}
                 duration={track.durationSeconds || player.duration}
                 currentTime={player.currentTime}
                 notes={track.notes}
@@ -473,6 +483,7 @@ export default function GuideTrackStudioPage() {
                   fallbackDuration={track.durationSeconds || player.duration}
                   muted={player.mixState[track.id]?.muted}
                   solo={player.mixState[track.id]?.solo}
+                  theme={getTrackTheme(track.part || track.title || track.id)}
                   onSeek={player.seek}
                 />
               </StudioTrackRow>
@@ -616,7 +627,7 @@ function StudioTrackRow({
   title,
   subtitle,
   badge,
-  color,
+  theme,
   duration,
   currentTime,
   notes,
@@ -633,8 +644,8 @@ function StudioTrackRow({
   id: string;
   title: string;
   subtitle: string;
-  badge: string;
-  color: "blue" | "emerald" | "slate";
+  badge?: string;
+  theme: StudioTrackTheme;
   duration: number;
   currentTime: number;
   notes?: string;
@@ -652,44 +663,83 @@ function StudioTrackRow({
   const solo = Boolean(mix?.solo);
   const active = hasSolo ? solo : !muted;
   const volume = mix?.volume ?? 1;
-  const colorClasses = {
-    blue: "border-blue-200 bg-blue-50/70",
-    emerald: "border-emerald-200 bg-emerald-50/70",
-    slate: "border-slate-200 bg-white",
-  }[color];
 
   return (
-    <article className={`rounded-2xl border p-3 transition ${active ? colorClasses : "border-slate-200 bg-slate-50 opacity-60"}`}>
-      <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-slate-950 px-2.5 py-1 text-[11px] font-black text-white">{badge}</span>
-            <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-slate-600 ring-1 ring-slate-200">
-              {formatDuration(Math.min(currentTime, duration))} / {formatDuration(duration)}
-            </span>
+    <article className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${active ? "border-slate-200" : "border-slate-200 opacity-55"}`}>
+      <div className="h-1" style={{ backgroundColor: theme.accent }} />
+      <div className="grid gap-3 p-3 lg:grid-cols-[210px_146px_1fr] lg:items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black"
+            style={{ backgroundColor: theme.soft, color: theme.accent }}
+            aria-hidden="true"
+          >
+            {theme.icon}
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <h3 className="truncate text-base font-black text-slate-950">{title}</h3>
+              {badge ? <span className="shrink-0 rounded-full bg-slate-950 px-2 py-0.5 text-[10px] font-black text-white">{badge}</span> : null}
+            </div>
+            <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">{subtitle}</p>
           </div>
-          <h3 className="mt-2 truncate text-base font-black text-slate-950">{title}</h3>
-          <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-slate-600">{subtitle}</p>
+        </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="min-w-0 lg:order-3">
+          {children}
+          <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-bold text-slate-400">
+            <span>{formatDuration(Math.min(currentTime, duration))}</span>
+            <span>{formatDuration(duration)}</span>
+          </div>
+          {notes ? <p className="mt-2 line-clamp-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-500">{notes}</p> : null}
+        </div>
+
+        <div className="flex items-center gap-2 lg:order-2 lg:flex-wrap">
+          <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white">
             <button
               type="button"
               onClick={() => onToggleMute(id)}
-              className={muted ? "rounded-xl bg-slate-700 px-3 py-2 text-xs font-black text-white" : "rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200"}
+              className={`size-9 text-xs font-black transition ${muted ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+              aria-label={`${title} 음소거`}
+              title="Mute"
             >
-              {muted ? "꺼짐" : "음소거"}
+              M
             </button>
             <button
               type="button"
               onClick={() => onToggleSolo(id)}
-              className={solo ? "rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white" : "rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200"}
+              className={`size-9 border-l border-slate-200 text-xs font-black transition ${solo ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+              aria-label={`${title} Solo`}
+              title="Solo"
             >
-              Solo
+              S
             </button>
           </div>
 
-          <label className="mt-3 block">
-            <span className="text-[11px] font-black text-slate-500">볼륨 {Math.round(volume * 100)}%</span>
+          <button
+            type="button"
+            onClick={() => onToggleMute(id)}
+            className={`relative h-7 w-12 rounded-full transition ${muted ? "bg-slate-300" : "bg-emerald-500"}`}
+            aria-label={`${title} 켜기 끄기`}
+            title={muted ? "트랙 꺼짐" : "트랙 켜짐"}
+          >
+            <span className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition ${muted ? "left-1" : "left-6"}`} />
+          </button>
+
+          {canDelete ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="size-9 rounded-xl text-lg font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+              aria-label={`${title} 삭제`}
+              title="삭제"
+            >
+              ⋮
+            </button>
+          ) : null}
+
+          <label className="flex w-full items-center gap-2">
+            <span className="w-9 shrink-0 text-[11px] font-black text-slate-400">{Math.round(volume * 100)}%</span>
             <input
               type="range"
               min={0}
@@ -697,20 +747,11 @@ function StudioTrackRow({
               step={0.01}
               value={volume}
               onChange={(event) => onVolumeChange(id, Number(event.target.value))}
-              className="mt-1 w-full accent-blue-600"
+              className="w-full"
+              style={{ accentColor: theme.accent }}
+              aria-label={`${title} 볼륨`}
             />
           </label>
-
-          {canDelete ? (
-            <button type="button" onClick={onDelete} className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">
-              삭제
-            </button>
-          ) : null}
-        </div>
-
-        <div className="min-w-0">
-          {children}
-          {notes ? <p className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-white/70 p-3 text-xs leading-5 text-slate-600">{notes}</p> : null}
         </div>
       </div>
     </article>
@@ -725,6 +766,7 @@ function RecordingWaveform({
   fallbackDuration,
   muted,
   solo,
+  theme,
   onSeek,
 }: {
   track: TeamRecordingTrack;
@@ -734,6 +776,7 @@ function RecordingWaveform({
   fallbackDuration: number;
   muted?: boolean;
   solo?: boolean;
+  theme: StudioTrackTheme;
   onSeek: (time: number) => void;
 }) {
   const [peaks, setPeaks] = useState<number[]>([]);
@@ -774,11 +817,47 @@ function RecordingWaveform({
       currentTime={currentTime}
       muted={muted}
       solo={solo}
+      waveColor={theme.wave}
+      backgroundColor={theme.background}
+      height={56}
       loading={loading}
       error={error}
       onSeek={onSeek}
     />
   );
+}
+
+const GUIDE_TRACK_THEME: StudioTrackTheme = {
+  icon: "G",
+  accent: "#10b981",
+  soft: "#d1fae5",
+  wave: "#5eead4",
+  background: "#ecfdf5",
+};
+
+const TRACK_THEMES: StudioTrackTheme[] = [
+  { icon: "K", accent: "#8b5cf6", soft: "#ede9fe", wave: "#a78bfa", background: "#f5f3ff" },
+  { icon: "V", accent: "#14b8a6", soft: "#ccfbf1", wave: "#5eead4", background: "#f0fdfa" },
+  { icon: "B", accent: "#f97316", soft: "#ffedd5", wave: "#fdba74", background: "#fff7ed" },
+  { icon: "E", accent: "#2563eb", soft: "#dbeafe", wave: "#93c5fd", background: "#eff6ff" },
+  { icon: "D", accent: "#db2777", soft: "#fce7f3", wave: "#f9a8d4", background: "#fdf2f8" },
+  { icon: "A", accent: "#d97706", soft: "#fef3c7", wave: "#fbbf24", background: "#fffbeb" },
+  { icon: "P", accent: "#7c3aed", soft: "#ede9fe", wave: "#c4b5fd", background: "#faf5ff" },
+  { icon: "T", accent: "#0f766e", soft: "#ccfbf1", wave: "#2dd4bf", background: "#f0fdfa" },
+];
+
+function getTrackTheme(input: string): StudioTrackTheme {
+  const key = input.toLowerCase();
+
+  if (key.includes("건반") || key.includes("피아노") || key.includes("key") || key.includes("piano")) return TRACK_THEMES[0];
+  if (key.includes("싱어") || key.includes("보컬") || key.includes("vocal")) return TRACK_THEMES[1];
+  if (key.includes("베이스") || key.includes("bass")) return TRACK_THEMES[2];
+  if (key.includes("일렉") || key.includes("electric") || key.includes("lead")) return TRACK_THEMES[3];
+  if (key.includes("드럼") || key.includes("drum")) return TRACK_THEMES[4];
+  if (key.includes("어쿠") || key.includes("통기타") || key.includes("acoustic")) return TRACK_THEMES[5];
+
+  const seed = Array.from(input).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return TRACK_THEMES[seed % TRACK_THEMES.length];
 }
 
 function orderTracks(tracks: TeamRecordingTrack[], myUserId: string) {
