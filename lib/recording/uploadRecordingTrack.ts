@@ -1,7 +1,7 @@
 "use client";
 
 import { getCurrentSession } from "@/lib/auth";
-import type { TeamRecordingTrack } from "@/lib/db/teamRecordingStudio";
+import type { RecordingInputType, TeamRecordingTrack } from "@/lib/db/teamRecordingStudio";
 
 type UploadRecordingTrackInput = {
   sessionId: string;
@@ -11,6 +11,7 @@ type UploadRecordingTrackInput = {
   part?: string;
   title?: string;
   notes?: string;
+  inputType?: RecordingInputType;
   deviceLabel?: string;
   recordingOffsetMs?: number;
   latencyOffsetMs?: number;
@@ -44,6 +45,7 @@ export async function uploadRecordingTrack(input: UploadRecordingTrackInput) {
       part: input.part,
       title: input.title,
       notes: input.notes,
+      inputType: input.inputType,
       deviceLabel: input.deviceLabel,
       recordingOffsetMs: input.recordingOffsetMs ?? 0,
       latencyOffsetMs: input.latencyOffsetMs ?? 0,

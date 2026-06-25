@@ -95,6 +95,7 @@ export async function createPresignedRecordingUpload(input: {
   part?: string;
   title?: string;
   notes?: string;
+  inputType?: string;
   deviceLabel?: string;
   recordingOffsetMs?: number;
   latencyOffsetMs?: number;
@@ -140,7 +141,7 @@ export async function createPresignedRecordingUpload(input: {
     mime_type: mimeType,
     duration_seconds: normalizeDuration(input.durationSeconds),
     size_bytes: sizeBytes,
-    input_type: "mic",
+    input_type: normalizeRecordingInputType(input.inputType),
     device_label: input.deviceLabel?.trim().slice(0, 160) || null,
     latency_offset_ms: normalizeInteger(input.latencyOffsetMs, 0),
     recording_offset_ms: normalizeInteger(input.recordingOffsetMs, 0),
@@ -343,6 +344,10 @@ function normalizeDuration(value: unknown) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue) || numberValue < 0) return null;
   return Math.round(numberValue * 100) / 100;
+}
+
+function normalizeRecordingInputType(value: unknown) {
+  return value === "mic" || value === "line" || value === "interface" || value === "unknown" ? value : "mic";
 }
 
 function normalizeInteger(value: unknown, fallback: number) {

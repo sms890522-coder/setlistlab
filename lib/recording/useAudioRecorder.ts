@@ -16,6 +16,8 @@ export type AudioInputDevice = {
   label: string;
 };
 
+export type RecorderInputType = "mic" | "line" | "interface" | "unknown";
+
 const MIME_TYPE_PRIORITY = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -35,7 +37,9 @@ export function useAudioRecorder() {
   const [state, setState] = useState<AudioRecorderState>(supported ? "idle" : "unsupported");
   const [error, setError] = useState("");
   const [devices, setDevices] = useState<AudioInputDevice[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [selectedDeviceId, setSelectedDeviceIdState] = useState("");
+  const [inputType, setInputTypeState] = useState<RecorderInputType>("mic");
+  const [rawInputMode, setRawInputModeState] = useState(false);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [objectUrl, setObjectUrl] = useState("");
   const [durationSeconds, setDurationSeconds] = useState(0);
@@ -66,7 +70,7 @@ export function useAudioRecorder() {
       }));
 
     setDevices(nextDevices);
-    if (!selectedDeviceId && nextDevices[0]) setSelectedDeviceId(nextDevices[0].deviceId);
+    if (!selectedDeviceId && nextDevices[0]) setSelectedDeviceIdState(nextDevices[0].deviceId);
     return nextDevices;
   }, [selectedDeviceId, supported]);
 
@@ -74,6 +78,37 @@ export function useAudioRecorder() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, []);
+
+  const resetInputStream = useCallback(() => {
+    if (recorderRef.current?.state === "recording") return;
+    cleanupStream();
+    setDeviceLabel("");
+    setState(supported ? "idle" : "unsupported");
+  }, [cleanupStream, supported]);
+
+  const setSelectedDeviceId = useCallback(
+    (deviceId: string) => {
+      setSelectedDeviceIdState(deviceId);
+      resetInputStream();
+    },
+    [resetInputStream],
+  );
+
+  const setInputType = useCallback(
+    (nextInputType: RecorderInputType) => {
+      setInputTypeState(nextInputType);
+      resetInputStream();
+    },
+    [resetInputStream],
+  );
+
+  const setRawInputMode = useCallback(
+    (enabled: boolean) => {
+      setRawInputModeState(enabled);
+      resetInputStream();
+    },
+    [resetInputStream],
+  );
 
   const requestMicrophonePermission = useCallback(async () => {
     if (!supported) {
@@ -88,7 +123,11 @@ export function useAudioRecorder() {
     try {
       cleanupStream();
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true,
+        audio: buildAudioConstraints({
+          selectedDeviceId,
+          inputType,
+          rawInputMode,
+        }),
       });
       streamRef.current = stream;
       const nextDevices = await refreshDevices();
@@ -102,7 +141,7 @@ export function useAudioRecorder() {
       setState("error");
       return false;
     }
-  }, [cleanupStream, refreshDevices, selectedDeviceId, supported]);
+  }, [cleanupStream, inputType, rawInputMode, refreshDevices, selectedDeviceId, supported]);
 
   const startRecording = useCallback(async () => {
     if (!supported) {
@@ -204,6 +243,10 @@ export function useAudioRecorder() {
       devices,
       selectedDeviceId,
       setSelectedDeviceId,
+      inputType,
+      setInputType,
+      rawInputMode,
+      setRawInputMode,
       deviceLabel,
       blob,
       objectUrl,
@@ -227,6 +270,8 @@ export function useAudioRecorder() {
       refreshDevices,
       requestMicrophonePermission,
       resetRecording,
+      inputType,
+      rawInputMode,
       selectedDeviceId,
       startRecording,
       state,
@@ -234,4 +279,24 @@ export function useAudioRecorder() {
       supported,
     ],
   );
+}
+
+function buildAudioConstraints({
+  selectedDeviceId,
+  inputType,
+  rawInputMode,
+}: {
+  selectedDeviceId: string;
+  inputType: RecorderInputType;
+  rawInputMode: boolean;
+}): MediaTrackConstraints {
+  const channelCount = inputType === "interface" || inputType === "line" ? 2 : 1;
+  return {
+    ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {}),
+    echoCancellation: !rawInputMode,
+    noiseSuppression: !rawInputMode,
+    autoGainControl: !rawInputMode,
+    channelCount: { ideal: channelCount },
+    sampleRate: { ideal: 48000 },
+  };
 }

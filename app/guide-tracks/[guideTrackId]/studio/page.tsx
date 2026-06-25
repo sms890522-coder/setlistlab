@@ -250,7 +250,7 @@ export default function GuideTrackStudioPage() {
 
   async function handleRequestPermission() {
     const granted = await recorder.requestMicrophonePermission();
-    if (granted) setMessage("마이크를 사용할 준비가 되었습니다.");
+    if (granted) setMessage("선택한 입력 장치를 사용할 준비가 되었습니다.");
   }
 
   async function startRecordingWithGuide() {
@@ -285,6 +285,7 @@ export default function GuideTrackStudioPage() {
         part: selectedPart,
         title: trackTitle.trim() || fallbackTrackTitle,
         notes,
+        inputType: recorder.inputType,
         deviceLabel: recorder.deviceLabel,
         recordingOffsetMs: 0,
         latencyOffsetMs: 0,
@@ -513,7 +514,7 @@ export default function GuideTrackStudioPage() {
                 key={track.id}
                 id={track.id}
                 title={track.part || "파트 미지정"}
-                subtitle={`${track.profile?.displayName || "팀원"} · ${formatDuration(track.durationSeconds ?? 0)}`}
+                subtitle={`${track.profile?.displayName || "팀원"} · ${formatInputTypeLabel(track.inputType)} · ${formatDuration(track.durationSeconds ?? 0)}`}
                 badge={track.userId === myUserId ? "내 녹음" : undefined}
                 theme={getTrackTheme(track.part || track.title || track.id)}
                 duration={track.durationSeconds || player.duration}
@@ -565,8 +566,25 @@ export default function GuideTrackStudioPage() {
           <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="space-y-4">
               <button type="button" onClick={handleRequestPermission} className="btn-secondary w-full">
-                마이크 권한 요청
+                입력 장치 권한 요청
               </button>
+
+              <label className="block space-y-1">
+                <span className="field-label">입력 종류</span>
+                <select
+                  value={recorder.inputType}
+                  onChange={(event) => recorder.setInputType(event.target.value as typeof recorder.inputType)}
+                  className="field-input"
+                >
+                  <option value="mic">마이크</option>
+                  <option value="interface">오디오 인터페이스</option>
+                  <option value="line">라인 입력</option>
+                  <option value="unknown">가상/플러그인/기타 입력</option>
+                </select>
+                <span className="block text-xs leading-5 text-slate-500">
+                  오디오 인터페이스, 라인 입력, 가상 믹서/플러그인 출력은 브라우저의 입력 장치 목록에 표시될 때 선택할 수 있습니다.
+                </span>
+              </label>
 
               <label className="block space-y-1">
                 <span className="field-label">입력 장치</span>
@@ -575,13 +593,28 @@ export default function GuideTrackStudioPage() {
                   onChange={(event) => recorder.setSelectedDeviceId(event.target.value)}
                   className="field-input"
                 >
-                  <option value="">기본 마이크</option>
+                  <option value="">기본 입력 장치</option>
                   {recorder.devices.map((device) => (
                     <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
                   ))}
                 </select>
                 <span className="block text-xs leading-5 text-slate-500">
-                  라인 입력이나 오디오 인터페이스를 연결하면 브라우저에서 입력 장치로 표시될 수 있습니다.
+                  권한을 허용한 뒤 장치 이름이 표시됩니다. 인터페이스가 보이지 않으면 OS 사운드 입력 설정을 먼저 확인해 주세요.
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <input
+                  type="checkbox"
+                  checked={recorder.rawInputMode}
+                  onChange={(event) => recorder.setRawInputMode(event.target.checked)}
+                  className="mt-1 size-4 accent-blue-600"
+                />
+                <span>
+                  <span className="block text-sm font-black text-slate-950">원음 입력 모드</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    오디오 인터페이스나 라인 입력을 사용할 때 권장합니다. 브라우저의 에코 제거, 노이즈 억제, 자동 볼륨 보정을 끄고 녹음합니다.
+                  </span>
                 </span>
               </label>
 
@@ -938,4 +971,11 @@ function sanitizeFilenamePart(value: string) {
     .replace(/\s+/g, "-")
     .slice(0, 48);
   return cleaned || "guide-track";
+}
+
+function formatInputTypeLabel(inputType: TeamRecordingTrack["inputType"]) {
+  if (inputType === "interface") return "인터페이스";
+  if (inputType === "line") return "라인";
+  if (inputType === "unknown") return "기타 입력";
+  return "마이크";
 }

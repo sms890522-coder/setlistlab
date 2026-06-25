@@ -10,6 +10,7 @@ type PresignUploadRequest = {
   part?: string;
   title?: string;
   notes?: string;
+  inputType?: string;
   deviceLabel?: string;
   recordingOffsetMs?: number;
   latencyOffsetMs?: number;
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       part: body.part,
       title: body.title,
       notes: body.notes,
+      inputType: body.inputType,
       deviceLabel: body.deviceLabel,
       recordingOffsetMs: body.recordingOffsetMs,
       latencyOffsetMs: body.latencyOffsetMs,
