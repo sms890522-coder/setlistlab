@@ -88,6 +88,14 @@ export async function getRecordingReadUrl(trackId: string) {
   return postJson<{ readUrl: string; expiresIn: number }>("/api/recordings/presign-read", { trackId }, token);
 }
 
+export async function markRecordingTrackDeleted(trackId: string) {
+  const session = await getCurrentSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("로그인이 필요합니다.");
+
+  return postJson<{ track: TeamRecordingTrack }>("/api/recordings/delete", { trackId }, token);
+}
+
 async function postJson<T>(url: string, body: unknown, token: string): Promise<T> {
   const response = await fetch(url, {
     method: "POST",

@@ -6,6 +6,7 @@ import {
   buildRecordingObjectKey,
   createPresignedReadUrl,
   createPresignedUploadUrl,
+  deleteR2Object,
   getR2ObjectMetadata,
   getRecordingBucket,
   normalizeRecordingMimeType,
@@ -218,6 +219,34 @@ export async function createRecordingReadUrl(input: { request: Request; trackId:
   };
 }
 
+export async function markRecordingTrackDeleted(input: { request: Request; trackId: string }) {
+  const { supabase, user } = await getRecordingAccessContext(input.request);
+  const track = await getTrackOrThrow(supabase, input.trackId);
+  if (track.status === "deleted") return { track: rowToApiTrack(track) };
+
+  const session = await getSessionOrThrow(supabase, track.session_id);
+  const setlist = await getSetlistOrThrow(supabase, session.setlist_id);
+  await assertCanDeleteRecordingTrack(supabase, user.id, track, session, setlist);
+
+  const { data, error } = await supabase
+    .from("team_recording_tracks")
+    .update({
+      status: "deleted",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", track.id)
+    .select("*")
+    .single<RecordingTrackRow>();
+
+  if (error || !data) throw new RecordingApiError(error?.message || "녹음을 삭제하지 못했습니다.", 500);
+
+  if (track.object_key) {
+    await deleteR2Object(track.object_key).catch(() => undefined);
+  }
+
+  return { track: rowToApiTrack(data) };
+}
+
 async function getSessionOrThrow(supabase: SupabaseClient, sessionId: string) {
   const { data, error } = await supabase
     .from("team_recording_sessions")
@@ -289,6 +318,36 @@ async function assertCanAccessRecording(
 
   if (setlist.user_id !== userId) {
     throw new RecordingApiError("개인 콘티 녹음실에 접근할 권한이 없습니다.", 403);
+  }
+}
+
+async function assertCanDeleteRecordingTrack(
+  supabase: SupabaseClient,
+  userId: string,
+  track: RecordingTrackRow,
+  session: RecordingSessionRow,
+  setlist: SetlistRow,
+) {
+  if (track.user_id === userId) return;
+
+  if (session.team_id) {
+    const { data, error } = await supabase
+      .from("team_memberships")
+      .select("id")
+      .eq("team_id", session.team_id)
+      .eq("user_id", userId)
+      .eq("status", "approved")
+      .in("role", ["owner", "admin"])
+      .is("removed_at", null)
+      .maybeSingle<{ id: string }>();
+
+    if (error) throw new RecordingApiError(error.message || "팀 권한을 확인하지 못했습니다.", 500);
+    if (!data) throw new RecordingApiError("이 녹음을 삭제할 권한이 없습니다.", 403);
+    return;
+  }
+
+  if (setlist.user_id !== userId) {
+    throw new RecordingApiError("이 녹음을 삭제할 권한이 없습니다.", 403);
   }
 }
 

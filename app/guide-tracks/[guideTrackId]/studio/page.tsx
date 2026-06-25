@@ -19,14 +19,13 @@ import {
   createRecordingSession,
   getRecordingSessionForGuideTrack,
   getRecordingTracks,
-  markRecordingTrackDeleted,
   type TeamRecordingSession,
   type TeamRecordingTrack,
 } from "@/lib/db/teamRecordingStudio";
 import { getGuideTrack, normalizeGuideTrackData, type TeamGuideTrack } from "@/lib/db/teamGuideTracks";
 import { canUseFeature } from "@/lib/features";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
-import { getRecordingReadUrl, uploadRecordingTrack } from "@/lib/recording/uploadRecordingTrack";
+import { getRecordingReadUrl, markRecordingTrackDeleted, uploadRecordingTrack } from "@/lib/recording/uploadRecordingTrack";
 import {
   getGuideTrackDurationSeconds,
   getStudioCurrentPosition,
