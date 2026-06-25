@@ -7,7 +7,8 @@ import { StudioTimeline } from "@/components/recording/StudioTimeline";
 import { StudioTransportBar } from "@/components/recording/StudioTransportBar";
 import { WaveformCanvas } from "@/components/recording/WaveformCanvas";
 import { useMultitrackPlayer, type TrackMixState } from "@/hooks/useMultitrackPlayer";
-import { audioBufferToWav } from "@/lib/audio/exportWav";
+import { audioBufferToWav, downloadBlob } from "@/lib/audio/exportWav";
+import { renderMixdownToWavBlob, type MixdownTrackSource } from "@/lib/audio/mixdown";
 import { renderGuideTrackToAudioBuffer } from "@/lib/audio/renderGuideTrack";
 import { createSyntheticGuidePeaks, getAudioPeaksFromUrl } from "@/lib/audio/waveform";
 import { getCurrentUser } from "@/lib/auth";
@@ -69,6 +70,7 @@ export default function GuideTrackStudioPage() {
   const [guideAudioUrl, setGuideAudioUrl] = useState("");
   const [guideAudioDuration, setGuideAudioDuration] = useState(0);
   const [guideRenderError, setGuideRenderError] = useState("");
+  const [mixdowning, setMixdowning] = useState(false);
 
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
@@ -316,6 +318,52 @@ export default function GuideTrackStudioPage() {
     void startRecordingWithGuide();
   }
 
+  function isTrackAudible(trackId: string) {
+    const state = player.mixState[trackId];
+    if (player.hasSolo) return Boolean(state?.solo);
+    return !state?.muted;
+  }
+
+  async function handleDownloadMixdown() {
+    if (!song) return;
+    setMixdowning(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const mixSources: MixdownTrackSource[] = [];
+      if (guideAudioUrl && isTrackAudible(GUIDE_TRACK_ID)) {
+        mixSources.push({
+          id: GUIDE_TRACK_ID,
+          url: guideAudioUrl,
+          volume: player.mixState[GUIDE_TRACK_ID]?.volume ?? 0.8,
+        });
+      }
+
+      for (const track of orderedTracks) {
+        if (!isTrackAudible(track.id)) continue;
+        mixSources.push({
+          id: track.id,
+          url: await ensureReadUrl(track.id),
+          volume: player.mixState[track.id]?.volume ?? 1,
+          offsetMs: track.recordingOffsetMs,
+        });
+      }
+
+      const wavBlob = await renderMixdownToWavBlob({
+        tracks: mixSources,
+        durationSeconds: player.duration,
+      });
+      const filename = `setlistlab-mix-${sanitizeFilenamePart(song.title)}-${new Date().toISOString().slice(0, 10)}.wav`;
+      downloadBlob(wavBlob, filename);
+      setMessage("현재 믹스 상태로 WAV 파일을 만들었습니다.");
+    } catch (mixdownError) {
+      setError(mixdownError instanceof Error ? mixdownError.message : "믹스 파일을 만들지 못했습니다.");
+    } finally {
+      setMixdowning(false);
+    }
+  }
+
   if (!loaded) {
     return (
       <div className="page-shell">
@@ -419,7 +467,12 @@ export default function GuideTrackStudioPage() {
             <h2 className="text-lg font-black text-slate-950">트랙</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">Guide는 맨 위에, 팀원 녹음은 파트별 색상으로 아래에 표시됩니다.</p>
           </div>
-          <button type="button" onClick={refreshTracks} className="btn-secondary">목록 새로고침</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={handleDownloadMixdown} disabled={mixdowning} className="btn-primary">
+              {mixdowning ? "믹스 만드는 중..." : "현재 믹스 다운로드"}
+            </button>
+            <button type="button" onClick={refreshTracks} className="btn-secondary">목록 새로고침</button>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -670,7 +723,7 @@ function StudioTrackRow({
       <div className="grid gap-3 p-3 lg:grid-cols-[210px_136px_minmax(0,1fr)_40px] lg:items-center">
         <div className="flex min-w-0 items-center gap-3 pr-10 lg:pr-0">
           <span
-            className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black"
+            className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-lg font-black"
             style={{ backgroundColor: theme.soft, color: theme.accent }}
             aria-hidden="true"
           >
@@ -830,7 +883,7 @@ function RecordingWaveform({
 }
 
 const GUIDE_TRACK_THEME: StudioTrackTheme = {
-  icon: "G",
+  icon: "🎧",
   accent: "#10b981",
   soft: "#d1fae5",
   wave: "#5eead4",
@@ -838,14 +891,14 @@ const GUIDE_TRACK_THEME: StudioTrackTheme = {
 };
 
 const TRACK_THEMES: StudioTrackTheme[] = [
-  { icon: "K", accent: "#8b5cf6", soft: "#ede9fe", wave: "#a78bfa", background: "#f5f3ff" },
-  { icon: "V", accent: "#14b8a6", soft: "#ccfbf1", wave: "#5eead4", background: "#f0fdfa" },
-  { icon: "B", accent: "#f97316", soft: "#ffedd5", wave: "#fdba74", background: "#fff7ed" },
-  { icon: "E", accent: "#2563eb", soft: "#dbeafe", wave: "#93c5fd", background: "#eff6ff" },
-  { icon: "D", accent: "#db2777", soft: "#fce7f3", wave: "#f9a8d4", background: "#fdf2f8" },
-  { icon: "A", accent: "#d97706", soft: "#fef3c7", wave: "#fbbf24", background: "#fffbeb" },
-  { icon: "P", accent: "#7c3aed", soft: "#ede9fe", wave: "#c4b5fd", background: "#faf5ff" },
-  { icon: "T", accent: "#0f766e", soft: "#ccfbf1", wave: "#2dd4bf", background: "#f0fdfa" },
+  { icon: "🎹", accent: "#8b5cf6", soft: "#ede9fe", wave: "#a78bfa", background: "#f5f3ff" },
+  { icon: "🎤", accent: "#14b8a6", soft: "#ccfbf1", wave: "#5eead4", background: "#f0fdfa" },
+  { icon: "🎸", accent: "#f97316", soft: "#ffedd5", wave: "#fdba74", background: "#fff7ed" },
+  { icon: "🎸", accent: "#2563eb", soft: "#dbeafe", wave: "#93c5fd", background: "#eff6ff" },
+  { icon: "🥁", accent: "#db2777", soft: "#fce7f3", wave: "#f9a8d4", background: "#fdf2f8" },
+  { icon: "🪕", accent: "#d97706", soft: "#fef3c7", wave: "#fbbf24", background: "#fffbeb" },
+  { icon: "🎵", accent: "#7c3aed", soft: "#ede9fe", wave: "#c4b5fd", background: "#faf5ff" },
+  { icon: "🎚️", accent: "#0f766e", soft: "#ccfbf1", wave: "#2dd4bf", background: "#f0fdfa" },
 ];
 
 function getTrackTheme(input: string): StudioTrackTheme {
@@ -876,4 +929,13 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(safeSeconds / 60);
   const rest = safeSeconds % 60;
   return `${minutes}:${rest.toString().padStart(2, "0")}`;
+}
+
+function sanitizeFilenamePart(value: string) {
+  const cleaned = value
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 48);
+  return cleaned || "guide-track";
 }
