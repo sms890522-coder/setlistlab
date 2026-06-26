@@ -552,7 +552,7 @@ export default function GuideTrackStudioPage() {
                 key={track.id}
                 id={track.id}
                 title={track.part || "파트 미지정"}
-                subtitle={`${track.profile?.displayName || "팀원"} · ${formatInputTypeLabel(track.inputType)} · ${formatDuration(track.durationSeconds ?? 0)}`}
+                subtitle={`${track.profile?.displayName || "팀원"} · ${formatDuration(track.durationSeconds ?? 0)}`}
                 badge={track.userId === myUserId ? "내 녹음" : undefined}
                 theme={getTrackTheme(track.part || track.title || track.id)}
                 duration={track.durationSeconds || player.duration}
@@ -897,7 +897,7 @@ function StudioTrackRow({
   return (
     <article className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition ${active ? "border-slate-200" : "border-slate-200 opacity-55"}`}>
       <div className="h-1" style={{ backgroundColor: theme.accent }} />
-      <div className="grid gap-3 p-3 lg:grid-cols-[210px_136px_minmax(0,1fr)_40px] lg:items-center">
+      <div className="grid gap-3 p-3 lg:grid-cols-[210px_210px_minmax(0,1fr)_40px] lg:items-center">
         <div className="flex min-w-0 items-center gap-3 pr-10 lg:pr-0">
           <span
             className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-lg font-black"
@@ -925,6 +925,15 @@ function StudioTrackRow({
         </div>
 
         <div className="flex items-center gap-2 lg:order-2 lg:flex-wrap">
+          <PanKnob
+            id={id}
+            title={title}
+            pan={pan}
+            theme={theme}
+            disabled={!panSupported}
+            onChange={onPanChange}
+          />
+
           <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white">
             <button
               type="button"
@@ -986,28 +995,8 @@ function StudioTrackRow({
           ) : null}
         </div>
       </div>
-      <div className={`grid gap-3 border-t border-slate-100 px-3 py-2 text-xs ${showSync ? "sm:grid-cols-2" : ""}`}>
-        <label className="space-y-1">
-          <span className="flex items-center justify-between font-black text-slate-500">
-            <span>좌우 위치</span>
-            <span>{formatPanLabel(pan)}</span>
-          </span>
-          <input
-            type="range"
-            min={-1}
-            max={1}
-            step={0.05}
-            value={pan}
-            disabled={!panSupported}
-            onChange={(event) => onPanChange(id, Number(event.target.value))}
-            className="w-full disabled:opacity-40"
-            style={{ accentColor: theme.accent }}
-            aria-label={`${title} 좌우 위치`}
-          />
-          {!panSupported ? <span className="block text-[11px] font-semibold text-slate-400">이 브라우저는 Pan 조절을 지원하지 않습니다.</span> : null}
-        </label>
-
-        {showSync ? (
+      {showSync ? (
+        <div className="border-t border-slate-100 px-3 py-2 text-xs">
           <div className={canAdjustSync ? "space-y-1" : "space-y-1 opacity-50"}>
             <div className="flex items-center justify-between gap-2">
               <span className="font-black text-slate-500">싱크</span>
@@ -1039,9 +1028,97 @@ function StudioTrackRow({
               </button>
             </div>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </article>
+  );
+}
+
+function PanKnob({
+  id,
+  title,
+  pan,
+  theme,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  title: string;
+  pan: number;
+  theme: StudioTrackTheme;
+  disabled: boolean;
+  onChange: (trackId: string, pan: number) => void;
+}) {
+  const dragRef = useRef<{ x: number; pan: number } | null>(null);
+  const safePan = Math.max(-1, Math.min(1, pan));
+  const angle = safePan * 135;
+
+  function commit(nextPan: number) {
+    onChange(id, Math.max(-1, Math.min(1, Math.round(nextPan * 100) / 100)));
+  }
+
+  return (
+    <div className="flex w-12 shrink-0 flex-col items-center gap-1" title={disabled ? "이 브라우저는 Pan 조절을 지원하지 않습니다." : "좌우 위치"}>
+      <div
+        role="slider"
+        tabIndex={disabled ? -1 : 0}
+        aria-label={`${title} 좌우 위치`}
+        aria-valuemin={-100}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(safePan * 100)}
+        aria-valuetext={formatPanLabel(safePan)}
+        onDoubleClick={() => !disabled && commit(0)}
+        onKeyDown={(event) => {
+          if (disabled) return;
+          if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+            event.preventDefault();
+            commit(safePan - 0.05);
+          }
+          if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+            event.preventDefault();
+            commit(safePan + 0.05);
+          }
+          if (event.key === "Home" || event.key === "0") {
+            event.preventDefault();
+            commit(0);
+          }
+        }}
+        onPointerDown={(event) => {
+          if (disabled) return;
+          dragRef.current = { x: event.clientX, pan: safePan };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (disabled || !dragRef.current) return;
+          const delta = (event.clientX - dragRef.current.x) / 90;
+          commit(dragRef.current.pan + delta);
+        }}
+        onPointerUp={(event) => {
+          dragRef.current = null;
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+        }}
+        className={`relative size-9 rounded-full border border-slate-200 bg-white shadow-sm transition ${
+          disabled ? "cursor-not-allowed opacity-50" : "cursor-ew-resize hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+        }`}
+        style={{
+          boxShadow: `inset 0 0 0 6px ${theme.soft}`,
+        }}
+      >
+        <span
+          className="absolute left-1/2 top-1/2 h-3.5 w-1 origin-bottom -translate-x-1/2 -translate-y-full rounded-full"
+          style={{
+            backgroundColor: theme.accent,
+            transform: `translate(-50%, -100%) rotate(${angle}deg)`,
+          }}
+          aria-hidden="true"
+        />
+        <span className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-500" aria-hidden="true" />
+      </div>
+      <span className="text-[10px] font-black leading-none text-slate-400">{formatPanShortLabel(safePan)}</span>
+    </div>
   );
 }
 
@@ -1172,16 +1249,15 @@ function sanitizeFilenamePart(value: string) {
   return cleaned || "guide-track";
 }
 
-function formatInputTypeLabel(inputType: TeamRecordingTrack["inputType"]) {
-  if (inputType === "interface") return "인터페이스";
-  if (inputType === "line") return "라인";
-  if (inputType === "unknown") return "기타 입력";
-  return "마이크";
-}
-
 function formatPanLabel(pan: number) {
   if (pan <= -0.1) return `왼쪽 ${Math.round(Math.abs(pan) * 100)}`;
   if (pan >= 0.1) return `오른쪽 ${Math.round(pan * 100)}`;
+  return "중앙";
+}
+
+function formatPanShortLabel(pan: number) {
+  if (pan <= -0.1) return `L${Math.round(Math.abs(pan) * 100)}`;
+  if (pan >= 0.1) return `R${Math.round(pan * 100)}`;
   return "중앙";
 }
 
