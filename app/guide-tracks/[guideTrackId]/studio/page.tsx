@@ -78,6 +78,7 @@ export default function GuideTrackStudioPage() {
   const [guideRenderError, setGuideRenderError] = useState("");
   const [mixdowning, setMixdowning] = useState(false);
   const [skipInputTest, setSkipInputTest] = useState(false);
+  const [selectedTrackId, setSelectedTrackId] = useState("");
 
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
@@ -86,6 +87,10 @@ export default function GuideTrackStudioPage() {
   const selectedPart = part === "직접 입력" ? customPart.trim() || "기타" : part;
   const fallbackTrackTitle = `${selectedPart} 녹음`;
   const orderedTracks = useMemo(() => orderTracks(tracks, myUserId), [myUserId, tracks]);
+  const selectedTrack = useMemo(
+    () => orderedTracks.find((track) => track.id === selectedTrackId) ?? null,
+    [orderedTracks, selectedTrackId],
+  );
   const studioDuration = Math.max(guideAudioDuration, fallbackGuideDuration, ...tracks.map((track) => track.durationSeconds ?? 0), 1);
 
   const ensureReadUrl = useCallback(
@@ -250,6 +255,12 @@ export default function GuideTrackStudioPage() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [recorder.state]);
+
+  useEffect(() => {
+    if (selectedTrackId && !orderedTracks.some((track) => track.id === selectedTrackId)) {
+      setSelectedTrackId("");
+    }
+  }, [orderedTracks, selectedTrackId]);
 
   async function refreshTracks() {
     if (!session) return;
@@ -489,6 +500,18 @@ export default function GuideTrackStudioPage() {
         currentTime={player.currentTime}
         duration={player.duration}
         position={currentPosition}
+        syncControl={
+          selectedTrack
+            ? {
+                trackLabel: `${selectedTrack.part || "파트 미지정"} · ${selectedTrack.profile?.displayName || "팀원"}`,
+                value: player.mixState[selectedTrack.id]?.latencyOffsetMs ?? selectedTrack.latencyOffsetMs,
+                canAdjust: selectedTrack.userId === myUserId || canManage,
+                onChange: (value) => void handleLatencyChange(selectedTrack, value),
+                onCommit: (value) => void handleLatencyChange(selectedTrack, value, true),
+                onClear: () => setSelectedTrackId(""),
+              }
+            : undefined
+        }
         onPlayPause={() => (player.playing ? player.pause() : void player.play().catch((playError) => setError(playError instanceof Error ? playError.message : "재생을 시작하지 못했습니다.")))}
         onStop={player.stop}
         onRewind={() => player.seek(0)}
@@ -528,6 +551,7 @@ export default function GuideTrackStudioPage() {
             onVolumeChange={player.setVolume}
             onPanChange={player.setPan}
             panSupported={player.panSupported}
+            selected={false}
           >
             <WaveformCanvas
               peaks={guidePeaks}
@@ -566,10 +590,8 @@ export default function GuideTrackStudioPage() {
                 onVolumeChange={player.setVolume}
                 onPanChange={player.setPan}
                 panSupported={player.panSupported}
-                showSync
-                canAdjustSync={track.userId === myUserId || canManage}
-                onLatencyChange={(value) => void handleLatencyChange(track, value)}
-                onLatencyCommit={(value) => void handleLatencyChange(track, value, true)}
+                selected={selectedTrackId === track.id}
+                onSelect={() => setSelectedTrackId(track.id)}
                 canDelete={track.userId === myUserId || canManage}
                 onDelete={() => handleDeleteTrack(track.id)}
               >
@@ -855,10 +877,8 @@ function StudioTrackRow({
   onVolumeChange,
   onPanChange,
   panSupported,
-  showSync = false,
-  canAdjustSync = false,
-  onLatencyChange,
-  onLatencyCommit,
+  selected = false,
+  onSelect,
   canDelete = false,
   onDelete,
   children,
@@ -879,10 +899,8 @@ function StudioTrackRow({
   onVolumeChange: (trackId: string, volume: number) => void;
   onPanChange: (trackId: string, pan: number) => void;
   panSupported: boolean;
-  showSync?: boolean;
-  canAdjustSync?: boolean;
-  onLatencyChange?: (latencyOffsetMs: number) => void;
-  onLatencyCommit?: (latencyOffsetMs: number) => void;
+  selected?: boolean;
+  onSelect?: () => void;
   canDelete?: boolean;
   onDelete?: () => void;
   children: ReactNode;
@@ -892,12 +910,27 @@ function StudioTrackRow({
   const active = hasSolo ? solo : !muted;
   const volume = mix?.volume ?? 1;
   const pan = mix?.pan ?? 0;
-  const latencyOffsetMs = mix?.latencyOffsetMs ?? 0;
 
   return (
-    <article className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition ${active ? "border-slate-200" : "border-slate-200 opacity-55"}`}>
+    <article
+      className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition ${
+        selected ? "border-blue-300 ring-2 ring-blue-100" : active ? "border-slate-200" : "border-slate-200 opacity-55"
+      }`}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (!onSelect) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      tabIndex={onSelect ? 0 : undefined}
+      role={onSelect ? "button" : undefined}
+      aria-selected={onSelect ? selected : undefined}
+      aria-label={onSelect ? `${title} 트랙 선택` : undefined}
+    >
       <div className="h-1" style={{ backgroundColor: theme.accent }} />
-      <div className="grid gap-3 p-3 lg:grid-cols-[210px_210px_minmax(0,1fr)_40px] lg:items-center">
+      <div className="grid gap-3 p-3 lg:grid-cols-[170px_200px_minmax(0,1fr)_36px] lg:items-center">
         <div className="flex min-w-0 items-center gap-3 pr-10 lg:pr-0">
           <span
             className="flex size-11 shrink-0 items-center justify-center rounded-2xl text-lg font-black"
@@ -995,41 +1028,6 @@ function StudioTrackRow({
           ) : null}
         </div>
       </div>
-      {showSync ? (
-        <div className="border-t border-slate-100 px-3 py-2 text-xs">
-          <div className={canAdjustSync ? "space-y-1" : "space-y-1 opacity-50"}>
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-black text-slate-500">싱크</span>
-              <span className="font-black text-slate-500">{latencyOffsetMs}ms</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" disabled={!canAdjustSync} onClick={() => onLatencyCommit?.(latencyOffsetMs - 50)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-black text-slate-600 disabled:cursor-not-allowed">
-                -50
-              </button>
-              <input
-                type="range"
-                min={-500}
-                max={500}
-                step={10}
-                value={Math.max(-500, Math.min(500, latencyOffsetMs))}
-                disabled={!canAdjustSync}
-                onChange={(event) => onLatencyChange?.(Number(event.target.value))}
-                onPointerUp={(event) => onLatencyCommit?.(Number((event.target as HTMLInputElement).value))}
-                onKeyUp={(event) => onLatencyCommit?.(Number((event.target as HTMLInputElement).value))}
-                className="min-w-0 flex-1 disabled:opacity-40"
-                style={{ accentColor: theme.accent }}
-                aria-label={`${title} 싱크 보정`}
-              />
-              <button type="button" disabled={!canAdjustSync} onClick={() => onLatencyCommit?.(latencyOffsetMs + 50)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-black text-slate-600 disabled:cursor-not-allowed">
-                +50
-              </button>
-              <button type="button" disabled={!canAdjustSync} onClick={() => onLatencyCommit?.(0)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-black text-slate-500 disabled:cursor-not-allowed">
-                초기화
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </article>
   );
 }
