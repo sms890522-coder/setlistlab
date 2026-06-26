@@ -136,6 +136,10 @@ export async function getR2ObjectMetadata(objectKey: string): Promise<HeadObject
   return getR2Client().send(command);
 }
 
+export async function headR2Object(objectKey: string): Promise<HeadObjectCommandOutput> {
+  return getR2ObjectMetadata(objectKey);
+}
+
 export async function deleteR2Object(objectKey: string) {
   const command = new DeleteObjectCommand({
     Bucket: getRecordingBucket(),
@@ -143,4 +147,18 @@ export async function deleteR2Object(objectKey: string) {
   });
 
   await getR2Client().send(command);
+}
+
+export async function safeDeleteR2Object(objectKey?: string | null): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  if (!objectKey) return { ok: true, skipped: true };
+
+  try {
+    await deleteR2Object(objectKey);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "R2 object delete failed",
+    };
+  }
 }

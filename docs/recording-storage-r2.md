@@ -19,6 +19,7 @@ R2_SECRET_ACCESS_KEY=
 R2_BUCKET_RECORDINGS=setlistlab-recordings
 R2_PUBLIC_BASE_URL=
 R2_REGION=auto
+CRON_SECRET=
 ```
 
 주의:
@@ -27,6 +28,7 @@ R2_REGION=auto
 - `NEXT_PUBLIC_` 접두사를 붙이지 마세요.
 - 기본 구조는 private bucket + presigned URL입니다.
 - `R2_PUBLIC_BASE_URL`은 public bucket을 쓰지 않는다면 비워둘 수 있습니다.
+- `CRON_SECRET`은 오래된 업로드 파일 정리 API를 호출할 때 쓰는 서버 전용 비밀값입니다.
 
 ## R2 bucket 만들기
 
@@ -94,6 +96,57 @@ R2 bucket의 CORS에 아래 예시를 넣습니다.
 - presigned URL 만료 시간은 짧게 유지합니다.
 - pending/rejected/removed 팀원은 업로드/재생 URL을 받을 수 없습니다.
 - 다른 팀 사용자는 녹음 메타데이터와 read URL에 접근할 수 없습니다.
+- 삭제 API와 cleanup API는 DB에 저장된 `object_key`만 사용합니다. 클라이언트가 보낸 object key로 R2 파일을 삭제하지 않습니다.
+
+## 삭제와 정리 정책
+
+녹음 트랙 삭제는 먼저 Supabase DB row를 `deleted` 상태로 바꾸고, 이어서 연결된 R2 object 삭제를 시도합니다.
+R2 삭제가 실패해도 사용자 화면에서는 삭제된 트랙으로 처리하고, row의 `error_message`에 `r2_delete_failed` 내용을 남겨 관리자 확인이 가능하게 합니다.
+
+자동 정리 대상은 다음과 같습니다.
+
+- `pending_upload` 또는 `uploading` 상태가 24시간 이상 지난 트랙
+- `failed` 상태가 7일 이상 지난 트랙
+- `deleted` 상태인데 `object_key`가 아직 남아 있는 트랙
+
+관리자 정리 API:
+
+```http
+POST /api/admin/recordings/cleanup
+Authorization: Bearer ${CRON_SECRET}
+```
+
+응답 예:
+
+```json
+{
+  "checked": 12,
+  "deletedObjects": 8,
+  "markedDeleted": 3,
+  "failed": 1
+}
+```
+
+Vercel Cron을 사용할 경우 매일 새벽처럼 트래픽이 적은 시간에 위 API를 호출하도록 설정합니다. 예시는 아래와 같습니다.
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/admin/recordings/cleanup",
+      "schedule": "0 19 * * *"
+    }
+  ]
+}
+```
+
+Vercel Cron은 UTC 기준이므로 `0 19 * * *`는 한국 시간 새벽 4시입니다. Cron 호출에 `Authorization` 헤더를 붙이는 방식은 운영 환경에 맞춰 별도 설정하거나, 필요한 경우 보호된 내부 호출 방식을 추가로 구성하세요.
+
+TODO:
+
+- DB row 없이 R2에만 남은 고아 파일 찾기
+- 오래된 archived 세션 파일 보관/삭제 정책
+- waveform peak cache 정리 정책
 
 ## 로컬 개발
 

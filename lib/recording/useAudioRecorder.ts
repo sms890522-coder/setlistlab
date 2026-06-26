@@ -123,7 +123,7 @@ export function useAudioRecorder() {
     try {
       cleanupStream();
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: buildAudioConstraints({
+        audio: createRecordingAudioConstraints({
           selectedDeviceId,
           inputType,
           rawInputMode,
@@ -281,7 +281,7 @@ export function useAudioRecorder() {
   );
 }
 
-function buildAudioConstraints({
+export function createRecordingAudioConstraints({
   selectedDeviceId,
   inputType,
   rawInputMode,

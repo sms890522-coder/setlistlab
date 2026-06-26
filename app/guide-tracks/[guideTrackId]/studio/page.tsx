@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StudioTimeline } from "@/components/recording/StudioTimeline";
 import { StudioTransportBar } from "@/components/recording/StudioTransportBar";
 import { WaveformCanvas } from "@/components/recording/WaveformCanvas";
@@ -25,11 +25,17 @@ import {
 import { getGuideTrack, normalizeGuideTrackData, type TeamGuideTrack } from "@/lib/db/teamGuideTracks";
 import { canUseFeature } from "@/lib/features";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
-import { getRecordingReadUrl, markRecordingTrackDeleted, uploadRecordingTrack } from "@/lib/recording/uploadRecordingTrack";
+import {
+  getRecordingReadUrl,
+  markRecordingTrackDeleted,
+  updateRecordingTrackLatencyOffset,
+  uploadRecordingTrack,
+} from "@/lib/recording/uploadRecordingTrack";
 import {
   getGuideTrackDurationSeconds,
   getStudioCurrentPosition,
 } from "@/lib/recording/studioTimeline";
+import { useAudioInputMeter, type AudioInputMeterStatus } from "@/lib/recording/useAudioInputMeter";
 import { useAudioRecorder } from "@/lib/recording/useAudioRecorder";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Song } from "@/lib/types";
@@ -48,6 +54,7 @@ type StudioTrackTheme = {
 export default function GuideTrackStudioPage() {
   const params = useParams<{ guideTrackId: string }>();
   const recorder = useAudioRecorder();
+  const inputMeter = useAudioInputMeter();
   const recordingPanelRef = useRef<HTMLElement | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -70,6 +77,7 @@ export default function GuideTrackStudioPage() {
   const [guideAudioDuration, setGuideAudioDuration] = useState(0);
   const [guideRenderError, setGuideRenderError] = useState("");
   const [mixdowning, setMixdowning] = useState(false);
+  const [skipInputTest, setSkipInputTest] = useState(false);
 
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
@@ -113,6 +121,7 @@ export default function GuideTrackStudioPage() {
         duration: track.durationSeconds,
         defaultVolume: 1,
         offsetMs: track.recordingOffsetMs,
+        defaultLatencyOffsetMs: track.latencyOffsetMs,
       })),
     ],
     [fallbackGuideDuration, guideAudioDuration, guideAudioUrl, orderedTracks, readUrls],
@@ -252,7 +261,7 @@ export default function GuideTrackStudioPage() {
     if (granted) setMessage("선택한 입력 장치를 사용할 준비가 되었습니다.");
   }
 
-  async function startRecordingWithGuide() {
+  async function startRecordingWithGuide(skipTest = false) {
     setError("");
     if (recorder.state === "recording") {
       recorder.stopRecording();
@@ -260,6 +269,18 @@ export default function GuideTrackStudioPage() {
       return;
     }
 
+    if (!selectedPart.trim()) {
+      setError("파트를 먼저 선택해 주세요.");
+      return;
+    }
+
+    if (!inputMeter.hasTested && !skipInputTest && !skipTest) {
+      setMessage("마이크 테스트를 하면 입력 크기를 미리 확인할 수 있습니다. 테스트하거나 건너뛰고 녹음을 시작해 주세요.");
+      recordingPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    inputMeter.stopTest();
     const started = await recorder.startRecording();
     if (started) {
       player.seek(0);
@@ -337,6 +358,7 @@ export default function GuideTrackStudioPage() {
           id: GUIDE_TRACK_ID,
           url: guideAudioUrl,
           volume: player.mixState[GUIDE_TRACK_ID]?.volume ?? 0.8,
+          pan: player.mixState[GUIDE_TRACK_ID]?.pan ?? 0,
         });
       }
 
@@ -346,7 +368,8 @@ export default function GuideTrackStudioPage() {
           id: track.id,
           url: await ensureReadUrl(track.id),
           volume: player.mixState[track.id]?.volume ?? 1,
-          offsetMs: track.recordingOffsetMs,
+          pan: player.mixState[track.id]?.pan ?? 0,
+          offsetMs: track.recordingOffsetMs + (player.mixState[track.id]?.latencyOffsetMs ?? track.latencyOffsetMs),
         });
       }
 
@@ -361,6 +384,20 @@ export default function GuideTrackStudioPage() {
       setError(mixdownError instanceof Error ? mixdownError.message : "믹스 파일을 만들지 못했습니다.");
     } finally {
       setMixdowning(false);
+    }
+  }
+
+  async function handleLatencyChange(track: TeamRecordingTrack, nextLatencyOffsetMs: number, persist = false) {
+    const safeValue = Math.max(-2000, Math.min(2000, Math.round(nextLatencyOffsetMs)));
+    player.setLatencyOffset(track.id, safeValue);
+    if (!persist) return;
+
+    try {
+      const { track: updatedTrack } = await updateRecordingTrackLatencyOffset(track.id, safeValue);
+      setTracks((current) => current.map((item) => (item.id === updatedTrack.id ? { ...item, latencyOffsetMs: updatedTrack.latencyOffsetMs } : item)));
+      setMessage("트랙 싱크를 저장했습니다.");
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : "트랙 싱크를 저장하지 못했습니다.");
     }
   }
 
@@ -489,6 +526,8 @@ export default function GuideTrackStudioPage() {
             onToggleMute={player.toggleMute}
             onToggleSolo={player.toggleSolo}
             onVolumeChange={player.setVolume}
+            onPanChange={player.setPan}
+            panSupported={player.panSupported}
           >
             <WaveformCanvas
               peaks={guidePeaks}
@@ -525,6 +564,12 @@ export default function GuideTrackStudioPage() {
                 onToggleMute={player.toggleMute}
                 onToggleSolo={player.toggleSolo}
                 onVolumeChange={player.setVolume}
+                onPanChange={player.setPan}
+                panSupported={player.panSupported}
+                showSync
+                canAdjustSync={track.userId === myUserId || canManage}
+                onLatencyChange={(value) => void handleLatencyChange(track, value)}
+                onLatencyCommit={(value) => void handleLatencyChange(track, value, true)}
                 canDelete={track.userId === myUserId || canManage}
                 onDelete={() => handleDeleteTrack(track.id)}
               >
@@ -556,6 +601,8 @@ export default function GuideTrackStudioPage() {
           </div>
           <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{recorder.state}</span>
         </div>
+
+        <MobileRecordingNotice />
 
         {!recorder.supported ? (
           <p className="mt-4 rounded-xl bg-rose-50 p-4 text-sm font-semibold leading-6 text-rose-700">
@@ -617,6 +664,53 @@ export default function GuideTrackStudioPage() {
                 </span>
               </label>
 
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-950">녹음 전 마이크 테스트</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      입력 크기와 클리핑 여부를 먼저 확인하면 녹음 실패를 줄일 수 있습니다.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (inputMeter.testing) {
+                        inputMeter.stopTest();
+                        return;
+                      }
+                      setSkipInputTest(false);
+                      void inputMeter.startTest({
+                        selectedDeviceId: recorder.selectedDeviceId,
+                        inputType: recorder.inputType,
+                        rawInputMode: recorder.rawInputMode,
+                      });
+                    }}
+                    className="rounded-xl bg-white px-4 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-50"
+                  >
+                    {inputMeter.testing ? "테스트 중지" : "테스트 시작"}
+                  </button>
+                </div>
+                <div className="mt-4">
+                  <div className="h-3 overflow-hidden rounded-full bg-white ring-1 ring-blue-100">
+                    <div
+                      className={`h-full rounded-full transition-all ${getMeterBarClass(inputMeter.status)}`}
+                      style={{ width: `${Math.round(inputMeter.level * 100)}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-xs font-bold">
+                    <span className={getMeterTextClass(inputMeter.status)}>{getMeterStatusMessage(inputMeter.status)}</span>
+                    <span className="text-slate-500">Peak {Math.round(inputMeter.peak * 100)}%</span>
+                  </div>
+                  {inputMeter.error ? <p className="mt-2 text-xs font-semibold text-rose-700">{inputMeter.error}</p> : null}
+                  {!inputMeter.hasTested && !skipInputTest ? (
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      마이크 테스트를 건너뛸 수는 있지만, 이어폰 착용과 입력 크기 확인을 권장합니다.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1">
                   <span className="field-label">내 파트</span>
@@ -657,7 +751,7 @@ export default function GuideTrackStudioPage() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={startRecordingWithGuide}
+                  onClick={() => void startRecordingWithGuide()}
                   disabled={!recorder.canRecord && recorder.state !== "recording"}
                   className={
                     recorder.state === "recording"
@@ -671,6 +765,19 @@ export default function GuideTrackStudioPage() {
                   다시 녹음
                 </button>
               </div>
+              {!inputMeter.hasTested && recorder.state !== "recording" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSkipInputTest(true);
+                    void startRecordingWithGuide(true);
+                  }}
+                  disabled={!recorder.canRecord}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  테스트 건너뛰고 녹음
+                </button>
+              ) : null}
 
               {recorder.objectUrl ? (
                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -707,6 +814,30 @@ export default function GuideTrackStudioPage() {
   );
 }
 
+function MobileRecordingNotice() {
+  return (
+    <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-2xl bg-white text-lg shadow-sm" aria-hidden="true">
+          🎧
+        </span>
+        <div>
+          <h3 className="font-black">모바일 녹음 안내</h3>
+          <p className="mt-1 text-xs font-semibold leading-5 text-amber-900">
+            이어폰 착용을 권장합니다. 녹음 중에는 화면을 끄거나 다른 앱으로 이동하면 녹음이나 재생이 중단될 수 있어요.
+          </p>
+          <ul className="mt-3 grid gap-1 text-xs font-semibold leading-5 sm:grid-cols-2">
+            <li>• 녹음 전 마이크 테스트로 입력 크기를 확인해 주세요.</li>
+            <li>• 조용한 공간에서 녹음하면 더 좋은 결과를 얻을 수 있습니다.</li>
+            <li>• 가이드 트랙 소리가 마이크에 섞이지 않도록 이어폰을 사용해 주세요.</li>
+            <li>• iPhone/Safari 환경에서는 브라우저 정책에 따라 일부 기능이 제한될 수 있습니다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StudioTrackRow({
   id,
   title,
@@ -722,6 +853,12 @@ function StudioTrackRow({
   onToggleMute,
   onToggleSolo,
   onVolumeChange,
+  onPanChange,
+  panSupported,
+  showSync = false,
+  canAdjustSync = false,
+  onLatencyChange,
+  onLatencyCommit,
   canDelete = false,
   onDelete,
   children,
@@ -740,14 +877,22 @@ function StudioTrackRow({
   onToggleMute: (trackId: string) => void;
   onToggleSolo: (trackId: string) => void;
   onVolumeChange: (trackId: string, volume: number) => void;
+  onPanChange: (trackId: string, pan: number) => void;
+  panSupported: boolean;
+  showSync?: boolean;
+  canAdjustSync?: boolean;
+  onLatencyChange?: (latencyOffsetMs: number) => void;
+  onLatencyCommit?: (latencyOffsetMs: number) => void;
   canDelete?: boolean;
   onDelete?: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const muted = Boolean(mix?.muted);
   const solo = Boolean(mix?.solo);
   const active = hasSolo ? solo : !muted;
   const volume = mix?.volume ?? 1;
+  const pan = mix?.pan ?? 0;
+  const latencyOffsetMs = mix?.latencyOffsetMs ?? 0;
 
   return (
     <article className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition ${active ? "border-slate-200" : "border-slate-200 opacity-55"}`}>
@@ -840,6 +985,61 @@ function StudioTrackRow({
             </button>
           ) : null}
         </div>
+      </div>
+      <div className={`grid gap-3 border-t border-slate-100 px-3 py-2 text-xs ${showSync ? "sm:grid-cols-2" : ""}`}>
+        <label className="space-y-1">
+          <span className="flex items-center justify-between font-black text-slate-500">
+            <span>좌우 위치</span>
+            <span>{formatPanLabel(pan)}</span>
+          </span>
+          <input
+            type="range"
+            min={-1}
+            max={1}
+            step={0.05}
+            value={pan}
+            disabled={!panSupported}
+            onChange={(event) => onPanChange(id, Number(event.target.value))}
+            className="w-full disabled:opacity-40"
+            style={{ accentColor: theme.accent }}
+            aria-label={`${title} 좌우 위치`}
+          />
+          {!panSupported ? <span className="block text-[11px] font-semibold text-slate-400">이 브라우저는 Pan 조절을 지원하지 않습니다.</span> : null}
+        </label>
+
+        {showSync ? (
+          <div className={canAdjustSync ? "space-y-1" : "space-y-1 opacity-50"}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-black text-slate-500">싱크</span>
+              <span className="font-black text-slate-500">{latencyOffsetMs}ms</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={!canAdjustSync} onClick={() => onLatencyCommit?.(latencyOffsetMs - 50)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-black text-slate-600 disabled:cursor-not-allowed">
+                -50
+              </button>
+              <input
+                type="range"
+                min={-500}
+                max={500}
+                step={10}
+                value={Math.max(-500, Math.min(500, latencyOffsetMs))}
+                disabled={!canAdjustSync}
+                onChange={(event) => onLatencyChange?.(Number(event.target.value))}
+                onPointerUp={(event) => onLatencyCommit?.(Number((event.target as HTMLInputElement).value))}
+                onKeyUp={(event) => onLatencyCommit?.(Number((event.target as HTMLInputElement).value))}
+                className="min-w-0 flex-1 disabled:opacity-40"
+                style={{ accentColor: theme.accent }}
+                aria-label={`${title} 싱크 보정`}
+              />
+              <button type="button" disabled={!canAdjustSync} onClick={() => onLatencyCommit?.(latencyOffsetMs + 50)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-black text-slate-600 disabled:cursor-not-allowed">
+                +50
+              </button>
+              <button type="button" disabled={!canAdjustSync} onClick={() => onLatencyCommit?.(0)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-black text-slate-500 disabled:cursor-not-allowed">
+                초기화
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </article>
   );
@@ -977,4 +1177,35 @@ function formatInputTypeLabel(inputType: TeamRecordingTrack["inputType"]) {
   if (inputType === "line") return "라인";
   if (inputType === "unknown") return "기타 입력";
   return "마이크";
+}
+
+function formatPanLabel(pan: number) {
+  if (pan <= -0.1) return `왼쪽 ${Math.round(Math.abs(pan) * 100)}`;
+  if (pan >= 0.1) return `오른쪽 ${Math.round(pan * 100)}`;
+  return "중앙";
+}
+
+function getMeterStatusMessage(status: AudioInputMeterStatus) {
+  if (status === "too_low") return "소리가 너무 작습니다. 마이크를 가까이 하거나 입력 장치를 확인해 주세요.";
+  if (status === "good") return "좋은 입력 크기입니다.";
+  if (status === "too_high") return "소리가 너무 큽니다. 입력을 조금 낮춰 주세요.";
+  if (status === "clipping") return "클리핑 위험이 있습니다. 소리가 깨질 수 있어요.";
+  if (status === "error") return "마이크 권한이 필요합니다.";
+  if (status === "checking") return "마이크 입력을 확인하고 있습니다.";
+  return "테스트 시작을 눌러 입력 크기를 확인해 주세요.";
+}
+
+function getMeterBarClass(status: AudioInputMeterStatus) {
+  if (status === "good") return "bg-emerald-500";
+  if (status === "too_high") return "bg-amber-500";
+  if (status === "clipping" || status === "error") return "bg-rose-500";
+  if (status === "too_low") return "bg-slate-400";
+  return "bg-blue-500";
+}
+
+function getMeterTextClass(status: AudioInputMeterStatus) {
+  if (status === "good") return "text-emerald-700";
+  if (status === "too_high") return "text-amber-700";
+  if (status === "clipping" || status === "error") return "text-rose-700";
+  return "text-slate-600";
 }

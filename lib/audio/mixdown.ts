@@ -6,6 +6,7 @@ export type MixdownTrackSource = {
   id: string;
   url: string;
   volume: number;
+  pan?: number;
   offsetMs?: number;
 };
 
@@ -52,9 +53,19 @@ export async function renderMixdownToWavBlob({
 
     const source = context.createBufferSource();
     const gain = context.createGain();
+    const pan = Math.max(-1, Math.min(1, track.pan ?? 0));
+    const destination = context.destination;
     source.buffer = track.buffer;
     gain.gain.value = Math.max(0, Math.min(1, track.volume));
-    source.connect(gain).connect(context.destination);
+    const createStereoPanner =
+      typeof context.createStereoPanner === "function" ? context.createStereoPanner.bind(context) : null;
+    if (createStereoPanner) {
+      const panner = createStereoPanner();
+      panner.pan.value = pan;
+      source.connect(gain).connect(panner).connect(destination);
+    } else {
+      source.connect(gain).connect(destination);
+    }
     source.start(startAt, bufferOffset, availableDuration);
   });
 

@@ -6,10 +6,10 @@ import {
   buildRecordingObjectKey,
   createPresignedReadUrl,
   createPresignedUploadUrl,
-  deleteR2Object,
   getR2ObjectMetadata,
   getRecordingBucket,
   normalizeRecordingMimeType,
+  safeDeleteR2Object,
 } from "@/lib/storage/r2";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -226,7 +226,7 @@ export async function markRecordingTrackDeleted(input: { request: Request; track
 
   const session = await getSessionOrThrow(supabase, track.session_id);
   const setlist = await getSetlistOrThrow(supabase, session.setlist_id);
-  await assertCanDeleteRecordingTrack(supabase, user.id, track, session, setlist);
+  await assertCanModifyRecordingTrack(supabase, user.id, track, session, setlist);
 
   const { data, error } = await supabase
     .from("team_recording_tracks")
@@ -241,9 +241,44 @@ export async function markRecordingTrackDeleted(input: { request: Request; track
   if (error || !data) throw new RecordingApiError(error?.message || "녹음을 삭제하지 못했습니다.", 500);
 
   if (track.object_key) {
-    await deleteR2Object(track.object_key).catch(() => undefined);
+    const deleteResult = await safeDeleteR2Object(track.object_key);
+    await supabase
+      .from("team_recording_tracks")
+      .update({
+        object_key: deleteResult.ok ? null : track.object_key,
+        error_message: deleteResult.ok ? null : `r2_delete_failed: ${deleteResult.error ?? "unknown"}`.slice(0, 500),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", track.id);
   }
 
+  return { track: rowToApiTrack(data) };
+}
+
+export async function updateRecordingTrackLatencyOffset(input: {
+  request: Request;
+  trackId: string;
+  latencyOffsetMs: number;
+}) {
+  const { supabase, user } = await getRecordingAccessContext(input.request);
+  const track = await getTrackOrThrow(supabase, input.trackId);
+  if (track.status === "deleted") throw new RecordingApiError("삭제된 녹음은 수정할 수 없습니다.", 400);
+
+  const session = await getSessionOrThrow(supabase, track.session_id);
+  const setlist = await getSetlistOrThrow(supabase, session.setlist_id);
+  await assertCanModifyRecordingTrack(supabase, user.id, track, session, setlist);
+
+  const { data, error } = await supabase
+    .from("team_recording_tracks")
+    .update({
+      latency_offset_ms: Math.max(-2000, Math.min(2000, normalizeInteger(input.latencyOffsetMs, 0))),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", track.id)
+    .select("*")
+    .single<RecordingTrackRow>();
+
+  if (error || !data) throw new RecordingApiError(error?.message || "트랙 싱크를 저장하지 못했습니다.", 500);
   return { track: rowToApiTrack(data) };
 }
 
@@ -321,7 +356,7 @@ async function assertCanAccessRecording(
   }
 }
 
-async function assertCanDeleteRecordingTrack(
+async function assertCanModifyRecordingTrack(
   supabase: SupabaseClient,
   userId: string,
   track: RecordingTrackRow,
@@ -342,12 +377,12 @@ async function assertCanDeleteRecordingTrack(
       .maybeSingle<{ id: string }>();
 
     if (error) throw new RecordingApiError(error.message || "팀 권한을 확인하지 못했습니다.", 500);
-    if (!data) throw new RecordingApiError("이 녹음을 삭제할 권한이 없습니다.", 403);
+    if (!data) throw new RecordingApiError("이 녹음을 수정하거나 삭제할 권한이 없습니다.", 403);
     return;
   }
 
   if (setlist.user_id !== userId) {
-    throw new RecordingApiError("이 녹음을 삭제할 권한이 없습니다.", 403);
+    throw new RecordingApiError("이 녹음을 수정하거나 삭제할 권한이 없습니다.", 403);
   }
 }
 

@@ -96,6 +96,14 @@ export async function markRecordingTrackDeleted(trackId: string) {
   return postJson<{ track: TeamRecordingTrack }>("/api/recordings/delete", { trackId }, token);
 }
 
+export async function updateRecordingTrackLatencyOffset(trackId: string, latencyOffsetMs: number) {
+  const session = await getCurrentSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("로그인이 필요합니다.");
+
+  return postJson<{ track: TeamRecordingTrack }>("/api/recordings/update-mix", { trackId, latencyOffsetMs }, token);
+}
+
 async function postJson<T>(url: string, body: unknown, token: string): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
