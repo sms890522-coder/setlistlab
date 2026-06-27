@@ -1187,23 +1187,94 @@ function VerticalVolumeFader({
   label: string;
   onChange: (value: number) => void;
 }) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
+  const safeValue = Math.max(0, Math.min(1, value));
+
+  const updateFromClientY = useCallback(
+    (clientY: number) => {
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (!rect || rect.height <= 0) return;
+
+      const nextValue = 1 - (clientY - rect.top) / rect.height;
+      onChange(Math.max(0, Math.min(1, nextValue)));
+    },
+    [onChange],
+  );
+
+  const nudgeValue = useCallback(
+    (amount: number) => {
+      onChange(Math.max(0, Math.min(1, safeValue + amount)));
+    },
+    [onChange, safeValue],
+  );
+
   return (
     <div className="flex h-36 items-center justify-center rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={Math.max(0, Math.min(1, value))}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="h-28 w-8 cursor-pointer"
-        style={{
-          accentColor: accent,
-          writingMode: "vertical-lr",
-          direction: "rtl",
-        }}
+      <div
+        ref={trackRef}
+        role="slider"
+        tabIndex={0}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(safeValue * 100)}
+        aria-valuetext={volumeToDb(safeValue)}
         aria-label={label}
-      />
+        className="relative h-28 w-8 cursor-pointer touch-none select-none rounded-full bg-white shadow-inner ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          draggingRef.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          updateFromClientY(event.clientY);
+        }}
+        onPointerMove={(event) => {
+          if (!draggingRef.current) return;
+          event.preventDefault();
+          updateFromClientY(event.clientY);
+        }}
+        onPointerUp={(event) => {
+          draggingRef.current = false;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+        onPointerCancel={() => {
+          draggingRef.current = false;
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp" || event.key === "ArrowRight") {
+            event.preventDefault();
+            nudgeValue(event.shiftKey ? 0.1 : 0.03);
+          }
+          if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
+            event.preventDefault();
+            nudgeValue(event.shiftKey ? -0.1 : -0.03);
+          }
+          if (event.key === "Home") {
+            event.preventDefault();
+            onChange(0);
+          }
+          if (event.key === "End") {
+            event.preventDefault();
+            onChange(1);
+          }
+        }}
+      >
+        <span
+          className="absolute bottom-2 left-1/2 w-1.5 -translate-x-1/2 rounded-full"
+          style={{
+            height: safeValue <= 0 ? "0px" : `max(0.25rem, calc(${safeValue * 100}% - 0.25rem))`,
+            backgroundColor: accent,
+            opacity: 0.9,
+          }}
+          aria-hidden="true"
+        />
+        <span
+          className="absolute left-1/2 size-5 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-white shadow-md transition-transform"
+          style={{ bottom: `${safeValue * 100}%`, backgroundColor: accent }}
+          aria-hidden="true"
+        />
+      </div>
     </div>
   );
 }
