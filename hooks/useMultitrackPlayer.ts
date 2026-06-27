@@ -29,7 +29,6 @@ export type TrackMixState = {
 };
 
 type AudioNodeSet = {
-  source: MediaElementAudioSourceNode;
   inputGain: GainNode;
   lowEq: BiquadFilterNode;
   midEq: BiquadFilterNode;
@@ -56,12 +55,12 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   const [loading, setLoading] = useState(false);
   const [panSupported, setPanSupported] = useState(false);
   const [masterVolume, setMasterVolumeState] = useState(1);
-  const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+  const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
   const audioNodesRef = useRef<Record<string, AudioNodeSet>>({});
+  const activeSourcesRef = useRef<Record<string, AudioBufferSourceNode>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
   const rafRef = useRef<number | null>(null);
-  const startTimersRef = useRef<Record<string, number>>({});
   const currentTimeRef = useRef(0);
   const playStartMsRef = useRef(0);
   const playingRef = useRef(false);
@@ -101,9 +100,17 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     });
   }, [sourceById, sources]);
 
-  const clearStartTimers = useCallback(() => {
-    Object.values(startTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
-    startTimersRef.current = {};
+  const stopActiveSources = useCallback(() => {
+    Object.values(activeSourcesRef.current).forEach((source) => {
+      try {
+        source.onended = null;
+        source.stop();
+        source.disconnect();
+      } catch {
+        // Already stopped or disconnected.
+      }
+    });
+    activeSourcesRef.current = {};
   }, []);
 
   const stopAnimationFrame = useCallback(() => {
@@ -166,13 +173,12 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   );
 
   const ensureAudioNodes = useCallback(
-    (trackId: string, audio: HTMLAudioElement) => {
+    (trackId: string) => {
       if (audioNodesRef.current[trackId]) return audioNodesRef.current[trackId];
 
       try {
         const context = getAudioContext();
         const masterGain = getMasterGain(context);
-        const source = context.createMediaElementSource(audio);
         const inputGain = context.createGain();
         const lowEq = context.createBiquadFilter();
         const midEq = context.createBiquadFilter();
@@ -193,7 +199,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
         highEq.type = "highshelf";
         highEq.frequency.value = 8000;
 
-        source.connect(inputGain).connect(lowEq).connect(midEq).connect(highEq).connect(compressor);
+        inputGain.connect(lowEq).connect(midEq).connect(highEq).connect(compressor);
         compressor.connect(dryGain);
         compressor.connect(reverbDelay);
         reverbDelay.connect(reverbWetGain);
@@ -209,7 +215,6 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
           trackGain.connect(masterGain);
         }
         audioNodesRef.current[trackId] = {
-          source,
           inputGain,
           lowEq,
           midEq,
@@ -230,66 +235,54 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     [getAudioContext, getMasterGain],
   );
 
-  const applyMixToAudio = useCallback(
-    (trackId: string, audio: HTMLAudioElement) => {
+  const applyMixToTrack = useCallback(
+    (trackId: string) => {
       const state = mixState[trackId];
       const audible = hasSolo ? Boolean(state?.solo) : !state?.muted;
       const volume = Math.max(0, Math.min(1, state?.volume ?? 1));
       const pan = Math.max(-1, Math.min(1, state?.pan ?? 0));
       const effects = normalizeTrackEffects(state?.effects);
-      const nodes = audioNodesRef.current[trackId] ?? ensureAudioNodes(trackId, audio);
+      const nodes = audioNodesRef.current[trackId] ?? ensureAudioNodes(trackId);
 
       if (nodes) {
-        audio.muted = false;
-        audio.volume = audible ? volume : 0;
         applyEffectsToNodes(nodes, effects);
         const now = nodes.trackGain.context.currentTime;
-        setAudioParamValue(nodes.trackGain.gain, audible ? 1 : 0, now);
+        setAudioParamValue(nodes.trackGain.gain, audible ? volume : 0, now);
         if (nodes.panner) setAudioParamValue(nodes.panner.pan, pan, now);
         if (masterGainRef.current) setAudioParamValue(masterGainRef.current.gain, masterVolume, now);
-        return;
       }
-
-      audio.muted = !audible;
-      audio.volume = audible ? volume : 0;
     },
     [ensureAudioNodes, hasSolo, masterVolume, mixState],
   );
 
-  const ensureAudio = useCallback(
+  const loadAudioBuffer = useCallback(
     async (trackId: string) => {
       const source = sourceById.get(trackId);
       if (!source) throw new Error("재생할 트랙을 찾을 수 없습니다.");
 
-      let audio = audioRefs.current[trackId];
-      if (!audio) {
-        audio = new Audio();
-        audio.crossOrigin = "anonymous";
-        audio.preload = "auto";
-        audioRefs.current[trackId] = audio;
-      }
+      if (audioBuffersRef.current[trackId]) return audioBuffersRef.current[trackId];
 
       const nextUrl = source.url || (resolveSourceUrl ? await resolveSourceUrl(trackId) : "");
       if (!nextUrl) throw new Error("트랙 재생 URL을 불러오지 못했습니다.");
-      if (audio.src !== nextUrl) {
-        audio.src = nextUrl;
-        audio.load();
+      const response = await fetch(nextUrl);
+      if (!response.ok) {
+        throw new Error("트랙 오디오를 불러오지 못했습니다. R2 CORS 설정을 확인해 주세요.");
       }
 
-      ensureAudioNodes(trackId, audio);
-      applyMixToAudio(trackId, audio);
-      return audio;
+      const arrayBuffer = await response.arrayBuffer();
+      const context = getAudioContext();
+      const buffer = await context.decodeAudioData(arrayBuffer.slice(0));
+      audioBuffersRef.current[trackId] = buffer;
+      ensureAudioNodes(trackId);
+      applyMixToTrack(trackId);
+      return buffer;
     },
-    [applyMixToAudio, ensureAudioNodes, resolveSourceUrl, sourceById],
+    [applyMixToTrack, ensureAudioNodes, getAudioContext, resolveSourceUrl, sourceById],
   );
 
   useEffect(() => {
-    Object.entries(audioRefs.current).forEach(([trackId, audio]) => applyMixToAudio(trackId, audio));
-  }, [applyMixToAudio]);
-
-  const pauseAudiosOnly = useCallback(() => {
-    Object.values(audioRefs.current).forEach((audio) => audio.pause());
-  }, []);
+    sources.forEach((source) => applyMixToTrack(source.id));
+  }, [applyMixToTrack, sources]);
 
   const startProgressLoop = useCallback(() => {
     const update = () => {
@@ -302,46 +295,61 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
       } else {
         playingRef.current = false;
         setPlaying(false);
-        pauseAudiosOnly();
+        stopActiveSources();
       }
     };
 
     stopAnimationFrame();
     rafRef.current = window.requestAnimationFrame(update);
-  }, [duration, pauseAudiosOnly, stopAnimationFrame]);
+  }, [duration, stopActiveSources, stopAnimationFrame]);
 
   const scheduleAudioAtTimelineWithOffset = useCallback(
-    async (trackId: string, audio: HTMLAudioElement, timelineSeconds: number, effectiveOffsetMs: number) => {
+    async (trackId: string, buffer: AudioBuffer, timelineSeconds: number, effectiveOffsetMs: number) => {
       const offsetSeconds = effectiveOffsetMs / 1000;
       const mediaTime = timelineSeconds - offsetSeconds;
-      const maxAudioTime = Math.max(0, audio.duration || sourceById.get(trackId)?.duration || duration);
+      const startDelaySeconds = Math.max(0, -mediaTime);
+      const bufferOffsetSeconds = Math.max(0, mediaTime);
+      const availableDuration = Math.max(0, buffer.duration - bufferOffsetSeconds);
+      if (availableDuration <= 0) return;
 
-      if (startTimersRef.current[trackId]) {
-        window.clearTimeout(startTimersRef.current[trackId]);
-        delete startTimersRef.current[trackId];
+      const context = getAudioContext();
+      const nodes = ensureAudioNodes(trackId);
+      if (!nodes) return;
+
+      const existingSource = activeSourcesRef.current[trackId];
+      if (existingSource) {
+        try {
+          existingSource.onended = null;
+          existingSource.stop();
+          existingSource.disconnect();
+        } catch {
+          // Already stopped.
+        }
       }
 
-      if (mediaTime < 0) {
-        audio.pause();
-        audio.currentTime = 0;
-        const delayMs = Math.min(60_000, Math.abs(mediaTime) * 1000);
-        startTimersRef.current[trackId] = window.setTimeout(() => {
-          if (!playingRef.current) return;
-          audio.currentTime = 0;
-          void audio.play();
-        }, delayMs);
-        return;
-      }
-
-      audio.currentTime = Math.max(0, Math.min(mediaTime, maxAudioTime));
-      await audio.play();
+      applyMixToTrack(trackId);
+      const bufferSource = context.createBufferSource();
+      bufferSource.buffer = buffer;
+      bufferSource.connect(nodes.inputGain);
+      activeSourcesRef.current[trackId] = bufferSource;
+      bufferSource.onended = () => {
+        if (activeSourcesRef.current[trackId] === bufferSource) {
+          delete activeSourcesRef.current[trackId];
+        }
+        try {
+          bufferSource.disconnect();
+        } catch {
+          // Already disconnected.
+        }
+      };
+      bufferSource.start(context.currentTime + startDelaySeconds, bufferOffsetSeconds, availableDuration);
     },
-    [duration, sourceById],
+    [applyMixToTrack, ensureAudioNodes, getAudioContext],
   );
 
   const scheduleAudioAtTimeline = useCallback(
-    async (trackId: string, audio: HTMLAudioElement, timelineSeconds: number) => {
-      await scheduleAudioAtTimelineWithOffset(trackId, audio, timelineSeconds, getEffectiveOffsetMs(trackId));
+    async (trackId: string, buffer: AudioBuffer, timelineSeconds: number) => {
+      await scheduleAudioAtTimelineWithOffset(trackId, buffer, timelineSeconds, getEffectiveOffsetMs(trackId));
     },
     [getEffectiveOffsetMs, scheduleAudioAtTimelineWithOffset],
   );
@@ -352,19 +360,18 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
 
     setLoading(true);
     try {
-      clearStartTimers();
-      pauseAudiosOnly();
+      stopActiveSources();
       await startAudioEngine();
-      const audios = await Promise.all(audibleIds.map(async (trackId) => [trackId, await ensureAudio(trackId)] as const));
+      const buffers = await Promise.all(audibleIds.map(async (trackId) => [trackId, await loadAudioBuffer(trackId)] as const));
       playStartMsRef.current = performance.now() - currentTimeRef.current * 1000;
       playingRef.current = true;
-      await Promise.allSettled(audios.map(([trackId, audio]) => scheduleAudioAtTimeline(trackId, audio, currentTimeRef.current)));
+      await Promise.allSettled(buffers.map(([trackId, buffer]) => scheduleAudioAtTimeline(trackId, buffer, currentTimeRef.current)));
       setPlaying(true);
       startProgressLoop();
     } finally {
       setLoading(false);
     }
-  }, [clearStartTimers, ensureAudio, getAudibleSourceIds, pauseAudiosOnly, scheduleAudioAtTimeline, startAudioEngine, startProgressLoop]);
+  }, [getAudibleSourceIds, loadAudioBuffer, scheduleAudioAtTimeline, startAudioEngine, startProgressLoop, stopActiveSources]);
 
   useEffect(() => {
     if (!playing) return;
@@ -375,10 +382,10 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
       const audibleIds = getAudibleSourceIds();
       await Promise.allSettled(
         audibleIds.map(async (trackId) => {
-          const audio = await ensureAudio(trackId);
+          const buffer = await loadAudioBuffer(trackId);
           if (cancelled || !playingRef.current) return;
-          if (audio.paused) {
-            await scheduleAudioAtTimeline(trackId, audio, currentTimeRef.current);
+          if (!activeSourcesRef.current[trackId]) {
+            await scheduleAudioAtTimeline(trackId, buffer, currentTimeRef.current);
           }
         }),
       );
@@ -388,39 +395,29 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     return () => {
       cancelled = true;
     };
-  }, [ensureAudio, getAudibleSourceIds, playing, scheduleAudioAtTimeline, startAudioEngine]);
+  }, [getAudibleSourceIds, loadAudioBuffer, playing, scheduleAudioAtTimeline, startAudioEngine]);
 
   const pause = useCallback(() => {
-    clearStartTimers();
-    pauseAudiosOnly();
+    stopActiveSources();
     stopAnimationFrame();
     playingRef.current = false;
     setPlaying(false);
-  }, [clearStartTimers, pauseAudiosOnly, stopAnimationFrame]);
+  }, [stopActiveSources, stopAnimationFrame]);
 
   const stop = useCallback(() => {
-    clearStartTimers();
-    Object.values(audioRefs.current).forEach((audio) => {
-      audio.pause();
-      audio.currentTime = 0;
-    });
+    stopActiveSources();
     stopAnimationFrame();
     currentTimeRef.current = 0;
     playingRef.current = false;
     setCurrentTime(0);
     setPlaying(false);
-  }, [clearStartTimers, stopAnimationFrame]);
+  }, [stopActiveSources, stopAnimationFrame]);
 
   const seek = useCallback(
     (time: number) => {
       const nextTime = Math.max(0, Math.min(time, duration));
       const wasPlaying = playingRef.current;
-      clearStartTimers();
-      pauseAudiosOnly();
-      Object.entries(audioRefs.current).forEach(([trackId, audio]) => {
-        const mediaTime = nextTime - getEffectiveOffsetMs(trackId) / 1000;
-        audio.currentTime = Math.max(0, Math.min(mediaTime, Math.max(0, audio.duration || mediaTime)));
-      });
+      stopActiveSources();
       currentTimeRef.current = nextTime;
       setCurrentTime(nextTime);
       if (wasPlaying) {
@@ -430,7 +427,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
         }, 0);
       }
     },
-    [clearStartTimers, duration, getEffectiveOffsetMs, pauseAudiosOnly, play],
+    [duration, play, stopActiveSources],
   );
 
   const toggleMute = useCallback((trackId: string) => {
@@ -518,10 +515,10 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
         },
       }));
 
-      const audio = audioRefs.current[trackId];
-      if (audio && playingRef.current) {
+      const buffer = audioBuffersRef.current[trackId];
+      if (buffer && playingRef.current) {
         const sourceOffsetMs = sourceById.get(trackId)?.offsetMs ?? 0;
-        void scheduleAudioAtTimelineWithOffset(trackId, audio, currentTimeRef.current, sourceOffsetMs + safeValue);
+        void scheduleAudioAtTimelineWithOffset(trackId, buffer, currentTimeRef.current, sourceOffsetMs + safeValue);
       }
     },
     [scheduleAudioAtTimelineWithOffset, sourceById],
@@ -536,12 +533,9 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   useEffect(() => {
     return () => {
       stop();
-      Object.values(audioRefs.current).forEach((audio) => {
-        audio.pause();
-        audio.src = "";
-      });
-      audioRefs.current = {};
+      audioBuffersRef.current = {};
       audioNodesRef.current = {};
+      activeSourcesRef.current = {};
       masterGainRef.current = null;
       void audioContextRef.current?.close?.();
       audioContextRef.current = null;
