@@ -16,11 +16,14 @@ import { getMyProfile, type Profile } from "@/lib/db/profiles";
 import { getCloudSetlist, type CloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import {
+  formatRecordingUsageBytes,
   createRecordingSession,
   getRecordingSessionForGuideTrack,
   getRecordingTracks,
+  getTeamRecordingUsageSummary,
   type TeamRecordingSession,
   type TeamRecordingTrack,
+  type TeamRecordingUsageSummary,
 } from "@/lib/db/teamRecordingStudio";
 import { getGuideTrack, normalizeGuideTrackData, type TeamGuideTrack } from "@/lib/db/teamGuideTracks";
 import { canUseFeature } from "@/lib/features";
@@ -79,6 +82,7 @@ export default function GuideTrackStudioPage() {
   const [mixdowning, setMixdowning] = useState(false);
   const [skipInputTest, setSkipInputTest] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [usageSummary, setUsageSummary] = useState<TeamRecordingUsageSummary | null>(null);
 
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
@@ -185,6 +189,9 @@ export default function GuideTrackStudioPage() {
       setCanManage(nextCanManage);
       setMyUserId(user.id);
       setTrackTitle(`${nextSong.title} ${selectedPart} 녹음`);
+      if (nextGuideTrack.teamId) {
+        setUsageSummary(await getTeamRecordingUsageSummary(nextGuideTrack.teamId).catch(() => null));
+      }
 
       if (!canUseFeature(nextProfile, "teamRecordingStudio")) {
         setLoaded(true);
@@ -193,13 +200,20 @@ export default function GuideTrackStudioPage() {
 
       let nextSession = await getRecordingSessionForGuideTrack(nextGuideTrack.id);
       if (!nextSession && nextCanManage) {
-        nextSession = await createRecordingSession({
-          teamId: nextGuideTrack.teamId,
-          setlistId: nextGuideTrack.setlistId,
-          songId: nextGuideTrack.songId,
-          guideTrackId: nextGuideTrack.id,
-          title: `${nextSong.title || "곡"} 팀 녹음실`,
-        });
+        try {
+          nextSession = await createRecordingSession({
+            teamId: nextGuideTrack.teamId,
+            setlistId: nextGuideTrack.setlistId,
+            songId: nextGuideTrack.songId,
+            guideTrackId: nextGuideTrack.id,
+            title: `${nextSong.title || "곡"} 팀 녹음실`,
+          });
+          if (nextGuideTrack.teamId) {
+            setUsageSummary(await getTeamRecordingUsageSummary(nextGuideTrack.teamId).catch(() => null));
+          }
+        } catch (sessionError) {
+          setError(sessionError instanceof Error ? sessionError.message : "팀 녹음실을 만들지 못했습니다.");
+        }
       }
 
       setSession(nextSession);
@@ -267,6 +281,11 @@ export default function GuideTrackStudioPage() {
     setTracks(await getRecordingTracks(session.id));
   }
 
+  async function refreshUsageSummary() {
+    if (!guideTrack?.teamId) return;
+    setUsageSummary(await getTeamRecordingUsageSummary(guideTrack.teamId).catch(() => null));
+  }
+
   async function handleRequestPermission() {
     const granted = await recorder.requestMicrophonePermission();
     if (granted) setMessage("선택한 입력 장치를 사용할 준비가 되었습니다.");
@@ -325,6 +344,7 @@ export default function GuideTrackStudioPage() {
       recorder.resetRecording();
       setNotes("");
       await refreshTracks();
+      await refreshUsageSummary();
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "녹음을 저장하지 못했습니다.");
     } finally {
@@ -339,6 +359,7 @@ export default function GuideTrackStudioPage() {
       await markRecordingTrackDeleted(trackId);
       player.stop();
       await refreshTracks();
+      await refreshUsageSummary();
       setMessage("녹음을 삭제했습니다.");
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "녹음을 삭제하지 못했습니다.");
@@ -459,6 +480,7 @@ export default function GuideTrackStudioPage() {
           <p className="mt-3 text-sm leading-7 text-slate-600">
             아직 열린 녹음 세션이 없습니다. 리더/부리더가 먼저 팀 녹음실을 열어야 팀원이 녹음할 수 있습니다.
           </p>
+          {error ? <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
           <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-secondary mt-5">가이드 트랙으로</Link>
         </section>
       </div>
@@ -492,6 +514,8 @@ export default function GuideTrackStudioPage() {
       {error || recorder.error || guideRenderError ? (
         <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error || recorder.error || guideRenderError}</p>
       ) : null}
+
+      <RecordingUsageNotice summary={usageSummary} labEnabled={Boolean(profile?.labEnabled)} />
 
       <StudioTransportBar
         playing={player.playing}
@@ -857,6 +881,77 @@ function MobileRecordingNotice() {
         </div>
       </div>
     </section>
+  );
+}
+
+function RecordingUsageNotice({
+  summary,
+  labEnabled,
+}: {
+  summary: TeamRecordingUsageSummary | null;
+  labEnabled: boolean;
+}) {
+  if (!summary) return null;
+
+  if (labEnabled || summary.limits.isUnlimited) {
+    return (
+      <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-950">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-black">{labEnabled ? "실험실 모드" : "무제한 녹음실"}</h2>
+            <p className="mt-1 text-xs font-semibold leading-5 text-violet-800">
+              {labEnabled
+                ? "실험실을 켠 계정은 테스트를 위해 팀 녹음실 사용량 제한을 우회합니다. 팀 접근 권한과 R2 보안 검사는 그대로 적용됩니다."
+                : "이 팀은 녹음실 사용량 제한 없이 사용할 수 있습니다."}
+            </p>
+          </div>
+          <span className="w-fit rounded-full bg-white px-3 py-1.5 text-xs font-black text-violet-700 ring-1 ring-violet-100">
+            {summary.yearMonth}
+          </span>
+        </div>
+      </section>
+    );
+  }
+
+  const sessionLimitReached = summary.monthlySessionsUsed >= summary.limits.monthlySessionsLimit;
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-sm font-black text-slate-950">녹음실 사용량</h2>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
+            기본 팀은 한 달에 녹음실 {summary.limits.monthlySessionsLimit}개까지 만들 수 있습니다. 실험실 사용자는 quota만 우회합니다.
+          </p>
+        </div>
+        <span
+          className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${
+            sessionLimitReached ? "bg-rose-50 text-rose-700 ring-1 ring-rose-100" : "bg-slate-100 text-slate-700"
+          }`}
+        >
+          이번 달 {summary.monthlySessionsUsed} / {summary.limits.monthlySessionsLimit}개
+        </span>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <UsageChip label="곡당 트랙" value={`${summary.activeTracksCount} / ${summary.limits.tracksPerSessionLimit}개`} />
+        <UsageChip label="파트별 보관" value={`최근 ${summary.limits.versionsPerUserPartLimit}개`} />
+        <UsageChip label="파일 제한" value={`${formatRecordingUsageBytes(summary.limits.maxTrackSizeBytes)} · ${Math.round(summary.limits.maxTrackDurationSeconds / 60)}분`} />
+        <UsageChip label="현재 보관" value={formatRecordingUsageBytes(summary.activeStorageBytes)} />
+      </div>
+      <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+        재녹음은 같은 사용자와 파트 기준 최근 {summary.limits.versionsPerUserPartLimit}개만 활성 보관됩니다.
+        기본 보관 기간은 {summary.limits.retentionDays}일이며, 오래된 실패 업로드와 삭제된 파일은 정리 정책에 따라 R2에서도 제거됩니다.
+      </p>
+    </section>
+  );
+}
+
+function UsageChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+      <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
+    </div>
   );
 }
 

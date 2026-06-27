@@ -1,7 +1,14 @@
 "use client";
 
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentSession } from "@/lib/auth";
 import type { Profile } from "@/lib/db/profiles";
+import {
+  formatRecordingLimitBytes,
+  getCurrentRecordingYearMonth,
+  getDefaultRecordingLimitConfig,
+  getMonthRange,
+  type RecordingLimitConfig,
+} from "@/lib/recording/recordingLimits";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export type RecordingSessionStatus = "open" | "closed" | "archived";
@@ -48,6 +55,16 @@ export type TeamRecordingTrack = {
   createdAt: string;
   updatedAt: string;
   profile?: Pick<Profile, "id" | "displayName" | "avatarUrl" | "role"> | null;
+};
+
+export type TeamRecordingUsageSummary = {
+  yearMonth: string;
+  limits: RecordingLimitConfig;
+  monthlySessionsUsed: number;
+  monthlyTracksUploaded: number;
+  monthlyStorageBytesUploaded: number;
+  activeStorageBytes: number;
+  activeTracksCount: number;
 };
 
 type RecordingSessionRow = {
@@ -98,6 +115,23 @@ type ProfileRow = {
   role: string | null;
 };
 
+type TeamRecordingLimitRow = {
+  plan: string;
+  monthly_sessions_limit: number | null;
+  tracks_per_session_limit: number | null;
+  versions_per_user_part_limit: number | null;
+  max_track_size_bytes: number | string | null;
+  max_track_duration_seconds: number | null;
+  retention_days: number | null;
+  is_unlimited: boolean | null;
+};
+
+type TeamRecordingUsageMonthlyRow = {
+  sessions_created_count: number | null;
+  tracks_uploaded_count: number | null;
+  storage_bytes_used: number | string | null;
+};
+
 export async function getRecordingSessionForGuideTrack(guideTrackId: string) {
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase
@@ -120,26 +154,25 @@ export async function createRecordingSession(input: {
   guideTrackId: string;
   title: string;
 }) {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("로그인이 필요합니다.");
+  const session = await getCurrentSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("로그인이 필요합니다.");
 
-  const supabase = getSupabaseBrowserClient();
-  const { data, error } = await supabase
-    .from("team_recording_sessions")
-    .insert({
-      team_id: input.teamId || null,
-      setlist_id: input.setlistId,
-      song_id: input.songId,
-      guide_track_id: input.guideTrackId,
-      title: input.title.trim() || "팀 녹음실",
-      status: "open",
-      created_by: user.id,
-    })
-    .select("*")
-    .single<RecordingSessionRow>();
+  const response = await fetch("/api/recordings/create-session", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
 
-  if (error) throw new Error(error.message || "녹음 세션을 만들지 못했습니다.");
-  return rowToSession(data);
+  const payload = (await response.json().catch(() => ({}))) as { session?: TeamRecordingSession; error?: string };
+  if (!response.ok || !payload.session) {
+    throw new Error(payload.error || "녹음 세션을 만들지 못했습니다.");
+  }
+
+  return payload.session;
 }
 
 export async function getRecordingTracks(sessionId: string) {
@@ -148,7 +181,7 @@ export async function getRecordingTracks(sessionId: string) {
     .from("team_recording_tracks")
     .select("*")
     .eq("session_id", sessionId)
-    .neq("status", "deleted")
+    .eq("status", "active")
     .order("created_at", { ascending: false })
     .returns<RecordingTrackRow[]>();
 
@@ -177,6 +210,72 @@ export async function getRecordingTracks(sessionId: string) {
   );
 
   return tracks.map((track) => ({ ...track, profile: track.userId ? profileById.get(track.userId) ?? null : null }));
+}
+
+export async function getTeamRecordingUsageSummary(teamId: string): Promise<TeamRecordingUsageSummary> {
+  const supabase = getSupabaseBrowserClient();
+  const yearMonth = getCurrentRecordingYearMonth();
+  const { startIso, endIso } = getMonthRange(yearMonth);
+  const defaults = getDefaultRecordingLimitConfig();
+
+  const [limitsResult, usageResult, monthlySessionsResult, activeTracksResult] = await Promise.all([
+    supabase
+      .from("team_recording_limits")
+      .select(
+        "plan, monthly_sessions_limit, tracks_per_session_limit, versions_per_user_part_limit, max_track_size_bytes, max_track_duration_seconds, retention_days, is_unlimited",
+      )
+      .eq("team_id", teamId)
+      .maybeSingle<TeamRecordingLimitRow>(),
+    supabase
+      .from("team_recording_usage_monthly")
+      .select("sessions_created_count, tracks_uploaded_count, storage_bytes_used")
+      .eq("team_id", teamId)
+      .eq("year_month", yearMonth)
+      .maybeSingle<TeamRecordingUsageMonthlyRow>(),
+    supabase
+      .from("team_recording_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("team_id", teamId)
+      .gte("created_at", startIso)
+      .lt("created_at", endIso),
+    supabase.from("team_recording_tracks").select("size_bytes").eq("team_id", teamId).eq("status", "active").returns<Array<{ size_bytes: number | string | null }>>(),
+  ]);
+
+  const limitRow = limitsResult.error ? null : limitsResult.data;
+  const usageRow = usageResult.error ? null : usageResult.data;
+  const limits: RecordingLimitConfig = limitRow
+    ? {
+        plan: limitRow.plan || defaults.plan,
+        monthlySessionsLimit: Number(limitRow.monthly_sessions_limit ?? defaults.monthlySessionsLimit),
+        tracksPerSessionLimit: Number(limitRow.tracks_per_session_limit ?? defaults.tracksPerSessionLimit),
+        versionsPerUserPartLimit: Number(limitRow.versions_per_user_part_limit ?? defaults.versionsPerUserPartLimit),
+        maxTrackSizeBytes: Number(limitRow.max_track_size_bytes ?? defaults.maxTrackSizeBytes),
+        maxTrackDurationSeconds: Number(limitRow.max_track_duration_seconds ?? defaults.maxTrackDurationSeconds),
+        retentionDays: Number(limitRow.retention_days ?? defaults.retentionDays),
+        isUnlimited: Boolean(limitRow.is_unlimited),
+      }
+    : defaults;
+
+  const activeTracks = activeTracksResult.error ? [] : activeTracksResult.data ?? [];
+  const activeStorageBytes = activeTracks.reduce((sum, track) => sum + Number(track.size_bytes ?? 0), 0);
+  const monthlySessionCount = Math.max(
+    Number(usageRow?.sessions_created_count ?? 0),
+    monthlySessionsResult.error ? 0 : monthlySessionsResult.count ?? 0,
+  );
+
+  return {
+    yearMonth,
+    limits,
+    monthlySessionsUsed: monthlySessionCount,
+    monthlyTracksUploaded: Number(usageRow?.tracks_uploaded_count ?? 0),
+    monthlyStorageBytesUploaded: Number(usageRow?.storage_bytes_used ?? 0),
+    activeStorageBytes,
+    activeTracksCount: activeTracks.length,
+  };
+}
+
+export function formatRecordingUsageBytes(bytes: number) {
+  return formatRecordingLimitBytes(bytes);
 }
 
 export async function markRecordingTrackDeleted(trackId: string) {

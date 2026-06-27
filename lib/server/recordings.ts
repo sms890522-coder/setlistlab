@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import {
-  MAX_RECORDING_UPLOAD_BYTES,
   RECORDING_PRESIGNED_EXPIRES_IN_SECONDS,
   buildRecordingObjectKey,
   createPresignedReadUrl,
@@ -11,6 +10,14 @@ import {
   normalizeRecordingMimeType,
   safeDeleteR2Object,
 } from "@/lib/storage/r2";
+import {
+  formatRecordingLimitBytes,
+  getCurrentRecordingYearMonth,
+  getDefaultRecordingLimitConfig,
+  getMonthRange,
+  shouldBypassRecordingLimits,
+  type RecordingLimitConfig,
+} from "@/lib/recording/recordingLimits";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export type RecordingSessionRow = {
@@ -67,6 +74,29 @@ type RecordingTrackRow = {
   updated_at: string;
 };
 
+type ProfileLabRow = {
+  lab_enabled: boolean | null;
+};
+
+type TeamRecordingLimitRow = {
+  plan: string;
+  monthly_sessions_limit: number | null;
+  tracks_per_session_limit: number | null;
+  versions_per_user_part_limit: number | null;
+  max_track_size_bytes: number | string | null;
+  max_track_duration_seconds: number | null;
+  retention_days: number | null;
+  is_unlimited: boolean | null;
+};
+
+type TeamRecordingUsageMonthlyRow = {
+  team_id: string;
+  year_month: string;
+  sessions_created_count: number | null;
+  tracks_uploaded_count: number | null;
+  storage_bytes_used: number | string | null;
+};
+
 export type RecordingAccessContext = {
   supabase: SupabaseClient;
   user: User;
@@ -84,6 +114,64 @@ export async function getRecordingAccessContext(request: Request): Promise<Recor
 
   if (error || !user) throw new RecordingApiError("로그인이 필요합니다.", 401);
   return { supabase, user };
+}
+
+export async function createRecordingSessionWithLimits(input: {
+  request: Request;
+  teamId?: string | null;
+  setlistId: string;
+  songId: string;
+  guideTrackId: string;
+  title: string;
+}) {
+  const { supabase, user } = await getRecordingAccessContext(input.request);
+  const guideTrack = await getGuideTrackOrThrow(supabase, input.guideTrackId);
+  const setlist = await getSetlistOrThrow(supabase, input.setlistId);
+
+  if (guideTrack.setlist_id !== input.setlistId || guideTrack.song_id !== input.songId) {
+    throw new RecordingApiError("가이드 트랙 정보가 콘티와 일치하지 않습니다.", 400);
+  }
+
+  if ((guideTrack.team_id ?? null) !== (input.teamId ?? null) || (setlist.team_id ?? null) !== (input.teamId ?? null)) {
+    throw new RecordingApiError("팀 녹음실 정보가 일치하지 않습니다.", 400);
+  }
+
+  await assertCanManageRecordingSession(supabase, user.id, guideTrack, setlist);
+
+  if (input.teamId) {
+    const quota = await getRecordingQuotaContext(supabase, user.id, input.teamId);
+    if (!quota.bypassLimits) {
+      const currentCount = await getMonthlySessionCountForLimit(supabase, input.teamId);
+      if (currentCount >= quota.limits.monthlySessionsLimit) {
+        throw new RecordingApiError(
+          `이번 달 녹음실 생성 가능 횟수를 모두 사용했습니다. 이번 달 녹음실: ${currentCount} / ${quota.limits.monthlySessionsLimit}개 사용`,
+          403,
+        );
+      }
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("team_recording_sessions")
+    .insert({
+      team_id: input.teamId || null,
+      setlist_id: input.setlistId,
+      song_id: input.songId,
+      guide_track_id: input.guideTrackId,
+      title: input.title.trim() || "팀 녹음실",
+      status: "open",
+      created_by: user.id,
+    })
+    .select("*")
+    .single<RecordingSessionRow>();
+
+  if (error || !data) throw new RecordingApiError(error?.message || "녹음 세션을 만들지 못했습니다.", 500);
+
+  if (input.teamId) {
+    await incrementMonthlyRecordingUsage(supabase, input.teamId, { sessionsDelta: 1 }).catch(() => undefined);
+  }
+
+  return { session: rowToApiSession(data) };
 }
 
 export async function createPresignedRecordingUpload(input: {
@@ -105,9 +193,6 @@ export async function createPresignedRecordingUpload(input: {
   const mimeType = normalizeRecordingMimeType(input.mimeType);
   const sizeBytes = Number(input.sizeBytes);
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) throw new RecordingApiError("녹음 파일 크기를 확인할 수 없습니다.", 400);
-  if (sizeBytes > MAX_RECORDING_UPLOAD_BYTES) {
-    throw new RecordingApiError("녹음 파일이 너무 큽니다. 50MB 이하로 다시 녹음해 주세요.", 413);
-  }
 
   const session = await getSessionOrThrow(supabase, input.sessionId);
   if (session.status !== "open") throw new RecordingApiError("닫힌 녹음 세션에는 업로드할 수 없습니다.", 403);
@@ -116,6 +201,29 @@ export async function createPresignedRecordingUpload(input: {
   const guideTrack = await getGuideTrackOrThrow(supabase, input.guideTrackId);
   const setlist = await getSetlistOrThrow(supabase, session.setlist_id);
   await assertCanAccessRecording(supabase, user.id, session, setlist);
+
+  const durationSeconds = normalizeDuration(input.durationSeconds);
+  const quota = session.team_id ? await getRecordingQuotaContext(supabase, user.id, session.team_id) : null;
+  if (quota && !quota.bypassLimits) {
+    if (sizeBytes > quota.limits.maxTrackSizeBytes) {
+      throw new RecordingApiError(
+        `녹음 파일이 너무 큽니다. 최대 ${formatRecordingLimitBytes(quota.limits.maxTrackSizeBytes)}까지 업로드할 수 있습니다.`,
+        413,
+      );
+    }
+
+    if (durationSeconds !== null && durationSeconds > quota.limits.maxTrackDurationSeconds) {
+      throw new RecordingApiError(
+        `녹음 시간이 너무 깁니다. 최대 ${Math.round(quota.limits.maxTrackDurationSeconds / 60)}분까지 업로드할 수 있습니다.`,
+        413,
+      );
+    }
+
+    const activeTrackCount = await countActiveTracksInSession(supabase, session.id);
+    if (activeTrackCount >= quota.limits.tracksPerSessionLimit) {
+      throw new RecordingApiError("이 곡의 녹음 트랙 수가 제한에 도달했습니다. 필요 없는 트랙을 삭제한 뒤 다시 시도해 주세요.", 403);
+    }
+  }
 
   const trackId = randomUUID();
   const objectKey = buildRecordingObjectKey({
@@ -140,7 +248,7 @@ export async function createPresignedRecordingUpload(input: {
     bucket: getRecordingBucket(),
     object_key: objectKey,
     mime_type: mimeType,
-    duration_seconds: normalizeDuration(input.durationSeconds),
+    duration_seconds: durationSeconds,
     size_bytes: sizeBytes,
     input_type: normalizeRecordingInputType(input.inputType),
     device_label: input.deviceLabel?.trim().slice(0, 160) || null,
@@ -197,6 +305,19 @@ export async function completeRecordingUpload(input: {
     .single<RecordingTrackRow>();
 
   if (error || !data) throw new RecordingApiError(error?.message || "녹음 업로드를 완료하지 못했습니다.", 500);
+
+  if (data.team_id) {
+    await incrementMonthlyRecordingUsage(supabase, data.team_id, {
+      tracksDelta: 1,
+      storageBytesDelta: Number(data.size_bytes ?? 0),
+    }).catch(() => undefined);
+
+    const quota = await getRecordingQuotaContext(supabase, user.id, data.team_id);
+    if (!quota.bypassLimits) {
+      await enforceVersionsPerUserPartLimit(supabase, data, quota.limits.versionsPerUserPartLimit).catch(() => undefined);
+    }
+  }
+
   await createRecordingUploadedNotification(supabase, data).catch(() => undefined);
 
   return { track: rowToApiTrack(data) };
@@ -356,6 +477,33 @@ async function assertCanAccessRecording(
   }
 }
 
+async function assertCanManageRecordingSession(
+  supabase: SupabaseClient,
+  userId: string,
+  guideTrack: GuideTrackRow,
+  setlist: SetlistRow,
+) {
+  if (guideTrack.created_by === userId || setlist.user_id === userId) return;
+
+  if (guideTrack.team_id) {
+    const { data, error } = await supabase
+      .from("team_memberships")
+      .select("id")
+      .eq("team_id", guideTrack.team_id)
+      .eq("user_id", userId)
+      .eq("status", "approved")
+      .in("role", ["owner", "admin"])
+      .is("removed_at", null)
+      .maybeSingle<{ id: string }>();
+
+    if (error) throw new RecordingApiError(error.message || "팀 권한을 확인하지 못했습니다.", 500);
+    if (!data) throw new RecordingApiError("팀 녹음실을 만들 권한이 없습니다.", 403);
+    return;
+  }
+
+  throw new RecordingApiError("팀 녹음실을 만들 권한이 없습니다.", 403);
+}
+
 async function assertCanModifyRecordingTrack(
   supabase: SupabaseClient,
   userId: string,
@@ -383,6 +531,152 @@ async function assertCanModifyRecordingTrack(
 
   if (setlist.user_id !== userId) {
     throw new RecordingApiError("이 녹음을 수정하거나 삭제할 권한이 없습니다.", 403);
+  }
+}
+
+async function getRecordingQuotaContext(supabase: SupabaseClient, userId: string, teamId: string) {
+  const [profile, limits] = await Promise.all([getUserLabProfile(supabase, userId), getTeamRecordingLimits(supabase, teamId)]);
+  return {
+    limits,
+    profile,
+    bypassLimits: shouldBypassRecordingLimits(profile) || limits.isUnlimited,
+  };
+}
+
+async function getUserLabProfile(supabase: SupabaseClient, userId: string): Promise<ProfileLabRow | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("lab_enabled")
+    .eq("id", userId)
+    .maybeSingle<ProfileLabRow>();
+
+  if (error) return null;
+  return data ?? null;
+}
+
+async function getTeamRecordingLimits(supabase: SupabaseClient, teamId: string): Promise<RecordingLimitConfig> {
+  const { data, error } = await supabase
+    .from("team_recording_limits")
+    .select(
+      "plan, monthly_sessions_limit, tracks_per_session_limit, versions_per_user_part_limit, max_track_size_bytes, max_track_duration_seconds, retention_days, is_unlimited",
+    )
+    .eq("team_id", teamId)
+    .maybeSingle<TeamRecordingLimitRow>();
+
+  if (error || !data) return getDefaultRecordingLimitConfig();
+  const defaults = getDefaultRecordingLimitConfig();
+  return {
+    plan: data.plan || defaults.plan,
+    monthlySessionsLimit: normalizeInteger(data.monthly_sessions_limit, defaults.monthlySessionsLimit),
+    tracksPerSessionLimit: normalizeInteger(data.tracks_per_session_limit, defaults.tracksPerSessionLimit),
+    versionsPerUserPartLimit: normalizeInteger(data.versions_per_user_part_limit, defaults.versionsPerUserPartLimit),
+    maxTrackSizeBytes: normalizeInteger(data.max_track_size_bytes, defaults.maxTrackSizeBytes),
+    maxTrackDurationSeconds: normalizeInteger(data.max_track_duration_seconds, defaults.maxTrackDurationSeconds),
+    retentionDays: normalizeInteger(data.retention_days, defaults.retentionDays),
+    isUnlimited: Boolean(data.is_unlimited),
+  };
+}
+
+async function getMonthlySessionCountForLimit(supabase: SupabaseClient, teamId: string) {
+  const yearMonth = getCurrentRecordingYearMonth();
+  const usage = await getMonthlyRecordingUsage(supabase, teamId, yearMonth);
+  const { startIso, endIso } = getMonthRange(yearMonth);
+  const { count, error } = await supabase
+    .from("team_recording_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("team_id", teamId)
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+
+  if (error) return usage?.sessions_created_count ?? 0;
+  return Math.max(usage?.sessions_created_count ?? 0, count ?? 0);
+}
+
+async function countActiveTracksInSession(supabase: SupabaseClient, sessionId: string) {
+  const { count, error } = await supabase
+    .from("team_recording_tracks")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", sessionId)
+    .eq("status", "active");
+
+  if (error) throw new RecordingApiError(error.message || "녹음 트랙 수를 확인하지 못했습니다.", 500);
+  return count ?? 0;
+}
+
+async function getMonthlyRecordingUsage(supabase: SupabaseClient, teamId: string, yearMonth = getCurrentRecordingYearMonth()) {
+  const { data } = await supabase
+    .from("team_recording_usage_monthly")
+    .select("team_id, year_month, sessions_created_count, tracks_uploaded_count, storage_bytes_used")
+    .eq("team_id", teamId)
+    .eq("year_month", yearMonth)
+    .maybeSingle<TeamRecordingUsageMonthlyRow>();
+
+  return data ?? null;
+}
+
+async function incrementMonthlyRecordingUsage(
+  supabase: SupabaseClient,
+  teamId: string,
+  delta: { sessionsDelta?: number; tracksDelta?: number; storageBytesDelta?: number },
+) {
+  const yearMonth = getCurrentRecordingYearMonth();
+  const current = await getMonthlyRecordingUsage(supabase, teamId, yearMonth);
+  const next = {
+    team_id: teamId,
+    year_month: yearMonth,
+    sessions_created_count: (current?.sessions_created_count ?? 0) + (delta.sessionsDelta ?? 0),
+    tracks_uploaded_count: (current?.tracks_uploaded_count ?? 0) + (delta.tracksDelta ?? 0),
+    storage_bytes_used: Number(current?.storage_bytes_used ?? 0) + (delta.storageBytesDelta ?? 0),
+    updated_at: new Date().toISOString(),
+  };
+
+  const query = current
+    ? supabase
+        .from("team_recording_usage_monthly")
+        .update(next)
+        .eq("team_id", teamId)
+        .eq("year_month", yearMonth)
+    : supabase.from("team_recording_usage_monthly").insert(next);
+
+  const { error } = await query;
+  if (error) throw error;
+}
+
+async function enforceVersionsPerUserPartLimit(supabase: SupabaseClient, track: RecordingTrackRow, limit: number) {
+  if (!track.user_id || limit <= 0) return;
+
+  const baseQuery = supabase
+    .from("team_recording_tracks")
+    .select("*")
+    .eq("session_id", track.session_id)
+    .eq("user_id", track.user_id)
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  const { data, error } = track.part
+    ? await baseQuery.eq("part", track.part).returns<RecordingTrackRow[]>()
+    : await baseQuery.is("part", null).returns<RecordingTrackRow[]>();
+  if (error || !data || data.length <= limit) return;
+
+  const staleTracks = data.slice(limit);
+  for (const staleTrack of staleTracks) {
+    await supabase
+      .from("team_recording_tracks")
+      .update({
+        status: "replaced",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", staleTrack.id);
+
+    const deleteResult = await safeDeleteR2Object(staleTrack.object_key);
+    await supabase
+      .from("team_recording_tracks")
+      .update({
+        object_key: deleteResult.ok ? null : staleTrack.object_key,
+        error_message: deleteResult.ok ? null : `r2_replaced_delete_failed: ${deleteResult.error ?? "unknown"}`.slice(0, 500),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", staleTrack.id);
   }
 }
 
@@ -473,6 +767,21 @@ function rowToApiTrack(row: RecordingTrackRow) {
     notes: row.notes ?? undefined,
     status: row.status,
     errorMessage: row.error_message ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function rowToApiSession(row: RecordingSessionRow) {
+  return {
+    id: row.id,
+    teamId: row.team_id ?? undefined,
+    setlistId: row.setlist_id,
+    songId: row.song_id,
+    guideTrackId: row.guide_track_id,
+    title: row.title,
+    status: row.status,
+    createdBy: row.created_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

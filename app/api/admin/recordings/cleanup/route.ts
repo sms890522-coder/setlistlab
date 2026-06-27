@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DEFAULT_RECORDING_LIMITS } from "@/lib/recording/recordingLimits";
 import { safeDeleteR2Object } from "@/lib/storage/r2";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -31,10 +32,10 @@ export async function POST(request: Request) {
   try {
     const supabase = getSupabaseAdminClient();
     const now = Date.now();
-    const staleUploadingBefore = new Date(now - 24 * 60 * 60 * 1000).toISOString();
-    const staleFailedBefore = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const staleUploadingBefore = new Date(now - DEFAULT_RECORDING_LIMITS.pendingUploadCleanupHours * 60 * 60 * 1000).toISOString();
+    const staleFailedBefore = new Date(now - DEFAULT_RECORDING_LIMITS.failedCleanupDays * 24 * 60 * 60 * 1000).toISOString();
 
-    const [staleUploads, staleFailed, deletedWithObjects] = await Promise.all([
+    const [staleUploads, staleFailed, deletedWithObjects, replacedWithObjects] = await Promise.all([
       supabase
         .from("team_recording_tracks")
         .select("id, status, object_key, updated_at")
@@ -53,15 +54,26 @@ export async function POST(request: Request) {
         .eq("status", "deleted")
         .not("object_key", "is", null)
         .returns<CleanupTrackRow[]>(),
+      supabase
+        .from("team_recording_tracks")
+        .select("id, status, object_key, updated_at")
+        .eq("status", "replaced")
+        .not("object_key", "is", null)
+        .returns<CleanupTrackRow[]>(),
     ]);
 
-    const queryError = staleUploads.error ?? staleFailed.error ?? deletedWithObjects.error;
+    const queryError = staleUploads.error ?? staleFailed.error ?? deletedWithObjects.error ?? replacedWithObjects.error;
     if (queryError) {
       return NextResponse.json({ error: queryError.message || "정리 대상 조회에 실패했습니다." }, { status: 500 });
     }
 
     const rowsById = new Map<string, CleanupTrackRow>();
-    [...(staleUploads.data ?? []), ...(staleFailed.data ?? []), ...(deletedWithObjects.data ?? [])].forEach((row) => {
+    [
+      ...(staleUploads.data ?? []),
+      ...(staleFailed.data ?? []),
+      ...(deletedWithObjects.data ?? []),
+      ...(replacedWithObjects.data ?? []),
+    ].forEach((row) => {
       rowsById.set(row.id, row);
     });
 
@@ -77,7 +89,7 @@ export async function POST(request: Request) {
       if (deleteResult.ok && !deleteResult.skipped) counters.deletedObjects += 1;
       if (!deleteResult.ok) counters.failed += 1;
 
-      const nextStatus = row.status === "deleted" ? "deleted" : "deleted";
+      const nextStatus = row.status === "replaced" ? "replaced" : "deleted";
       const { error: updateError } = await supabase
         .from("team_recording_tracks")
         .update({
@@ -93,7 +105,7 @@ export async function POST(request: Request) {
         continue;
       }
 
-      if (row.status !== "deleted") counters.markedDeleted += 1;
+      if (row.status !== nextStatus) counters.markedDeleted += 1;
     }
 
     return NextResponse.json(counters);

@@ -895,6 +895,70 @@ before update on public.team_recording_tracks
 for each row
 execute function public.set_updated_at();
 
+create table if not exists public.team_recording_limits (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams(id) on delete cascade,
+  plan text not null default 'free',
+  monthly_sessions_limit integer not null default 3,
+  tracks_per_session_limit integer not null default 12,
+  versions_per_user_part_limit integer not null default 2,
+  max_track_size_bytes bigint not null default 31457280,
+  max_track_duration_seconds integer not null default 600,
+  retention_days integer not null default 60,
+  is_unlimited boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_recording_limits_team_unique unique (team_id),
+  constraint team_recording_limits_plan_check check (plan in ('free', 'beta', 'pro', 'custom')),
+  constraint team_recording_limits_positive_check check (
+    monthly_sessions_limit >= 0
+    and tracks_per_session_limit >= 0
+    and versions_per_user_part_limit >= 0
+    and max_track_size_bytes >= 0
+    and max_track_duration_seconds >= 0
+    and retention_days >= 0
+  )
+);
+
+create index if not exists team_recording_limits_team_idx
+on public.team_recording_limits (team_id);
+
+drop trigger if exists team_recording_limits_set_updated_at on public.team_recording_limits;
+create trigger team_recording_limits_set_updated_at
+before update on public.team_recording_limits
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.team_recording_usage_monthly (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams(id) on delete cascade,
+  year_month text not null,
+  sessions_created_count integer not null default 0,
+  tracks_uploaded_count integer not null default 0,
+  storage_bytes_used bigint not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_recording_usage_monthly_team_month_unique unique (team_id, year_month),
+  constraint team_recording_usage_monthly_year_month_check check (year_month ~ '^[0-9]{4}-[0-9]{2}$'),
+  constraint team_recording_usage_monthly_positive_check check (
+    sessions_created_count >= 0
+    and tracks_uploaded_count >= 0
+    and storage_bytes_used >= 0
+  )
+);
+
+create index if not exists team_recording_usage_monthly_team_idx
+on public.team_recording_usage_monthly (team_id);
+
+create index if not exists team_recording_usage_monthly_year_month_idx
+on public.team_recording_usage_monthly (year_month);
+
+drop trigger if exists team_recording_usage_monthly_set_updated_at on public.team_recording_usage_monthly;
+create trigger team_recording_usage_monthly_set_updated_at
+before update on public.team_recording_usage_monthly
+for each row
+execute function public.set_updated_at();
+
 create table if not exists public.shared_setlists (
   id uuid primary key default gen_random_uuid(),
   share_slug text not null unique,
@@ -1072,6 +1136,8 @@ alter table public.setlist_assignments enable row level security;
 alter table public.team_guide_tracks enable row level security;
 alter table public.team_recording_sessions enable row level security;
 alter table public.team_recording_tracks enable row level security;
+alter table public.team_recording_limits enable row level security;
+alter table public.team_recording_usage_monthly enable row level security;
 alter table public.shared_setlists enable row level security;
 alter table public.notifications enable row level security;
 alter table public.push_subscriptions enable row level security;
@@ -3516,6 +3582,49 @@ using (
     team_id is not null
     and public.is_team_admin(team_id, auth.uid())
   )
+);
+
+drop policy if exists "team_recording_limits_select_member" on public.team_recording_limits;
+create policy "team_recording_limits_select_member"
+on public.team_recording_limits
+for select
+using (
+  public.is_team_approved_member(team_id, auth.uid())
+);
+
+drop policy if exists "team_recording_limits_insert_admin" on public.team_recording_limits;
+create policy "team_recording_limits_insert_admin"
+on public.team_recording_limits
+for insert
+with check (
+  public.is_team_admin(team_id, auth.uid())
+);
+
+drop policy if exists "team_recording_limits_update_admin" on public.team_recording_limits;
+create policy "team_recording_limits_update_admin"
+on public.team_recording_limits
+for update
+using (
+  public.is_team_admin(team_id, auth.uid())
+)
+with check (
+  public.is_team_admin(team_id, auth.uid())
+);
+
+drop policy if exists "team_recording_limits_delete_admin" on public.team_recording_limits;
+create policy "team_recording_limits_delete_admin"
+on public.team_recording_limits
+for delete
+using (
+  public.is_team_admin(team_id, auth.uid())
+);
+
+drop policy if exists "team_recording_usage_monthly_select_member" on public.team_recording_usage_monthly;
+create policy "team_recording_usage_monthly_select_member"
+on public.team_recording_usage_monthly
+for select
+using (
+  public.is_team_approved_member(team_id, auth.uid())
 );
 
 drop policy if exists "shared_setlists_select_public" on public.shared_setlists;

@@ -8,7 +8,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-export const MAX_RECORDING_UPLOAD_BYTES = 50 * 1024 * 1024;
+export const MAX_RECORDING_UPLOAD_BYTES = 30 * 1024 * 1024;
 export const RECORDING_PRESIGNED_EXPIRES_IN_SECONDS = 60 * 15;
 
 export const ALLOWED_RECORDING_MIME_TYPES = [
