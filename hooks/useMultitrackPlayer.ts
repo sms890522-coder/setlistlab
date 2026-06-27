@@ -1,6 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DEFAULT_TRACK_EFFECTS,
+  dbToGain,
+  getCompressorValues,
+  getReverbValues,
+  normalizeTrackEffects,
+  type TrackEffectSettings,
+} from "@/lib/audio/trackEffects";
 
 export type MultitrackSource = {
   id: string;
@@ -17,11 +25,21 @@ export type TrackMixState = {
   volume: number;
   pan: number;
   latencyOffsetMs: number;
+  effects: TrackEffectSettings;
 };
 
 type AudioNodeSet = {
   source: MediaElementAudioSourceNode;
-  gain: GainNode;
+  inputGain: GainNode;
+  lowEq: BiquadFilterNode;
+  midEq: BiquadFilterNode;
+  highEq: BiquadFilterNode;
+  compressor: DynamicsCompressorNode;
+  dryGain: GainNode;
+  reverbDelay: DelayNode;
+  reverbFeedback: GainNode;
+  reverbWetGain: GainNode;
+  trackGain: GainNode;
   panner?: StereoPannerNode;
 };
 
@@ -37,9 +55,11 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [panSupported, setPanSupported] = useState(false);
+  const [masterVolume, setMasterVolumeState] = useState(1);
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const audioNodesRef = useRef<Record<string, AudioNodeSet>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
+  const masterGainRef = useRef<GainNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const startTimersRef = useRef<Record<string, number>>({});
   const currentTimeRef = useRef(0);
@@ -68,6 +88,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
             volume: source.defaultVolume ?? 1,
             pan: 0,
             latencyOffsetMs: source.defaultLatencyOffsetMs ?? 0,
+            effects: DEFAULT_TRACK_EFFECTS,
           };
         }
       });
@@ -118,27 +139,83 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     return audioContextRef.current;
   }, []);
 
+  const getMasterGain = useCallback(
+    (context: AudioContext) => {
+      if (!masterGainRef.current) {
+        const masterGain = context.createGain();
+        masterGain.gain.value = masterVolume;
+        masterGain.connect(context.destination);
+        masterGainRef.current = masterGain;
+      }
+
+      return masterGainRef.current;
+    },
+    [masterVolume],
+  );
+
   const ensureAudioNodes = useCallback(
     (trackId: string, audio: HTMLAudioElement) => {
       if (audioNodesRef.current[trackId]) return audioNodesRef.current[trackId];
 
       try {
         const context = getAudioContext();
+        const masterGain = getMasterGain(context);
         const source = context.createMediaElementSource(audio);
-        const gain = context.createGain();
+        const inputGain = context.createGain();
+        const lowEq = context.createBiquadFilter();
+        const midEq = context.createBiquadFilter();
+        const highEq = context.createBiquadFilter();
+        const compressor = context.createDynamicsCompressor();
+        const dryGain = context.createGain();
+        const reverbDelay = context.createDelay(1.5);
+        const reverbFeedback = context.createGain();
+        const reverbWetGain = context.createGain();
+        const trackGain = context.createGain();
         const panner = "createStereoPanner" in context ? context.createStereoPanner() : undefined;
+
+        lowEq.type = "lowshelf";
+        lowEq.frequency.value = 120;
+        midEq.type = "peaking";
+        midEq.frequency.value = 1000;
+        midEq.Q.value = 1;
+        highEq.type = "highshelf";
+        highEq.frequency.value = 8000;
+
+        source.connect(inputGain).connect(lowEq).connect(midEq).connect(highEq).connect(compressor);
+        compressor.connect(dryGain);
+        compressor.connect(reverbDelay);
+        reverbDelay.connect(reverbWetGain);
+        reverbDelay.connect(reverbFeedback).connect(reverbDelay);
+
         if (panner) {
-          source.connect(gain).connect(panner).connect(context.destination);
+          dryGain.connect(panner);
+          reverbWetGain.connect(panner);
+          panner.connect(trackGain).connect(masterGain);
         } else {
-          source.connect(gain).connect(context.destination);
+          dryGain.connect(trackGain);
+          reverbWetGain.connect(trackGain);
+          trackGain.connect(masterGain);
         }
-        audioNodesRef.current[trackId] = { source, gain, panner };
+        audioNodesRef.current[trackId] = {
+          source,
+          inputGain,
+          lowEq,
+          midEq,
+          highEq,
+          compressor,
+          dryGain,
+          reverbDelay,
+          reverbFeedback,
+          reverbWetGain,
+          trackGain,
+          panner,
+        };
         return audioNodesRef.current[trackId];
       } catch {
         return null;
       }
     },
-    [getAudioContext],
+    [getAudioContext, getMasterGain],
   );
 
   const applyMixToAudio = useCallback(
@@ -147,20 +224,23 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
       const audible = hasSolo ? Boolean(state?.solo) : !state?.muted;
       const volume = Math.max(0, Math.min(1, state?.volume ?? 1));
       const pan = Math.max(-1, Math.min(1, state?.pan ?? 0));
+      const effects = normalizeTrackEffects(state?.effects);
       const nodes = audioNodesRef.current[trackId] ?? ensureAudioNodes(trackId, audio);
 
       if (nodes) {
         audio.muted = false;
         audio.volume = 1;
-        nodes.gain.gain.value = audible ? volume : 0;
+        applyEffectsToNodes(nodes, effects);
+        nodes.trackGain.gain.value = audible ? volume : 0;
         if (nodes.panner) nodes.panner.pan.value = pan;
+        if (masterGainRef.current) masterGainRef.current.gain.value = masterVolume;
         return;
       }
 
       audio.muted = !audible;
       audio.volume = volume;
     },
-    [ensureAudioNodes, hasSolo, mixState],
+    [ensureAudioNodes, hasSolo, masterVolume, mixState],
   );
 
   const ensureAudio = useCallback(
@@ -325,13 +405,14 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
         volume: current[trackId]?.volume ?? 1,
         pan: current[trackId]?.pan ?? 0,
         latencyOffsetMs: current[trackId]?.latencyOffsetMs ?? 0,
+        effects: current[trackId]?.effects ?? DEFAULT_TRACK_EFFECTS,
       },
     }));
   }, []);
 
   const toggleSolo = useCallback((trackId: string) => {
     setMixState((current) => {
-      const previous = current[trackId] ?? { muted: false, solo: false, volume: 1, pan: 0, latencyOffsetMs: 0 };
+      const previous = current[trackId] ?? createDefaultMixState();
       return {
         ...current,
         [trackId]: {
@@ -352,6 +433,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
         volume: Math.max(0, Math.min(1, volume)),
         pan: current[trackId]?.pan ?? 0,
         latencyOffsetMs: current[trackId]?.latencyOffsetMs ?? 0,
+        effects: current[trackId]?.effects ?? DEFAULT_TRACK_EFFECTS,
       },
     }));
   }, []);
@@ -365,6 +447,21 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
         volume: current[trackId]?.volume ?? 1,
         pan: Math.max(-1, Math.min(1, pan)),
         latencyOffsetMs: current[trackId]?.latencyOffsetMs ?? 0,
+        effects: current[trackId]?.effects ?? DEFAULT_TRACK_EFFECTS,
+      },
+    }));
+  }, []);
+
+  const setEffects = useCallback((trackId: string, effects: TrackEffectSettings) => {
+    setMixState((current) => ({
+      ...current,
+      [trackId]: {
+        muted: current[trackId]?.muted ?? false,
+        solo: current[trackId]?.solo ?? false,
+        volume: current[trackId]?.volume ?? 1,
+        pan: current[trackId]?.pan ?? 0,
+        latencyOffsetMs: current[trackId]?.latencyOffsetMs ?? 0,
+        effects: normalizeTrackEffects(effects),
       },
     }));
   }, []);
@@ -380,6 +477,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
           volume: current[trackId]?.volume ?? 1,
           pan: current[trackId]?.pan ?? 0,
           latencyOffsetMs: safeValue,
+          effects: current[trackId]?.effects ?? DEFAULT_TRACK_EFFECTS,
         },
       }));
 
@@ -392,6 +490,12 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     [scheduleAudioAtTimelineWithOffset, sourceById],
   );
 
+  const setMasterVolume = useCallback((volume: number) => {
+    const safeVolume = Math.max(0, Math.min(1, volume));
+    setMasterVolumeState(safeVolume);
+    if (masterGainRef.current) masterGainRef.current.gain.value = safeVolume;
+  }, []);
+
   useEffect(() => {
     return () => {
       stop();
@@ -401,6 +505,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
       });
       audioRefs.current = {};
       audioNodesRef.current = {};
+      masterGainRef.current = null;
       void audioContextRef.current?.close?.();
       audioContextRef.current = null;
     };
@@ -408,6 +513,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
 
   return {
     mixState,
+    masterVolume,
     currentTime,
     duration,
     playing,
@@ -422,6 +528,39 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     toggleSolo,
     setVolume,
     setPan,
+    setEffects,
     setLatencyOffset,
+    setMasterVolume,
   };
+}
+
+function createDefaultMixState(): TrackMixState {
+  return {
+    muted: false,
+    solo: false,
+    volume: 1,
+    pan: 0,
+    latencyOffsetMs: 0,
+    effects: DEFAULT_TRACK_EFFECTS,
+  };
+}
+
+function applyEffectsToNodes(nodes: AudioNodeSet, effects: TrackEffectSettings) {
+  const normalized = normalizeTrackEffects(effects);
+  nodes.inputGain.gain.value = dbToGain(normalized.gainDb);
+  nodes.lowEq.gain.value = normalized.eq.lowGainDb;
+  nodes.midEq.gain.value = normalized.eq.midGainDb;
+  nodes.highEq.gain.value = normalized.eq.highGainDb;
+
+  const compressor = getCompressorValues(normalized.compressor.enabled ? normalized.compressor.preset : "off");
+  nodes.compressor.threshold.value = compressor.threshold;
+  nodes.compressor.ratio.value = compressor.ratio;
+  nodes.compressor.attack.value = compressor.attack;
+  nodes.compressor.release.value = compressor.release;
+
+  const reverb = getReverbValues(normalized.reverb.type);
+  nodes.reverbDelay.delayTime.value = reverb.delayTime;
+  nodes.reverbFeedback.gain.value = normalized.reverb.type === "off" ? 0 : reverb.feedback;
+  nodes.reverbWetGain.gain.value = normalized.reverb.type === "off" ? 0 : normalized.reverb.amount;
+  nodes.dryGain.gain.value = normalized.reverb.type === "off" ? 1 : Math.max(0.55, 1 - normalized.reverb.amount * 0.35);
 }

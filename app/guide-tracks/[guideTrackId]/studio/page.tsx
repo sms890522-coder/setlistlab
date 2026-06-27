@@ -10,6 +10,14 @@ import { useMultitrackPlayer, type TrackMixState } from "@/hooks/useMultitrackPl
 import { audioBufferToWav, downloadBlob } from "@/lib/audio/exportWav";
 import { renderMixdownToWavBlob, type MixdownTrackSource } from "@/lib/audio/mixdown";
 import { renderGuideTrackToAudioBuffer } from "@/lib/audio/renderGuideTrack";
+import {
+  DEFAULT_TRACK_EFFECTS,
+  normalizeTrackEffects,
+  volumeToDb,
+  type CompressorPreset,
+  type ReverbType,
+  type TrackEffectSettings,
+} from "@/lib/audio/trackEffects";
 import { createSyntheticGuidePeaks, getAudioPeaksFromUrl } from "@/lib/audio/waveform";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile, type Profile } from "@/lib/db/profiles";
@@ -83,6 +91,7 @@ export default function GuideTrackStudioPage() {
   const [skipInputTest, setSkipInputTest] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [usageSummary, setUsageSummary] = useState<TeamRecordingUsageSummary | null>(null);
+  const [effectTrackId, setEffectTrackId] = useState("");
 
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
@@ -95,6 +104,17 @@ export default function GuideTrackStudioPage() {
     () => orderedTracks.find((track) => track.id === selectedTrackId) ?? null,
     [orderedTracks, selectedTrackId],
   );
+  const effectTarget = useMemo(() => {
+    if (effectTrackId === GUIDE_TRACK_ID) return { id: GUIDE_TRACK_ID, label: "Guide", theme: GUIDE_TRACK_THEME };
+    const track = orderedTracks.find((item) => item.id === effectTrackId);
+    return track
+      ? {
+          id: track.id,
+          label: track.part || track.profile?.displayName || "트랙",
+          theme: getTrackTheme(track.part || track.title || track.id),
+        }
+      : null;
+  }, [effectTrackId, orderedTracks]);
   const studioDuration = Math.max(guideAudioDuration, fallbackGuideDuration, ...tracks.map((track) => track.durationSeconds ?? 0), 1);
 
   const ensureReadUrl = useCallback(
@@ -391,6 +411,7 @@ export default function GuideTrackStudioPage() {
           url: guideAudioUrl,
           volume: player.mixState[GUIDE_TRACK_ID]?.volume ?? 0.8,
           pan: player.mixState[GUIDE_TRACK_ID]?.pan ?? 0,
+          effects: player.mixState[GUIDE_TRACK_ID]?.effects,
         });
       }
 
@@ -402,12 +423,14 @@ export default function GuideTrackStudioPage() {
           volume: player.mixState[track.id]?.volume ?? 1,
           pan: player.mixState[track.id]?.pan ?? 0,
           offsetMs: track.recordingOffsetMs + (player.mixState[track.id]?.latencyOffsetMs ?? track.latencyOffsetMs),
+          effects: player.mixState[track.id]?.effects,
         });
       }
 
       const wavBlob = await renderMixdownToWavBlob({
         tracks: mixSources,
         durationSeconds: player.duration,
+        masterVolume: player.masterVolume,
       });
       const filename = `setlistlab-mix-${sanitizeFilenamePart(song.title)}-${new Date().toISOString().slice(0, 10)}.wav`;
       downloadBlob(wavBlob, filename);
@@ -636,6 +659,18 @@ export default function GuideTrackStudioPage() {
         </div>
       </section>
 
+      <StudioMixerSection
+        orderedTracks={orderedTracks}
+        myUserId={myUserId}
+        mixState={player.mixState}
+        masterVolume={player.masterVolume}
+        panSupported={player.panSupported}
+        onMasterVolumeChange={player.setMasterVolume}
+        onVolumeChange={player.setVolume}
+        onPanChange={player.setPan}
+        onOpenEffects={setEffectTrackId}
+      />
+
       <section ref={recordingPanelRef} className="card scroll-mt-28 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -856,6 +891,16 @@ export default function GuideTrackStudioPage() {
         <p className="mt-2">이 기능은 실험실 기능입니다. 브라우저와 기기 환경에 따라 재생 싱크와 녹음 동작이 다를 수 있습니다.</p>
         <p className="mt-1">녹음 중에는 화면을 끄거나 다른 앱으로 이동하지 않는 것을 권장합니다.</p>
       </section>
+
+      {effectTarget ? (
+        <TrackEffectsModal
+          trackLabel={effectTarget.label}
+          theme={effectTarget.theme}
+          effects={player.mixState[effectTarget.id]?.effects ?? DEFAULT_TRACK_EFFECTS}
+          onPreview={(effects) => player.setEffects(effectTarget.id, effects)}
+          onClose={() => setEffectTrackId("")}
+        />
+      ) : null}
     </div>
   );
 }
@@ -952,6 +997,510 @@ function UsageChip({ label, value }: { label: string; value: string }) {
       <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-1 text-sm font-black text-slate-950">{value}</p>
     </div>
+  );
+}
+
+function StudioMixerSection({
+  orderedTracks,
+  myUserId,
+  mixState,
+  masterVolume,
+  panSupported,
+  onMasterVolumeChange,
+  onVolumeChange,
+  onPanChange,
+  onOpenEffects,
+}: {
+  orderedTracks: TeamRecordingTrack[];
+  myUserId: string;
+  mixState: Record<string, TrackMixState>;
+  masterVolume: number;
+  panSupported: boolean;
+  onMasterVolumeChange: (volume: number) => void;
+  onVolumeChange: (trackId: string, volume: number) => void;
+  onPanChange: (trackId: string, pan: number) => void;
+  onOpenEffects: (trackId: string) => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-black text-slate-950">믹서</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            각 트랙의 좌우 위치와 소리 크기를 조절할 수 있습니다. 자세한 소리 보정은 이펙터에서 조절하세요.
+          </p>
+        </div>
+        <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+          현재 믹서 설정으로 다운로드
+        </span>
+      </div>
+
+      <div className="mt-4 overflow-x-auto pb-2">
+        <div className="flex min-w-max gap-3">
+          <MasterMixerChannel volume={masterVolume} onVolumeChange={onMasterVolumeChange} />
+          <MixerChannel
+            id={GUIDE_TRACK_ID}
+            icon={GUIDE_TRACK_THEME.icon}
+            title="Guide"
+            subtitle="가이드"
+            theme={GUIDE_TRACK_THEME}
+            mix={mixState[GUIDE_TRACK_ID]}
+            panSupported={panSupported}
+            onVolumeChange={onVolumeChange}
+            onPanChange={onPanChange}
+            onOpenEffects={onOpenEffects}
+          />
+          {orderedTracks.map((track) => {
+            const theme = getTrackTheme(track.part || track.title || track.id);
+            return (
+              <MixerChannel
+                key={track.id}
+                id={track.id}
+                icon={theme.icon}
+                title={track.part || "파트"}
+                subtitle={track.userId === myUserId ? "내 녹음" : track.profile?.displayName || "팀원"}
+                theme={theme}
+                mix={mixState[track.id]}
+                panSupported={panSupported}
+                onVolumeChange={onVolumeChange}
+                onPanChange={onPanChange}
+                onOpenEffects={onOpenEffects}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MasterMixerChannel({
+  volume,
+  onVolumeChange,
+}: {
+  volume: number;
+  onVolumeChange: (volume: number) => void;
+}) {
+  return (
+    <article className="flex w-28 shrink-0 flex-col items-center rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <div className="grid size-10 place-items-center rounded-2xl bg-slate-900 text-lg text-white" aria-hidden="true">
+        🎚️
+      </div>
+      <h3 className="mt-2 w-full truncate text-center text-sm font-black text-slate-950">Master</h3>
+      <p className="mt-0.5 text-center text-[11px] font-bold text-slate-500">전체 출력</p>
+      <div className="mt-5 flex flex-1 flex-col items-center justify-center">
+        <VerticalVolumeFader
+          value={volume}
+          accent="#0f172a"
+          label="Master 볼륨"
+          onChange={onVolumeChange}
+        />
+      </div>
+      <p className="mt-3 text-xs font-black text-slate-600">{volumeToDb(volume)}</p>
+      <button
+        type="button"
+        disabled
+        className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-black text-slate-300"
+        title="Master 이펙터는 준비 중입니다."
+      >
+        이펙터
+      </button>
+    </article>
+  );
+}
+
+function MixerChannel({
+  id,
+  icon,
+  title,
+  subtitle,
+  theme,
+  mix,
+  panSupported,
+  onVolumeChange,
+  onPanChange,
+  onOpenEffects,
+}: {
+  id: string;
+  icon: string;
+  title: string;
+  subtitle: string;
+  theme: StudioTrackTheme;
+  mix?: TrackMixState;
+  panSupported: boolean;
+  onVolumeChange: (trackId: string, volume: number) => void;
+  onPanChange: (trackId: string, pan: number) => void;
+  onOpenEffects: (trackId: string) => void;
+}) {
+  const volume = mix?.volume ?? (id === GUIDE_TRACK_ID ? 0.8 : 1);
+  const pan = mix?.pan ?? 0;
+
+  return (
+    <article className="flex w-28 shrink-0 flex-col items-center rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div
+        className="grid size-10 place-items-center rounded-2xl text-lg"
+        style={{ backgroundColor: theme.soft, color: theme.accent }}
+        aria-hidden="true"
+      >
+        {icon}
+      </div>
+      <h3 className="mt-2 w-full truncate text-center text-sm font-black text-slate-950">{title}</h3>
+      <p className="mt-0.5 w-full truncate text-center text-[11px] font-bold text-slate-500">{subtitle}</p>
+      <div className="mt-3 w-full">
+        <p className="text-center text-[10px] font-black uppercase text-slate-400">Pan</p>
+        <PanButtonGroup
+          trackId={id}
+          pan={pan}
+          accent={theme.accent}
+          disabled={!panSupported}
+          onChange={onPanChange}
+        />
+      </div>
+      <div className="mt-4 flex flex-1 flex-col items-center justify-center">
+        <VerticalVolumeFader
+          value={volume}
+          accent={theme.accent}
+          label={`${title} 볼륨`}
+          onChange={(nextVolume) => onVolumeChange(id, nextVolume)}
+        />
+      </div>
+      <p className="mt-3 text-xs font-black text-slate-600">{volumeToDb(volume)}</p>
+      <button
+        type="button"
+        onClick={() => onOpenEffects(id)}
+        className="mt-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-black text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
+      >
+        이펙터
+      </button>
+    </article>
+  );
+}
+
+function VerticalVolumeFader({
+  value,
+  accent,
+  label,
+  onChange,
+}: {
+  value: number;
+  accent: string;
+  label: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex h-36 items-center justify-center rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={Math.max(0, Math.min(1, value))}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-28 w-8 cursor-pointer"
+        style={{
+          accentColor: accent,
+          writingMode: "vertical-lr",
+          direction: "rtl",
+        }}
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
+function PanButtonGroup({
+  trackId,
+  pan,
+  accent,
+  disabled,
+  onChange,
+}: {
+  trackId: string;
+  pan: number;
+  accent: string;
+  disabled: boolean;
+  onChange: (trackId: string, pan: number) => void;
+}) {
+  const items = [
+    { label: "L", value: -1 },
+    { label: "C", value: 0 },
+    { label: "R", value: 1 },
+  ];
+
+  return (
+    <div className="mt-1 grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      {items.map((item) => {
+        const selected = item.value === 0 ? Math.abs(pan) < 0.1 : item.value < 0 ? pan <= -0.1 : pan >= 0.1;
+        return (
+          <button
+            key={item.label}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(trackId, item.value)}
+            className="px-2 py-1.5 text-[11px] font-black transition disabled:cursor-not-allowed disabled:opacity-40"
+            style={{
+              backgroundColor: selected ? accent : undefined,
+              color: selected ? "white" : undefined,
+            }}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrackEffectsModal({
+  trackLabel,
+  theme,
+  effects,
+  onPreview,
+  onClose,
+}: {
+  trackLabel: string;
+  theme: StudioTrackTheme;
+  effects: TrackEffectSettings;
+  onPreview: (effects: TrackEffectSettings) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(() => normalizeTrackEffects(effects));
+
+  useEffect(() => {
+    setDraft(normalizeTrackEffects(effects));
+  }, [effects]);
+
+  function updateDraft(next: TrackEffectSettings) {
+    const normalized = normalizeTrackEffects(next);
+    setDraft(normalized);
+    onPreview(normalized);
+  }
+
+  function updateCompressor(preset: CompressorPreset) {
+    updateDraft({
+      ...draft,
+      compressor: {
+        enabled: preset !== "off",
+        preset,
+      },
+    });
+  }
+
+  function updateReverb(type: ReverbType) {
+    updateDraft({
+      ...draft,
+      reverb: {
+        type,
+        amount: type === "off" ? 0 : draft.reverb.amount || 0.25,
+      },
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true">
+      <section className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:mx-auto sm:max-w-2xl sm:rounded-3xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-black" style={{ color: theme.accent }}>
+              이펙터
+            </p>
+            <h2 className="mt-1 text-2xl font-black text-slate-950">{trackLabel} 이펙터</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Gain, EQ, Compressor, Reverb는 이 창에서만 조절합니다. 변경값은 재생과 현재 믹스 다운로드에 반영됩니다.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-500">
+            닫기
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4">
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <h3 className="font-black text-slate-950">Gain</h3>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">녹음 원본의 기본 소리 크기를 보정합니다.</p>
+            <EffectSlider
+              label="Gain"
+              value={draft.gainDb}
+              min={-12}
+              max={12}
+              step={0.5}
+              unit="dB"
+              accent={theme.accent}
+              onChange={(value) => updateDraft({ ...draft, gainDb: value })}
+            />
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <h3 className="font-black text-slate-950">EQ</h3>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">저음, 중음, 고음을 간단히 조절합니다.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <EffectSlider
+                label="저음"
+                value={draft.eq.lowGainDb}
+                min={-12}
+                max={12}
+                step={1}
+                unit="dB"
+                accent={theme.accent}
+                onChange={(value) => updateDraft({ ...draft, eq: { ...draft.eq, lowGainDb: value } })}
+              />
+              <EffectSlider
+                label="중음"
+                value={draft.eq.midGainDb}
+                min={-12}
+                max={12}
+                step={1}
+                unit="dB"
+                accent={theme.accent}
+                onChange={(value) => updateDraft({ ...draft, eq: { ...draft.eq, midGainDb: value } })}
+              />
+              <EffectSlider
+                label="고음"
+                value={draft.eq.highGainDb}
+                min={-12}
+                max={12}
+                step={1}
+                unit="dB"
+                accent={theme.accent}
+                onChange={(value) => updateDraft({ ...draft, eq: { ...draft.eq, highGainDb: value } })}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <h3 className="font-black text-slate-950">Compressor</h3>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">소리 크기 차이를 줄여 더 안정적으로 들리게 합니다.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["off", "끔"],
+                ["light", "약하게"],
+                ["medium", "보통"],
+                ["strong", "강하게"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => updateCompressor(value as CompressorPreset)}
+                  className={`rounded-xl px-3 py-2 text-sm font-black transition ${
+                    draft.compressor.preset === value ? "text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                  style={{ backgroundColor: draft.compressor.preset === value ? theme.accent : undefined }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <h3 className="font-black text-slate-950">Reverb</h3>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">공간감을 추가합니다. 너무 많이 넣으면 소리가 흐려질 수 있습니다.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["off", "끔"],
+                ["small_room", "작은 공간"],
+                ["chapel", "예배당"],
+                ["wide_hall", "넓은 홀"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => updateReverb(value as ReverbType)}
+                  className={`rounded-xl px-3 py-2 text-sm font-black transition ${
+                    draft.reverb.type === value ? "text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                  style={{ backgroundColor: draft.reverb.type === value ? theme.accent : undefined }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <EffectSlider
+              label="리버브 양"
+              value={Math.round(draft.reverb.amount * 100)}
+              min={0}
+              max={100}
+              step={1}
+              unit="%"
+              accent={theme.accent}
+              disabled={draft.reverb.type === "off"}
+              onChange={(value) => updateDraft({ ...draft, reverb: { ...draft.reverb, amount: value / 100 } })}
+            />
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 mt-5 grid gap-2 bg-white pt-3 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => updateDraft(DEFAULT_TRACK_EFFECTS)}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50"
+          >
+            초기화
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl px-4 py-3 text-sm font-black text-white transition"
+            style={{ backgroundColor: theme.accent }}
+          >
+            적용
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-200"
+          >
+            닫기
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function EffectSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  unit,
+  accent,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+  accent: string;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className={disabled ? "mt-3 block opacity-45" : "mt-3 block"}>
+      <span className="flex items-center justify-between gap-3 text-xs font-black text-slate-500">
+        <span>{label}</span>
+        <span className="text-slate-900">
+          {value}
+          {unit}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="mt-2 w-full"
+        style={{ accentColor: accent }}
+        aria-label={label}
+      />
+    </label>
   );
 }
 
