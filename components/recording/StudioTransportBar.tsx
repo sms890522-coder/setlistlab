@@ -39,16 +39,29 @@ export function StudioTransportBar({
   onRecord,
 }: StudioTransportBarProps) {
   return (
-    <section className="sticky top-16 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
-      <div className="grid gap-4 lg:grid-cols-[auto_minmax(220px,300px)_minmax(280px,1fr)] lg:items-center">
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={onRewind} className="btn-secondary min-h-11">
+    <section className="sticky top-[4.25rem] z-20 max-h-[calc(100dvh-4.75rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur sm:top-16 sm:max-h-none sm:overflow-visible sm:p-4">
+      <div className="grid gap-2 sm:gap-4 lg:grid-cols-[auto_minmax(220px,300px)_minmax(280px,1fr)] lg:items-center">
+        <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">
+          <button
+            type="button"
+            onClick={onRewind}
+            className="min-h-10 rounded-xl border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50 sm:min-h-11 sm:px-4 sm:text-sm"
+          >
             처음으로
           </button>
-          <button type="button" onClick={onPlayPause} disabled={loading} className="btn-primary min-h-11">
+          <button
+            type="button"
+            onClick={onPlayPause}
+            disabled={loading}
+            className="min-h-10 rounded-xl bg-blue-600 px-2 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-11 sm:px-5 sm:text-sm"
+          >
             {loading ? "준비 중..." : playing ? "일시정지" : "재생"}
           </button>
-          <button type="button" onClick={onStop} className="btn-secondary min-h-11">
+          <button
+            type="button"
+            onClick={onStop}
+            className="min-h-10 rounded-xl border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50 sm:min-h-11 sm:px-4 sm:text-sm"
+          >
             정지
           </button>
           <button
@@ -56,15 +69,15 @@ export function StudioTransportBar({
             onClick={onRecord}
             className={
               recording
-                ? "min-h-11 rounded-xl bg-rose-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-rose-700"
-                : "min-h-11 rounded-xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-slate-800"
+                ? "min-h-10 rounded-xl bg-rose-600 px-2 text-[11px] font-black text-white shadow-sm transition hover:bg-rose-700 sm:min-h-11 sm:px-5 sm:text-sm"
+                : "min-h-10 rounded-xl bg-slate-950 px-2 text-[11px] font-black text-white shadow-sm transition hover:bg-slate-800 sm:min-h-11 sm:px-5 sm:text-sm"
             }
           >
             {recording ? "녹음 중지" : "녹음"}
           </button>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
+        <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-2 py-2 sm:rounded-2xl sm:px-3">
           {syncControl ? (
             <div className={syncControl.canAdjust ? "space-y-2" : "space-y-2 opacity-55"}>
               <div className="flex items-center justify-between gap-2">
@@ -90,7 +103,7 @@ export function StudioTransportBar({
                   type="button"
                   disabled={!syncControl.canAdjust}
                   onClick={() => syncControl.onCommit(syncControl.value - 50)}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 disabled:cursor-not-allowed sm:text-xs"
                 >
                   -50
                 </button>
@@ -111,7 +124,7 @@ export function StudioTransportBar({
                   type="button"
                   disabled={!syncControl.canAdjust}
                   onClick={() => syncControl.onCommit(syncControl.value + 50)}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 disabled:cursor-not-allowed sm:text-xs"
                 >
                   +50
                 </button>
@@ -119,14 +132,14 @@ export function StudioTransportBar({
                   type="button"
                   disabled={!syncControl.canAdjust}
                   onClick={() => syncControl.onCommit(0)}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-500 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-500 disabled:cursor-not-allowed sm:text-xs"
                 >
                   0
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex min-h-14 items-center text-xs font-bold leading-5 text-slate-500">
+            <div className="flex min-h-10 items-center text-xs font-bold leading-5 text-slate-500 sm:min-h-14">
               트랙을 선택하면 이곳에서 싱크를 조절할 수 있습니다.
             </div>
           )}
