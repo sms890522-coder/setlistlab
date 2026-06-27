@@ -139,6 +139,18 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     return audioContextRef.current;
   }, []);
 
+  const startAudioEngine = useCallback(async () => {
+    try {
+      const context = getAudioContext();
+      if (context.state === "suspended") {
+        await context.resume();
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, [getAudioContext]);
+
   const getMasterGain = useCallback(
     (context: AudioContext) => {
       if (!masterGainRef.current) {
@@ -229,16 +241,17 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
 
       if (nodes) {
         audio.muted = false;
-        audio.volume = 1;
+        audio.volume = audible ? volume : 0;
         applyEffectsToNodes(nodes, effects);
-        nodes.trackGain.gain.value = audible ? volume : 0;
-        if (nodes.panner) nodes.panner.pan.value = pan;
-        if (masterGainRef.current) masterGainRef.current.gain.value = masterVolume;
+        const now = nodes.trackGain.context.currentTime;
+        setAudioParamValue(nodes.trackGain.gain, audible ? 1 : 0, now);
+        if (nodes.panner) setAudioParamValue(nodes.panner.pan, pan, now);
+        if (masterGainRef.current) setAudioParamValue(masterGainRef.current.gain, masterVolume, now);
         return;
       }
 
       audio.muted = !audible;
-      audio.volume = volume;
+      audio.volume = audible ? volume : 0;
     },
     [ensureAudioNodes, hasSolo, masterVolume, mixState],
   );
@@ -341,7 +354,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     try {
       clearStartTimers();
       pauseAudiosOnly();
-      await audioContextRef.current?.resume?.();
+      await startAudioEngine();
       const audios = await Promise.all(audibleIds.map(async (trackId) => [trackId, await ensureAudio(trackId)] as const));
       playStartMsRef.current = performance.now() - currentTimeRef.current * 1000;
       playingRef.current = true;
@@ -351,7 +364,31 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     } finally {
       setLoading(false);
     }
-  }, [clearStartTimers, ensureAudio, getAudibleSourceIds, pauseAudiosOnly, scheduleAudioAtTimeline, startProgressLoop]);
+  }, [clearStartTimers, ensureAudio, getAudibleSourceIds, pauseAudiosOnly, scheduleAudioAtTimeline, startAudioEngine, startProgressLoop]);
+
+  useEffect(() => {
+    if (!playing) return;
+    let cancelled = false;
+
+    async function syncAudibleTracks() {
+      await startAudioEngine();
+      const audibleIds = getAudibleSourceIds();
+      await Promise.allSettled(
+        audibleIds.map(async (trackId) => {
+          const audio = await ensureAudio(trackId);
+          if (cancelled || !playingRef.current) return;
+          if (audio.paused) {
+            await scheduleAudioAtTimeline(trackId, audio, currentTimeRef.current);
+          }
+        }),
+      );
+    }
+
+    void syncAudibleTracks();
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureAudio, getAudibleSourceIds, playing, scheduleAudioAtTimeline, startAudioEngine]);
 
   const pause = useCallback(() => {
     clearStartTimers();
@@ -547,20 +584,30 @@ function createDefaultMixState(): TrackMixState {
 
 function applyEffectsToNodes(nodes: AudioNodeSet, effects: TrackEffectSettings) {
   const normalized = normalizeTrackEffects(effects);
-  nodes.inputGain.gain.value = dbToGain(normalized.gainDb);
-  nodes.lowEq.gain.value = normalized.eq.lowGainDb;
-  nodes.midEq.gain.value = normalized.eq.midGainDb;
-  nodes.highEq.gain.value = normalized.eq.highGainDb;
+  const now = nodes.inputGain.context.currentTime;
+  setAudioParamValue(nodes.inputGain.gain, dbToGain(normalized.gainDb), now);
+  setAudioParamValue(nodes.lowEq.gain, normalized.eq.lowGainDb, now);
+  setAudioParamValue(nodes.midEq.gain, normalized.eq.midGainDb, now);
+  setAudioParamValue(nodes.highEq.gain, normalized.eq.highGainDb, now);
 
   const compressor = getCompressorValues(normalized.compressor.enabled ? normalized.compressor.preset : "off");
-  nodes.compressor.threshold.value = compressor.threshold;
-  nodes.compressor.ratio.value = compressor.ratio;
-  nodes.compressor.attack.value = compressor.attack;
-  nodes.compressor.release.value = compressor.release;
+  setAudioParamValue(nodes.compressor.threshold, compressor.threshold, now);
+  setAudioParamValue(nodes.compressor.ratio, compressor.ratio, now);
+  setAudioParamValue(nodes.compressor.attack, compressor.attack, now);
+  setAudioParamValue(nodes.compressor.release, compressor.release, now);
 
   const reverb = getReverbValues(normalized.reverb.type);
-  nodes.reverbDelay.delayTime.value = reverb.delayTime;
-  nodes.reverbFeedback.gain.value = normalized.reverb.type === "off" ? 0 : reverb.feedback;
-  nodes.reverbWetGain.gain.value = normalized.reverb.type === "off" ? 0 : normalized.reverb.amount;
-  nodes.dryGain.gain.value = normalized.reverb.type === "off" ? 1 : Math.max(0.55, 1 - normalized.reverb.amount * 0.35);
+  setAudioParamValue(nodes.reverbDelay.delayTime, reverb.delayTime, now);
+  setAudioParamValue(nodes.reverbFeedback.gain, normalized.reverb.type === "off" ? 0 : reverb.feedback, now);
+  setAudioParamValue(nodes.reverbWetGain.gain, normalized.reverb.type === "off" ? 0 : normalized.reverb.amount, now);
+  setAudioParamValue(nodes.dryGain.gain, normalized.reverb.type === "off" ? 1 : Math.max(0.55, 1 - normalized.reverb.amount * 0.35), now);
+}
+
+function setAudioParamValue(param: AudioParam, value: number, currentTime: number) {
+  try {
+    param.cancelScheduledValues(currentTime);
+    param.setValueAtTime(value, currentTime);
+  } catch {
+    param.value = value;
+  }
 }
