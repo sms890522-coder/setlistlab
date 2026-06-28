@@ -1,6 +1,11 @@
 import { randomUUID } from "crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import {
+  DEFAULT_TRACK_EFFECTS,
+  normalizeTrackEffects,
+  type TrackEffectSettings,
+} from "@/lib/audio/trackEffects";
+import {
   RECORDING_PRESIGNED_EXPIRES_IN_SECONDS,
   buildRecordingObjectKey,
   createPresignedReadUrl,
@@ -95,6 +100,61 @@ type TeamRecordingUsageMonthlyRow = {
   sessions_created_count: number | null;
   tracks_uploaded_count: number | null;
   storage_bytes_used: number | string | null;
+};
+
+type RecordingMixSettingRow = {
+  id: string;
+  session_id: string;
+  track_key: string;
+  volume: number | string | null;
+  pan: number | string | null;
+  muted: boolean | null;
+  solo: boolean | null;
+  latency_offset_ms: number | null;
+  gain_db: number | string | null;
+  eq_low_gain_db: number | string | null;
+  eq_mid_gain_db: number | string | null;
+  eq_high_gain_db: number | string | null;
+  compressor_enabled: boolean | null;
+  compressor_preset: string | null;
+  reverb_type: string | null;
+  reverb_amount: number | string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecordingMixSettingInput = {
+  trackKey: string;
+  volume?: number;
+  pan?: number;
+  muted?: boolean;
+  solo?: boolean;
+  latencyOffsetMs?: number;
+  effects?: Partial<TrackEffectSettings>;
+};
+
+export type RecordingMixSetting = {
+  id: string;
+  sessionId: string;
+  trackKey: string;
+  volume: number;
+  pan: number;
+  muted: boolean;
+  solo: boolean;
+  latencyOffsetMs: number;
+  effects: TrackEffectSettings;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type SanitizedRecordingMixSetting = {
+  trackKey: string;
+  volume: number;
+  pan: number;
+  muted: boolean;
+  solo: boolean;
+  latencyOffsetMs: number;
+  effects: TrackEffectSettings;
 };
 
 export type RecordingAccessContext = {
@@ -403,6 +463,65 @@ export async function updateRecordingTrackLatencyOffset(input: {
   return { track: rowToApiTrack(data) };
 }
 
+export async function getRecordingMixSettings(input: { request: Request; sessionId: string }) {
+  const { supabase, user } = await getRecordingAccessContext(input.request);
+  const session = await getSessionOrThrow(supabase, input.sessionId);
+  const setlist = await getSetlistOrThrow(supabase, session.setlist_id);
+  await assertCanAccessRecording(supabase, user.id, session, setlist);
+
+  const { data, error } = await supabase
+    .from("team_recording_mix_settings")
+    .select("*")
+    .eq("session_id", session.id)
+    .returns<RecordingMixSettingRow[]>();
+
+  if (error) throw new RecordingApiError(error.message || "믹서 설정을 불러오지 못했습니다.", 500);
+  return { settings: (data ?? []).map(rowToApiMixSetting) };
+}
+
+export async function upsertRecordingMixSetting(input: {
+  request: Request;
+  sessionId: string;
+  mix: RecordingMixSettingInput;
+}) {
+  const { supabase, user } = await getRecordingAccessContext(input.request);
+  const session = await getSessionOrThrow(supabase, input.sessionId);
+  const setlist = await getSetlistOrThrow(supabase, session.setlist_id);
+  await assertCanAccessRecording(supabase, user.id, session, setlist);
+
+  const mix = sanitizeRecordingMixSetting(input.mix);
+  await assertMixTrackKeyBelongsToSession(supabase, session.id, mix.trackKey);
+
+  const effects = mix.effects;
+  const payload = {
+    session_id: session.id,
+    track_key: mix.trackKey,
+    volume: mix.volume,
+    pan: mix.pan,
+    muted: mix.muted,
+    solo: mix.solo,
+    latency_offset_ms: mix.latencyOffsetMs,
+    gain_db: effects.gainDb,
+    eq_low_gain_db: effects.eq.lowGainDb,
+    eq_mid_gain_db: effects.eq.midGainDb,
+    eq_high_gain_db: effects.eq.highGainDb,
+    compressor_enabled: effects.compressor.enabled,
+    compressor_preset: effects.compressor.preset,
+    reverb_type: effects.reverb.type,
+    reverb_amount: effects.reverb.amount,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("team_recording_mix_settings")
+    .upsert(payload, { onConflict: "session_id,track_key" })
+    .select("*")
+    .single<RecordingMixSettingRow>();
+
+  if (error || !data) throw new RecordingApiError(error?.message || "믹서 설정을 저장하지 못했습니다.", 500);
+  return { setting: rowToApiMixSetting(data) };
+}
+
 async function getSessionOrThrow(supabase: SupabaseClient, sessionId: string) {
   const { data, error } = await supabase
     .from("team_recording_sessions")
@@ -449,6 +568,25 @@ async function getTrackOrThrow(supabase: SupabaseClient, trackId: string) {
   if (error) throw new RecordingApiError(error.message || "녹음 트랙을 확인하지 못했습니다.", 500);
   if (!data) throw new RecordingApiError("녹음 트랙을 찾을 수 없습니다.", 404);
   return data;
+}
+
+async function assertMixTrackKeyBelongsToSession(supabase: SupabaseClient, sessionId: string, trackKey: string) {
+  if (trackKey === "guide" || trackKey === "master") return;
+  if (!trackKey.startsWith("recording:")) {
+    throw new RecordingApiError("지원하지 않는 믹서 트랙입니다.", 400);
+  }
+
+  const trackId = trackKey.replace(/^recording:/, "");
+  const { data, error } = await supabase
+    .from("team_recording_tracks")
+    .select("id")
+    .eq("id", trackId)
+    .eq("session_id", sessionId)
+    .neq("status", "deleted")
+    .maybeSingle<{ id: string }>();
+
+  if (error) throw new RecordingApiError(error.message || "믹서 트랙을 확인하지 못했습니다.", 500);
+  if (!data) throw new RecordingApiError("이 녹음실에 없는 트랙입니다.", 400);
 }
 
 async function assertCanAccessRecording(
@@ -738,10 +876,52 @@ function normalizeRecordingInputType(value: unknown) {
   return value === "mic" || value === "line" || value === "interface" || value === "unknown" ? value : "mic";
 }
 
+function sanitizeRecordingMixSetting(input: RecordingMixSettingInput): SanitizedRecordingMixSetting {
+  const trackKey = normalizeMixTrackKey(input.trackKey);
+  const effects = normalizeTrackEffects({
+    ...input.effects,
+    reverb: input.effects?.reverb
+      ? {
+          ...input.effects.reverb,
+          amount: normalizeReverbAmount(input.effects.reverb.amount),
+        }
+      : undefined,
+  });
+
+  return {
+    trackKey,
+    volume: clampNumber(input.volume, 0, 1.5, trackKey === "guide" ? 0.8 : 1),
+    pan: clampNumber(input.pan, -1, 1, 0),
+    muted: Boolean(input.muted),
+    solo: Boolean(input.solo),
+    latencyOffsetMs: Math.max(-2000, Math.min(2000, normalizeInteger(input.latencyOffsetMs, 0))),
+    effects,
+  };
+}
+
+function normalizeMixTrackKey(value: unknown) {
+  const trackKey = String(value ?? "").trim();
+  if (trackKey === "guide" || trackKey === "master") return trackKey;
+  if (/^recording:[0-9a-fA-F-]{20,}$/.test(trackKey)) return trackKey;
+  throw new RecordingApiError("믹서 트랙 정보가 올바르지 않습니다.", 400);
+}
+
+function normalizeReverbAmount(value: unknown) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return DEFAULT_TRACK_EFFECTS.reverb.amount;
+  return numberValue > 1 ? numberValue / 100 : numberValue;
+}
+
 function normalizeInteger(value: unknown, fallback: number) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return fallback;
   return Math.round(numberValue);
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return fallback;
+  return Math.max(min, Math.min(max, numberValue));
 }
 
 function rowToApiTrack(row: RecordingTrackRow) {
@@ -782,6 +962,47 @@ function rowToApiSession(row: RecordingSessionRow) {
     title: row.title,
     status: row.status,
     createdBy: row.created_by ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function rowToApiMixSetting(row: RecordingMixSettingRow): RecordingMixSetting {
+  const compressorPreset: TrackEffectSettings["compressor"]["preset"] =
+    row.compressor_preset === "light" || row.compressor_preset === "medium" || row.compressor_preset === "strong"
+      ? row.compressor_preset
+      : "off";
+  const reverbType: TrackEffectSettings["reverb"]["type"] =
+    row.reverb_type === "small_room" || row.reverb_type === "chapel" || row.reverb_type === "wide_hall"
+      ? row.reverb_type
+      : "off";
+  const effects = normalizeTrackEffects({
+    gainDb: Number(row.gain_db ?? 0),
+    eq: {
+      lowGainDb: Number(row.eq_low_gain_db ?? 0),
+      midGainDb: Number(row.eq_mid_gain_db ?? 0),
+      highGainDb: Number(row.eq_high_gain_db ?? 0),
+    },
+    compressor: {
+      enabled: Boolean(row.compressor_enabled),
+      preset: compressorPreset,
+    },
+    reverb: {
+      type: reverbType,
+      amount: normalizeReverbAmount(row.reverb_amount),
+    },
+  });
+
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    trackKey: row.track_key,
+    volume: clampNumber(row.volume, 0, 1.5, row.track_key === "guide" ? 0.8 : 1),
+    pan: clampNumber(row.pan, -1, 1, 0),
+    muted: Boolean(row.muted),
+    solo: Boolean(row.solo),
+    latencyOffsetMs: normalizeInteger(row.latency_offset_ms, 0),
+    effects,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

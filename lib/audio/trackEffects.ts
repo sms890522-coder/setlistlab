@@ -1,5 +1,3 @@
-"use client";
-
 export type CompressorPreset = "off" | "light" | "medium" | "strong";
 export type ReverbType = "off" | "small_room" | "chapel" | "wide_hall";
 

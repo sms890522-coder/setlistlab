@@ -895,6 +895,61 @@ before update on public.team_recording_tracks
 for each row
 execute function public.set_updated_at();
 
+create table if not exists public.team_recording_mix_settings (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.team_recording_sessions(id) on delete cascade,
+  track_key text not null,
+  volume numeric not null default 1,
+  pan numeric not null default 0,
+  muted boolean not null default false,
+  solo boolean not null default false,
+  latency_offset_ms integer not null default 0,
+  gain_db numeric not null default 0,
+  eq_low_gain_db numeric not null default 0,
+  eq_mid_gain_db numeric not null default 0,
+  eq_high_gain_db numeric not null default 0,
+  compressor_enabled boolean not null default false,
+  compressor_preset text not null default 'off',
+  reverb_type text not null default 'off',
+  reverb_amount numeric not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint team_recording_mix_settings_session_track_unique unique (session_id, track_key),
+  constraint team_recording_mix_settings_track_key_check check (length(trim(track_key)) > 0),
+  constraint team_recording_mix_settings_value_check check (
+    volume >= 0
+    and volume <= 1.5
+    and pan >= -1
+    and pan <= 1
+    and latency_offset_ms >= -2000
+    and latency_offset_ms <= 2000
+    and gain_db >= -12
+    and gain_db <= 12
+    and eq_low_gain_db >= -12
+    and eq_low_gain_db <= 12
+    and eq_mid_gain_db >= -12
+    and eq_mid_gain_db <= 12
+    and eq_high_gain_db >= -12
+    and eq_high_gain_db <= 12
+    and reverb_amount >= 0
+    and reverb_amount <= 1
+  ),
+  constraint team_recording_mix_settings_compressor_check check (compressor_preset in ('off', 'light', 'medium', 'strong')),
+  constraint team_recording_mix_settings_reverb_check check (reverb_type in ('off', 'small_room', 'chapel', 'wide_hall'))
+);
+
+create index if not exists team_recording_mix_settings_session_idx
+on public.team_recording_mix_settings (session_id);
+
+create index if not exists team_recording_mix_settings_track_key_idx
+on public.team_recording_mix_settings (track_key);
+
+drop trigger if exists team_recording_mix_settings_set_updated_at on public.team_recording_mix_settings;
+create trigger team_recording_mix_settings_set_updated_at
+before update on public.team_recording_mix_settings
+for each row
+execute function public.set_updated_at();
+
 create table if not exists public.team_recording_limits (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
@@ -1136,6 +1191,7 @@ alter table public.setlist_assignments enable row level security;
 alter table public.team_guide_tracks enable row level security;
 alter table public.team_recording_sessions enable row level security;
 alter table public.team_recording_tracks enable row level security;
+alter table public.team_recording_mix_settings enable row level security;
 alter table public.team_recording_limits enable row level security;
 alter table public.team_recording_usage_monthly enable row level security;
 alter table public.shared_setlists enable row level security;
@@ -3581,6 +3637,121 @@ using (
   or (
     team_id is not null
     and public.is_team_admin(team_id, auth.uid())
+  )
+);
+
+drop policy if exists "team_recording_mix_settings_select_accessible" on public.team_recording_mix_settings;
+create policy "team_recording_mix_settings_select_accessible"
+on public.team_recording_mix_settings
+for select
+using (
+  exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_mix_settings.session_id
+      and (
+        (
+          sessions.team_id is not null
+          and public.is_team_approved_member(sessions.team_id, auth.uid())
+        )
+        or (
+          sessions.team_id is null
+          and setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+      )
+  )
+);
+
+drop policy if exists "team_recording_mix_settings_insert_member" on public.team_recording_mix_settings;
+create policy "team_recording_mix_settings_insert_member"
+on public.team_recording_mix_settings
+for insert
+with check (
+  exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_mix_settings.session_id
+      and (
+        (
+          sessions.team_id is not null
+          and public.is_team_approved_member(sessions.team_id, auth.uid())
+        )
+        or (
+          sessions.team_id is null
+          and setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+      )
+  )
+);
+
+drop policy if exists "team_recording_mix_settings_update_member" on public.team_recording_mix_settings;
+create policy "team_recording_mix_settings_update_member"
+on public.team_recording_mix_settings
+for update
+using (
+  exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_mix_settings.session_id
+      and (
+        (
+          sessions.team_id is not null
+          and public.is_team_approved_member(sessions.team_id, auth.uid())
+        )
+        or (
+          sessions.team_id is null
+          and setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+      )
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_mix_settings.session_id
+      and (
+        (
+          sessions.team_id is not null
+          and public.is_team_approved_member(sessions.team_id, auth.uid())
+        )
+        or (
+          sessions.team_id is null
+          and setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+      )
+  )
+);
+
+drop policy if exists "team_recording_mix_settings_delete_manager" on public.team_recording_mix_settings;
+create policy "team_recording_mix_settings_delete_manager"
+on public.team_recording_mix_settings
+for delete
+using (
+  exists (
+    select 1
+    from public.team_recording_sessions sessions
+    join public.setlists setlists on setlists.id = sessions.setlist_id
+    where sessions.id = public.team_recording_mix_settings.session_id
+      and (
+        (
+          sessions.team_id is not null
+          and public.is_team_admin(sessions.team_id, auth.uid())
+        )
+        or (
+          sessions.team_id is null
+          and setlists.team_id is null
+          and setlists.user_id = auth.uid()
+        )
+      )
   )
 );
 

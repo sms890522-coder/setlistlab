@@ -39,9 +39,13 @@ import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
 import {
   getRecordingReadUrl,
   markRecordingTrackDeleted,
-  updateRecordingTrackLatencyOffset,
   uploadRecordingTrack,
 } from "@/lib/recording/uploadRecordingTrack";
+import {
+  getRecordingMixSettings,
+  upsertRecordingMixSetting,
+  type RecordingMixSetting,
+} from "@/lib/recording/mixSettings";
 import {
   getGuideTrackDurationSeconds,
   getStudioCurrentPosition,
@@ -54,6 +58,7 @@ import type { Song } from "@/lib/types";
 const GUIDE_TRACK_ID = "guide-track";
 const PART_OPTIONS = ["보컬", "싱어", "일렉", "어쿠스틱", "건반", "베이스", "드럼", "기타", "직접 입력"];
 const READ_URL_REFRESH_MARGIN_MS = 2 * 60 * 1000;
+const MAX_MIX_VOLUME = 1.5;
 
 type StudioLoadStep =
   | "auth"
@@ -90,6 +95,8 @@ type RecordingWorkflowState =
   | "uploading"
   | "uploaded"
   | "failed";
+
+type MixSaveState = "idle" | "saving" | "saved" | "error";
 
 const INITIAL_STUDIO_LOAD_STATE: StudioLoadState = {
   step: "auth",
@@ -145,9 +152,17 @@ export default function GuideTrackStudioPage() {
     ready: false,
   });
   const [lastUploadedAt, setLastUploadedAt] = useState<number | null>(null);
+  const [savedMixSettings, setSavedMixSettings] = useState<RecordingMixSetting[]>([]);
+  const [mixSettingsLoaded, setMixSettingsLoaded] = useState(false);
+  const [mixSaveState, setMixSaveState] = useState<MixSaveState>("idle");
+  const [mixSaveError, setMixSaveError] = useState("");
+  const [mixPersistenceVersion, setMixPersistenceVersion] = useState(0);
   const readUrlsRef = useRef<Record<string, TrackReadUrlState>>({});
   const recordingActionLockedRef = useRef(false);
   const uploadActionLockedRef = useRef(false);
+  const mixHydratedSessionRef = useRef("");
+  const mixSaveTimersRef = useRef<Record<string, number>>({});
+  const lastMixPayloadRef = useRef<Record<string, string>>({});
 
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
@@ -283,9 +298,90 @@ export default function GuideTrackStudioPage() {
     hasError: Boolean(error || recorder.error || guideRenderError),
   });
 
+  function seedPersistedMixPayloads(settings: RecordingMixSetting[]) {
+    lastMixPayloadRef.current = Object.fromEntries(
+      settings.map((setting) => [setting.trackKey, JSON.stringify(toPersistableMixSetting(setting.trackKey, setting))]),
+    );
+  }
+
+  const scheduleMixSettingSave = useCallback(
+    (trackKey: string, mix: TrackMixState) => {
+      if (!session || !mixSettingsLoaded || mixHydratedSessionRef.current !== session.id) return;
+
+      const payload = toPersistableMixSetting(trackKey, mix);
+      const serialized = JSON.stringify(payload);
+      if (lastMixPayloadRef.current[trackKey] === serialized) return;
+
+      if (mixSaveTimersRef.current[trackKey]) {
+        window.clearTimeout(mixSaveTimersRef.current[trackKey]);
+      }
+
+      setMixSaveState("saving");
+      setMixSaveError("");
+      mixSaveTimersRef.current[trackKey] = window.setTimeout(async () => {
+        try {
+          await upsertRecordingMixSetting(session.id, payload);
+          lastMixPayloadRef.current[trackKey] = serialized;
+          setMixSaveState("saved");
+          setMixSaveError("");
+        } catch (saveError) {
+          setMixSaveState("error");
+          setMixSaveError(saveError instanceof Error ? saveError.message : "믹서 설정을 저장하지 못했습니다.");
+        } finally {
+          delete mixSaveTimersRef.current[trackKey];
+        }
+      }, 700);
+    },
+    [mixSettingsLoaded, session],
+  );
+
+  useEffect(() => {
+    if (!session || !mixSettingsLoaded) return;
+    if (mixHydratedSessionRef.current === session.id || mixHydratedSessionRef.current === `hydrating:${session.id}`) return;
+    mixHydratedSessionRef.current = `hydrating:${session.id}`;
+    const hydratedMixState = buildHydratedPlayerMixState(savedMixSettings, orderedTracks);
+    player.hydrateMixState(hydratedMixState);
+
+    const masterSetting = savedMixSettings.find((setting) => setting.trackKey === "master");
+    if (masterSetting) player.setMasterVolume(masterSetting.volume);
+
+    window.setTimeout(() => {
+      mixHydratedSessionRef.current = session.id;
+      setMixPersistenceVersion((version) => version + 1);
+      setMixSaveState(savedMixSettings.length > 0 ? "saved" : "idle");
+    }, 0);
+  }, [mixSettingsLoaded, orderedTracks, player, savedMixSettings, session]);
+
+  useEffect(() => {
+    if (!session || !mixSettingsLoaded || mixHydratedSessionRef.current !== session.id) return;
+    Object.entries(player.mixState).forEach(([trackId, mix]) => {
+      const trackKey = playerTrackIdToMixTrackKey(trackId);
+      if (!trackKey) return;
+      scheduleMixSettingSave(trackKey, mix);
+    });
+
+    scheduleMixSettingSave("master", createMasterMixState(player.masterVolume));
+  }, [mixPersistenceVersion, mixSettingsLoaded, player.masterVolume, player.mixState, scheduleMixSettingSave, session]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(mixSaveTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
+      mixSaveTimersRef.current = {};
+    };
+  }, []);
+
   useEffect(() => {
     async function load() {
       setStudioLoadState({ step: "auth", progress: 10, message: "로그인과 접근 권한을 확인하는 중입니다.", ready: false });
+      setMixSettingsLoaded(false);
+      setSavedMixSettings([]);
+      setMixSaveState("idle");
+      setMixSaveError("");
+      setMixPersistenceVersion(0);
+      mixHydratedSessionRef.current = "";
+      lastMixPayloadRef.current = {};
+      Object.values(mixSaveTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
+      mixSaveTimersRef.current = {};
       if (!isSupabaseConfigured()) {
         setError("팀 녹음실은 로그인 저장소가 설정된 콘티에서 사용할 수 있습니다.");
         setStudioLoadState({ step: "error", progress: 100, message: "녹음실을 열 수 없습니다.", ready: false, error: "저장소 설정이 필요합니다." });
@@ -368,7 +464,23 @@ export default function GuideTrackStudioPage() {
       setStudioLoadState({ step: "recordingTracks", progress: 68, message: "팀원 녹음 트랙을 확인하는 중입니다.", ready: false });
       setSession(nextSession);
       if (nextSession) {
-        setTracks(await getRecordingTracks(nextSession.id));
+        const nextTracks = await getRecordingTracks(nextSession.id);
+        setTracks(nextTracks);
+
+        setStudioLoadState({ step: "mixState", progress: 76, message: "저장된 믹서 설정을 불러오는 중입니다.", ready: false });
+        try {
+          const nextMixSettings = await getRecordingMixSettings(nextSession.id);
+          setSavedMixSettings(nextMixSettings);
+          seedPersistedMixPayloads(nextMixSettings);
+        } catch (mixError) {
+          setSavedMixSettings([]);
+          setMixSaveState("error");
+          setMixSaveError(mixError instanceof Error ? mixError.message : "저장된 믹서 설정을 불러오지 못했습니다.");
+        } finally {
+          setMixSettingsLoaded(true);
+        }
+      } else {
+        setMixSettingsLoaded(true);
       }
 
       setStudioLoadState({ step: "audioMetadata", progress: 82, message: "가이드 오디오와 믹서를 준비하는 중입니다.", ready: false });
@@ -694,17 +806,11 @@ export default function GuideTrackStudioPage() {
     }
   }
 
-  async function handleLatencyChange(track: TeamRecordingTrack, nextLatencyOffsetMs: number, persist = false) {
+  function handleLatencyChange(track: TeamRecordingTrack, nextLatencyOffsetMs: number, persist = false) {
     const safeValue = Math.max(-2000, Math.min(2000, Math.round(nextLatencyOffsetMs)));
     player.setLatencyOffset(track.id, safeValue);
-    if (!persist) return;
-
-    try {
-      const { track: updatedTrack } = await updateRecordingTrackLatencyOffset(track.id, safeValue);
-      setTracks((current) => current.map((item) => (item.id === updatedTrack.id ? { ...item, latencyOffsetMs: updatedTrack.latencyOffsetMs } : item)));
-      setMessage("트랙 싱크를 저장했습니다.");
-    } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : "트랙 싱크를 저장하지 못했습니다.");
+    if (persist) {
+      setMessage("트랙 싱크는 자동으로 저장됩니다.");
     }
   }
 
@@ -933,6 +1039,8 @@ export default function GuideTrackStudioPage() {
         myUserId={myUserId}
         mixState={player.mixState}
         masterVolume={player.masterVolume}
+        saveState={mixSaveState}
+        saveError={mixSaveError}
         panSupported={player.panSupported}
         onMasterVolumeChange={player.setMasterVolume}
         onVolumeChange={player.setVolume}
@@ -1191,6 +1299,8 @@ export default function GuideTrackStudioPage() {
           trackLabel={effectTarget.label}
           theme={effectTarget.theme}
           effects={player.mixState[effectTarget.id]?.effects ?? DEFAULT_TRACK_EFFECTS}
+          saveState={mixSaveState}
+          saveError={mixSaveError}
           onPreview={(effects) => player.setEffects(effectTarget.id, effects)}
           onClose={() => setEffectTrackId("")}
         />
@@ -1418,6 +1528,8 @@ function StudioMixerSection({
   myUserId,
   mixState,
   masterVolume,
+  saveState,
+  saveError,
   panSupported,
   onMasterVolumeChange,
   onVolumeChange,
@@ -1428,6 +1540,8 @@ function StudioMixerSection({
   myUserId: string;
   mixState: Record<string, TrackMixState>;
   masterVolume: number;
+  saveState: MixSaveState;
+  saveError: string;
   panSupported: boolean;
   onMasterVolumeChange: (volume: number) => void;
   onVolumeChange: (trackId: string, volume: number) => void;
@@ -1440,13 +1554,23 @@ function StudioMixerSection({
         <div>
           <h2 className="text-lg font-black text-slate-950">믹서</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            각 트랙의 좌우 위치와 소리 크기를 조절할 수 있습니다. 자세한 소리 보정은 이펙터에서 조절하세요.
+            각 트랙의 좌우 위치와 소리 크기를 조절할 수 있습니다. 믹서와 이펙터 설정은 수정하면 자동으로 저장됩니다.
           </p>
         </div>
-        <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
-          현재 믹서 설정으로 다운로드
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${getMixSaveStateClass(saveState)}`}>
+            {getMixSaveStateLabel(saveState)}
+          </span>
+          <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+            현재 믹서 설정으로 다운로드
+          </span>
+        </div>
       </div>
+      {saveState === "error" ? (
+        <p className="mt-3 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700">
+          {saveError || "설정 저장에 실패했습니다. 인터넷 연결을 확인해 주세요."}
+        </p>
+      ) : null}
 
       <div className="mt-4 overflow-x-auto pb-2">
         <div className="flex min-w-max gap-3">
@@ -1602,22 +1726,23 @@ function VerticalVolumeFader({
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
-  const safeValue = Math.max(0, Math.min(1, value));
+  const safeValue = Math.max(0, Math.min(MAX_MIX_VOLUME, value));
+  const normalizedValue = safeValue / MAX_MIX_VOLUME;
 
   const updateFromClientY = useCallback(
     (clientY: number) => {
       const rect = trackRef.current?.getBoundingClientRect();
       if (!rect || rect.height <= 0) return;
 
-      const nextValue = 1 - (clientY - rect.top) / rect.height;
-      onChange(Math.max(0, Math.min(1, nextValue)));
+      const nextValue = (1 - (clientY - rect.top) / rect.height) * MAX_MIX_VOLUME;
+      onChange(Math.max(0, Math.min(MAX_MIX_VOLUME, nextValue)));
     },
     [onChange],
   );
 
   const nudgeValue = useCallback(
     (amount: number) => {
-      onChange(Math.max(0, Math.min(1, safeValue + amount)));
+      onChange(Math.max(0, Math.min(MAX_MIX_VOLUME, safeValue + amount)));
     },
     [onChange, safeValue],
   );
@@ -1629,7 +1754,7 @@ function VerticalVolumeFader({
         role="slider"
         tabIndex={0}
         aria-valuemin={0}
-        aria-valuemax={100}
+        aria-valuemax={150}
         aria-valuenow={Math.round(safeValue * 100)}
         aria-valuetext={volumeToDb(safeValue)}
         aria-label={label}
@@ -1676,7 +1801,7 @@ function VerticalVolumeFader({
         <span
           className="absolute bottom-2 left-1/2 w-1.5 -translate-x-1/2 rounded-full"
           style={{
-            height: safeValue <= 0 ? "0px" : `max(0.25rem, calc(${safeValue * 100}% - 0.25rem))`,
+            height: normalizedValue <= 0 ? "0px" : `max(0.25rem, calc(${normalizedValue * 100}% - 0.25rem))`,
             backgroundColor: accent,
             opacity: 0.9,
           }}
@@ -1684,7 +1809,7 @@ function VerticalVolumeFader({
         />
         <span
           className="absolute left-1/2 size-5 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-white shadow-md transition-transform"
-          style={{ bottom: `${safeValue * 100}%`, backgroundColor: accent }}
+          style={{ bottom: `${normalizedValue * 100}%`, backgroundColor: accent }}
           aria-hidden="true"
         />
       </div>
@@ -1739,12 +1864,16 @@ function TrackEffectsModal({
   trackLabel,
   theme,
   effects,
+  saveState,
+  saveError,
   onPreview,
   onClose,
 }: {
   trackLabel: string;
   theme: StudioTrackTheme;
   effects: TrackEffectSettings;
+  saveState: MixSaveState;
+  saveError: string;
   onPreview: (effects: TrackEffectSettings) => void;
   onClose: () => void;
 }) {
@@ -1790,8 +1919,14 @@ function TrackEffectsModal({
             </p>
             <h2 className="mt-1 text-2xl font-black text-slate-950">{trackLabel} 이펙터</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Gain, EQ, Compressor, Reverb는 이 창에서만 조절합니다. 변경값은 재생과 현재 믹스 다운로드에 반영됩니다.
+              값을 바꾸면 바로 소리에 적용되고 자동으로 저장됩니다. 다시 들어와도 마지막 설정을 그대로 불러옵니다.
             </p>
+            <p className={`mt-3 inline-flex rounded-full px-3 py-1.5 text-xs font-black ${getMixSaveStateClass(saveState)}`}>
+              {getMixSaveStateLabel(saveState)}
+            </p>
+            {saveState === "error" ? (
+              <p className="mt-2 text-xs font-bold text-rose-700">{saveError || "설정 저장에 실패했습니다. 잠시 후 다시 시도해 주세요."}</p>
+            ) : null}
           </div>
           <button type="button" onClick={onClose} className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-500">
             닫기
@@ -1913,26 +2048,19 @@ function TrackEffectsModal({
           </div>
         </div>
 
-        <div className="sticky bottom-0 mt-5 grid gap-2 bg-white pt-3 sm:grid-cols-3">
+        <div className="sticky bottom-0 mt-5 grid gap-2 bg-white pt-3 sm:grid-cols-2">
           <button
             type="button"
             onClick={() => updateDraft(DEFAULT_TRACK_EFFECTS)}
             className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50"
           >
-            초기화
+            이펙터 초기화
           </button>
           <button
             type="button"
             onClick={onClose}
             className="rounded-xl px-4 py-3 text-sm font-black text-white transition"
             style={{ backgroundColor: theme.accent }}
-          >
-            적용
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-200"
           >
             닫기
           </button>
@@ -2131,7 +2259,7 @@ function StudioTrackRow({
             <input
               type="range"
               min={0}
-              max={1}
+              max={MAX_MIX_VOLUME}
               step={0.01}
               value={volume}
               onChange={(event) => onVolumeChange(id, Number(event.target.value))}
@@ -2402,6 +2530,79 @@ function orderTracks(tracks: TeamRecordingTrack[], myUserId: string) {
   });
 }
 
+function buildHydratedPlayerMixState(settings: RecordingMixSetting[], tracks: TeamRecordingTrack[]) {
+  const validTrackIds = new Set([GUIDE_TRACK_ID, ...tracks.map((track) => track.id)]);
+  const hydrated: Record<string, TrackMixState> = {};
+
+  settings.forEach((setting) => {
+    const playerTrackId = mixTrackKeyToPlayerTrackId(setting.trackKey);
+    if (!playerTrackId || !validTrackIds.has(playerTrackId)) return;
+    hydrated[playerTrackId] = settingToTrackMixState(setting);
+  });
+
+  return hydrated;
+}
+
+function mixTrackKeyToPlayerTrackId(trackKey: string) {
+  if (trackKey === "guide") return GUIDE_TRACK_ID;
+  if (trackKey.startsWith("recording:")) return trackKey.replace(/^recording:/, "");
+  return "";
+}
+
+function playerTrackIdToMixTrackKey(trackId: string) {
+  if (trackId === GUIDE_TRACK_ID) return "guide";
+  if (!trackId) return "";
+  return `recording:${trackId}`;
+}
+
+function settingToTrackMixState(setting: RecordingMixSetting): TrackMixState {
+  return {
+    muted: Boolean(setting.muted),
+    solo: Boolean(setting.solo),
+    volume: clampNumber(setting.volume, 0, 1.5, setting.trackKey === "guide" ? 0.8 : 1),
+    pan: clampNumber(setting.pan, -1, 1, 0),
+    latencyOffsetMs: Math.max(-2000, Math.min(2000, Math.round(Number(setting.latencyOffsetMs ?? 0)))),
+    effects: normalizeTrackEffects(setting.effects),
+  };
+}
+
+function createMasterMixState(volume: number): TrackMixState {
+  return {
+    muted: false,
+    solo: false,
+    volume: clampNumber(volume, 0, 1.5, 1),
+    pan: 0,
+    latencyOffsetMs: 0,
+    effects: DEFAULT_TRACK_EFFECTS,
+  };
+}
+
+function toPersistableMixSetting(trackKey: string, mix: TrackMixState): RecordingMixSetting {
+  return {
+    trackKey,
+    muted: Boolean(mix.muted),
+    solo: Boolean(mix.solo),
+    volume: clampNumber(mix.volume, 0, 1.5, trackKey === "guide" ? 0.8 : 1),
+    pan: clampNumber(mix.pan, -1, 1, 0),
+    latencyOffsetMs: Math.max(-2000, Math.min(2000, Math.round(Number(mix.latencyOffsetMs ?? 0)))),
+    effects: normalizeTrackEffects(mix.effects),
+  };
+}
+
+function getMixSaveStateLabel(state: MixSaveState) {
+  if (state === "saving") return "설정 저장 중...";
+  if (state === "saved") return "설정 저장됨";
+  if (state === "error") return "설정 저장 실패";
+  return "자동 저장";
+}
+
+function getMixSaveStateClass(state: MixSaveState) {
+  if (state === "saving") return "bg-blue-50 text-blue-700 ring-1 ring-blue-100";
+  if (state === "saved") return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100";
+  if (state === "error") return "bg-rose-50 text-rose-700 ring-1 ring-rose-100";
+  return "bg-slate-100 text-slate-600 ring-1 ring-slate-200";
+}
+
 function formatDuration(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(safeSeconds / 60);
@@ -2416,6 +2617,12 @@ function sanitizeFilenamePart(value: string) {
     .replace(/\s+/g, "-")
     .slice(0, 48);
   return cleaned || "guide-track";
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return fallback;
+  return Math.max(min, Math.min(max, numberValue));
 }
 
 function formatPanLabel(pan: number) {

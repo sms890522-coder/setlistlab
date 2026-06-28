@@ -28,6 +28,8 @@ export type TrackMixState = {
   effects: TrackEffectSettings;
 };
 
+const MAX_TRACK_VOLUME = 1.5;
+
 type AudioNodeSet = {
   inputGain: GainNode;
   lowEq: BiquadFilterNode;
@@ -82,14 +84,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
       const next = { ...current };
       sources.forEach((source) => {
         if (!next[source.id]) {
-          next[source.id] = {
-            muted: false,
-            solo: false,
-            volume: source.defaultVolume ?? 1,
-            pan: 0,
-            latencyOffsetMs: source.defaultLatencyOffsetMs ?? 0,
-            effects: DEFAULT_TRACK_EFFECTS,
-          };
+          next[source.id] = createDefaultMixState(source);
         }
       });
 
@@ -482,7 +477,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
       [trackId]: {
         muted: current[trackId]?.muted ?? false,
         solo: current[trackId]?.solo ?? false,
-        volume: Math.max(0, Math.min(1, volume)),
+        volume: Math.max(0, Math.min(MAX_TRACK_VOLUME, volume)),
         pan: current[trackId]?.pan ?? 0,
         latencyOffsetMs: current[trackId]?.latencyOffsetMs ?? 0,
         effects: current[trackId]?.effects ?? DEFAULT_TRACK_EFFECTS,
@@ -543,10 +538,25 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   );
 
   const setMasterVolume = useCallback((volume: number) => {
-    const safeVolume = Math.max(0, Math.min(1, volume));
+    const safeVolume = Math.max(0, Math.min(MAX_TRACK_VOLUME, volume));
     setMasterVolumeState(safeVolume);
     if (masterGainRef.current) masterGainRef.current.gain.value = safeVolume;
   }, []);
+
+  const hydrateMixState = useCallback(
+    (nextMixState: Record<string, Partial<TrackMixState>>) => {
+      setMixState((current) => {
+        const next = { ...current };
+        sources.forEach((source) => {
+          const base = next[source.id] ?? createDefaultMixState(source);
+          const incoming = nextMixState[source.id];
+          next[source.id] = normalizeMixState(incoming ? { ...base, ...incoming } : base, source);
+        });
+        return next;
+      });
+    },
+    [sources],
+  );
 
   useEffect(() => {
     return () => {
@@ -580,17 +590,30 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     setEffects,
     setLatencyOffset,
     setMasterVolume,
+    hydrateMixState,
   };
 }
 
-function createDefaultMixState(): TrackMixState {
+function createDefaultMixState(source?: MultitrackSource): TrackMixState {
   return {
     muted: false,
     solo: false,
-    volume: 1,
+    volume: Math.max(0, Math.min(MAX_TRACK_VOLUME, source?.defaultVolume ?? 1)),
     pan: 0,
-    latencyOffsetMs: 0,
+    latencyOffsetMs: source?.defaultLatencyOffsetMs ?? 0,
     effects: DEFAULT_TRACK_EFFECTS,
+  };
+}
+
+function normalizeMixState(mix: Partial<TrackMixState>, source?: MultitrackSource): TrackMixState {
+  const defaults = createDefaultMixState(source);
+  return {
+    muted: Boolean(mix.muted ?? defaults.muted),
+    solo: Boolean(mix.solo ?? defaults.solo),
+    volume: Math.max(0, Math.min(MAX_TRACK_VOLUME, Number(mix.volume ?? defaults.volume))),
+    pan: Math.max(-1, Math.min(1, Number(mix.pan ?? defaults.pan))),
+    latencyOffsetMs: Math.max(-2000, Math.min(2000, Math.round(Number(mix.latencyOffsetMs ?? defaults.latencyOffsetMs)))),
+    effects: normalizeTrackEffects(mix.effects),
   };
 }
 
