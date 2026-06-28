@@ -44,7 +44,7 @@ type AudioNodeSet = {
 
 type UseMultitrackPlayerInput = {
   sources: MultitrackSource[];
-  resolveSourceUrl?: (trackId: string) => Promise<string>;
+  resolveSourceUrl?: (trackId: string, options?: { force?: boolean }) => Promise<string>;
   fallbackDuration?: number;
 };
 
@@ -64,6 +64,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   const currentTimeRef = useRef(0);
   const playStartMsRef = useRef(0);
   const playingRef = useRef(false);
+  const playbackActionLockedRef = useRef(false);
 
   const sourceById = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
   const duration = useMemo(
@@ -262,9 +263,13 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
 
       if (audioBuffersRef.current[trackId]) return audioBuffersRef.current[trackId];
 
-      const nextUrl = source.url || (resolveSourceUrl ? await resolveSourceUrl(trackId) : "");
+      let nextUrl = source.url || (resolveSourceUrl ? await resolveSourceUrl(trackId) : "");
       if (!nextUrl) throw new Error("트랙 재생 URL을 불러오지 못했습니다.");
-      const response = await fetch(nextUrl);
+      let response = await fetch(nextUrl);
+      if (!response.ok && !source.url && resolveSourceUrl) {
+        nextUrl = await resolveSourceUrl(trackId, { force: true });
+        response = await fetch(nextUrl);
+      }
       if (!response.ok) {
         throw new Error("트랙 오디오를 불러오지 못했습니다. R2 CORS 설정을 확인해 주세요.");
       }
@@ -355,9 +360,11 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   );
 
   const play = useCallback(async () => {
+    if (playbackActionLockedRef.current) return;
     const audibleIds = getAudibleSourceIds();
     if (audibleIds.length === 0) return;
 
+    playbackActionLockedRef.current = true;
     setLoading(true);
     try {
       stopActiveSources();
@@ -370,6 +377,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
       startProgressLoop();
     } finally {
       setLoading(false);
+      playbackActionLockedRef.current = false;
     }
   }, [getAudibleSourceIds, loadAudioBuffer, scheduleAudioAtTimeline, startAudioEngine, startProgressLoop, stopActiveSources]);
 
@@ -398,6 +406,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   }, [getAudibleSourceIds, loadAudioBuffer, playing, scheduleAudioAtTimeline, startAudioEngine]);
 
   const pause = useCallback(() => {
+    playbackActionLockedRef.current = false;
     stopActiveSources();
     stopAnimationFrame();
     playingRef.current = false;
@@ -405,6 +414,7 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
   }, [stopActiveSources, stopAnimationFrame]);
 
   const stop = useCallback(() => {
+    playbackActionLockedRef.current = false;
     stopActiveSources();
     stopAnimationFrame();
     currentTimeRef.current = 0;
@@ -429,6 +439,14 @@ export function useMultitrackPlayer({ sources, resolveSourceUrl, fallbackDuratio
     },
     [duration, play, stopActiveSources],
   );
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      pause();
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [pause]);
 
   const toggleMute = useCallback((trackId: string) => {
     setMixState((current) => ({

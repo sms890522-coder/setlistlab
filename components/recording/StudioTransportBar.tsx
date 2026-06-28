@@ -5,6 +5,7 @@ import type { StudioCurrentPosition } from "@/lib/recording/studioTimeline";
 type StudioTransportBarProps = {
   playing: boolean;
   loading?: boolean;
+  disabled?: boolean;
   recording?: boolean;
   currentTime: number;
   duration: number;
@@ -27,6 +28,7 @@ type StudioTransportBarProps = {
 export function StudioTransportBar({
   playing,
   loading = false,
+  disabled = false,
   recording = false,
   currentTime,
   duration,
@@ -45,6 +47,7 @@ export function StudioTransportBar({
           <button
             type="button"
             onClick={onRewind}
+            disabled={disabled}
             className="min-h-10 rounded-xl border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50 sm:min-h-11 sm:px-4 sm:text-sm"
           >
             처음으로
@@ -52,7 +55,7 @@ export function StudioTransportBar({
           <button
             type="button"
             onClick={onPlayPause}
-            disabled={loading}
+            disabled={loading || disabled}
             className="min-h-10 rounded-xl bg-blue-600 px-2 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-11 sm:px-5 sm:text-sm"
           >
             {loading ? "준비 중..." : playing ? "일시정지" : "재생"}
@@ -60,6 +63,7 @@ export function StudioTransportBar({
           <button
             type="button"
             onClick={onStop}
+            disabled={disabled && !recording}
             className="min-h-10 rounded-xl border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50 sm:min-h-11 sm:px-4 sm:text-sm"
           >
             정지
@@ -67,6 +71,7 @@ export function StudioTransportBar({
           <button
             type="button"
             onClick={onRecord}
+            disabled={disabled && !recording}
             className={
               recording
                 ? "min-h-10 rounded-xl bg-rose-600 px-2 text-[11px] font-black text-white shadow-sm transition hover:bg-rose-700 sm:min-h-11 sm:px-5 sm:text-sm"
@@ -160,6 +165,7 @@ export function StudioTransportBar({
             max={Math.max(1, duration)}
             step={0.01}
             value={Math.min(currentTime, Math.max(1, duration))}
+            disabled={disabled}
             onChange={(event) => onSeek(Number(event.target.value))}
             className="mt-2 w-full accent-blue-600"
             aria-label="재생 위치"

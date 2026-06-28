@@ -53,6 +53,50 @@ import type { Song } from "@/lib/types";
 
 const GUIDE_TRACK_ID = "guide-track";
 const PART_OPTIONS = ["보컬", "싱어", "일렉", "어쿠스틱", "건반", "베이스", "드럼", "기타", "직접 입력"];
+const READ_URL_REFRESH_MARGIN_MS = 2 * 60 * 1000;
+
+type StudioLoadStep =
+  | "auth"
+  | "guideTrack"
+  | "session"
+  | "recordingTracks"
+  | "readUrls"
+  | "audioMetadata"
+  | "mixState"
+  | "ready"
+  | "error";
+
+type StudioLoadState = {
+  step: StudioLoadStep;
+  progress: number;
+  message: string;
+  ready: boolean;
+  error?: string;
+};
+
+type TrackReadUrlState = {
+  readUrl: string;
+  expiresAt: number;
+  loading: boolean;
+  error?: string;
+};
+
+type RecordingWorkflowState =
+  | "idle"
+  | "requesting_permission"
+  | "ready"
+  | "recording"
+  | "preview"
+  | "uploading"
+  | "uploaded"
+  | "failed";
+
+const INITIAL_STUDIO_LOAD_STATE: StudioLoadState = {
+  step: "auth",
+  progress: 8,
+  message: "녹음실을 준비하고 있습니다.",
+  ready: false,
+};
 
 type StudioTrackTheme = {
   icon: string;
@@ -83,15 +127,27 @@ export default function GuideTrackStudioPage() {
   const [customPart, setCustomPart] = useState("");
   const [trackTitle, setTrackTitle] = useState("");
   const [notes, setNotes] = useState("");
-  const [readUrls, setReadUrls] = useState<Record<string, string>>({});
+  const [readUrls, setReadUrls] = useState<Record<string, TrackReadUrlState>>({});
   const [guideAudioUrl, setGuideAudioUrl] = useState("");
   const [guideAudioDuration, setGuideAudioDuration] = useState(0);
   const [guideRenderError, setGuideRenderError] = useState("");
+  const [guideAudioLoading, setGuideAudioLoading] = useState(false);
   const [mixdowning, setMixdowning] = useState(false);
   const [skipInputTest, setSkipInputTest] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [usageSummary, setUsageSummary] = useState<TeamRecordingUsageSummary | null>(null);
   const [effectTrackId, setEffectTrackId] = useState("");
+  const [studioLoadState, setStudioLoadState] = useState<StudioLoadState>(INITIAL_STUDIO_LOAD_STATE);
+  const [assetLoadState, setAssetLoadState] = useState<StudioLoadState>({
+    step: "readUrls",
+    progress: 0,
+    message: "팀원 녹음 트랙을 준비하고 있습니다.",
+    ready: false,
+  });
+  const [lastUploadedAt, setLastUploadedAt] = useState<number | null>(null);
+  const readUrlsRef = useRef<Record<string, TrackReadUrlState>>({});
+  const recordingActionLockedRef = useRef(false);
+  const uploadActionLockedRef = useRef(false);
 
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
@@ -116,20 +172,78 @@ export default function GuideTrackStudioPage() {
       : null;
   }, [effectTrackId, orderedTracks]);
   const studioDuration = Math.max(guideAudioDuration, fallbackGuideDuration, ...tracks.map((track) => track.durationSeconds ?? 0), 1);
+  const readUrlStrings = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(readUrls)
+          .filter(([, state]) => state.readUrl)
+          .map(([trackId, state]) => [trackId, state.readUrl]),
+      ) as Record<string, string>,
+    [readUrls],
+  );
+  const recordingWorkflowState: RecordingWorkflowState = useMemo(() => {
+    if (uploading) return "uploading";
+    if (recorder.state === "requesting_permission") return "requesting_permission";
+    if (recorder.state === "recording") return "recording";
+    if (recorder.blob) return "preview";
+    if (recorder.state === "ready") return "ready";
+    if (recorder.state === "error") return "failed";
+    if (lastUploadedAt) return "uploaded";
+    return "idle";
+  }, [lastUploadedAt, recorder.blob, recorder.state, uploading]);
+  const studioReady = Boolean(loaded && canUseRecordingStudio && session && guideAudioUrl && !guideAudioLoading && !guideRenderError);
+  const blockingBusy = uploading || mixdowning || recorder.state === "recording";
+
+  useEffect(() => {
+    readUrlsRef.current = readUrls;
+  }, [readUrls]);
 
   const ensureReadUrl = useCallback(
-    async (trackId: string) => {
+    async (trackId: string, options?: { force?: boolean }) => {
       if (trackId === GUIDE_TRACK_ID) {
         if (!guideAudioUrl) throw new Error("가이드 트랙 오디오를 준비하는 중입니다.");
         return guideAudioUrl;
       }
 
-      if (readUrls[trackId]) return readUrls[trackId];
-      const { readUrl } = await getRecordingReadUrl(trackId);
-      setReadUrls((current) => ({ ...current, [trackId]: readUrl }));
-      return readUrl;
+      const cached = readUrlsRef.current[trackId];
+      if (!options?.force && cached?.readUrl && cached.expiresAt - Date.now() > READ_URL_REFRESH_MARGIN_MS) {
+        return cached.readUrl;
+      }
+
+      setReadUrls((current) => ({
+        ...current,
+        [trackId]: {
+          readUrl: current[trackId]?.readUrl || "",
+          expiresAt: current[trackId]?.expiresAt || 0,
+          loading: true,
+          error: undefined,
+        },
+      }));
+
+      try {
+        const { readUrl, expiresIn } = await getRecordingReadUrl(trackId);
+        const nextState = {
+          readUrl,
+          expiresAt: Date.now() + Math.max(60, expiresIn) * 1000,
+          loading: false,
+        };
+        setReadUrls((current) => ({ ...current, [trackId]: nextState }));
+        return readUrl;
+      } catch (readError) {
+        const errorMessage = readError instanceof Error ? readError.message : "녹음 파일을 불러오지 못했습니다.";
+        setReadUrls((current) => ({
+          ...current,
+          [trackId]: {
+            readUrl: current[trackId]?.readUrl || "",
+            expiresAt: current[trackId]?.expiresAt || 0,
+            loading: false,
+            error: errorMessage,
+          },
+        }));
+        throw readError;
+      }
     },
-    [guideAudioUrl, readUrls],
+    [guideAudioUrl],
   );
 
   const playerSources = useMemo(
@@ -146,14 +260,13 @@ export default function GuideTrackStudioPage() {
         : []),
       ...orderedTracks.map((track) => ({
         id: track.id,
-        url: readUrls[track.id],
         duration: track.durationSeconds,
         defaultVolume: 1,
         offsetMs: track.recordingOffsetMs,
         defaultLatencyOffsetMs: track.latencyOffsetMs,
       })),
     ],
-    [fallbackGuideDuration, guideAudioDuration, guideAudioUrl, orderedTracks, readUrls],
+    [fallbackGuideDuration, guideAudioDuration, guideAudioUrl, orderedTracks],
   );
 
   const player = useMultitrackPlayer({
@@ -162,11 +275,20 @@ export default function GuideTrackStudioPage() {
     fallbackDuration: studioDuration,
   });
   const currentPosition = useMemo(() => getStudioCurrentPosition(guideData, player.currentTime), [guideData, player.currentTime]);
+  const studioStatus = getStudioStatus({
+    studioReady,
+    guideAudioLoading,
+    playerLoading: player.loading,
+    recordingState: recordingWorkflowState,
+    hasError: Boolean(error || recorder.error || guideRenderError),
+  });
 
   useEffect(() => {
     async function load() {
+      setStudioLoadState({ step: "auth", progress: 10, message: "로그인과 접근 권한을 확인하는 중입니다.", ready: false });
       if (!isSupabaseConfigured()) {
         setError("팀 녹음실은 로그인 저장소가 설정된 콘티에서 사용할 수 있습니다.");
+        setStudioLoadState({ step: "error", progress: 100, message: "녹음실을 열 수 없습니다.", ready: false, error: "저장소 설정이 필요합니다." });
         setLoaded(true);
         return;
       }
@@ -174,13 +296,16 @@ export default function GuideTrackStudioPage() {
       const user = await getCurrentUser();
       if (!user) {
         setError("로그인이 필요합니다.");
+        setStudioLoadState({ step: "error", progress: 100, message: "로그인이 필요합니다.", ready: false, error: "로그인이 필요합니다." });
         setLoaded(true);
         return;
       }
 
+      setStudioLoadState({ step: "guideTrack", progress: 24, message: "가이드 트랙을 불러오는 중입니다.", ready: false });
       const [nextProfile, nextGuideTrack] = await Promise.all([getMyProfile().catch(() => null), getGuideTrack(params.guideTrackId)]);
       if (!nextGuideTrack) {
         setError("가이드 트랙을 찾을 수 없습니다.");
+        setStudioLoadState({ step: "error", progress: 100, message: "가이드 트랙을 찾을 수 없습니다.", ready: false, error: "가이드 트랙을 찾을 수 없습니다." });
         setLoaded(true);
         return;
       }
@@ -188,6 +313,7 @@ export default function GuideTrackStudioPage() {
       const nextSetlist = await getCloudSetlist(nextGuideTrack.setlistId);
       if (!nextSetlist) {
         setError("콘티를 찾을 수 없습니다.");
+        setStudioLoadState({ step: "error", progress: 100, message: "콘티를 찾을 수 없습니다.", ready: false, error: "콘티를 찾을 수 없습니다." });
         setLoaded(true);
         return;
       }
@@ -195,10 +321,12 @@ export default function GuideTrackStudioPage() {
       const nextSong = nextSetlist.songs.find((item) => item.id === nextGuideTrack.songId) ?? null;
       if (!nextSong) {
         setError("곡 정보를 찾을 수 없습니다.");
+        setStudioLoadState({ step: "error", progress: 100, message: "곡 정보를 찾을 수 없습니다.", ready: false, error: "곡 정보를 찾을 수 없습니다." });
         setLoaded(true);
         return;
       }
 
+      setStudioLoadState({ step: "session", progress: 45, message: "녹음 세션과 팀 권한을 확인하는 중입니다.", ready: false });
       const membership = nextSetlist.teamId ? await getMyRoleInTeam(nextSetlist.teamId) : null;
       const nextCanManage = Boolean(nextSetlist.ownerId === user.id || canManageTeamSetlist(membership) || nextGuideTrack.createdBy === user.id);
 
@@ -214,6 +342,7 @@ export default function GuideTrackStudioPage() {
       }
 
       if (!canUseFeature(nextProfile, "teamRecordingStudio")) {
+        setStudioLoadState({ step: "ready", progress: 100, message: "실험실 설정을 확인했습니다.", ready: true });
         setLoaded(true);
         return;
       }
@@ -236,16 +365,20 @@ export default function GuideTrackStudioPage() {
         }
       }
 
+      setStudioLoadState({ step: "recordingTracks", progress: 68, message: "팀원 녹음 트랙을 확인하는 중입니다.", ready: false });
       setSession(nextSession);
       if (nextSession) {
         setTracks(await getRecordingTracks(nextSession.id));
       }
 
+      setStudioLoadState({ step: "audioMetadata", progress: 82, message: "가이드 오디오와 믹서를 준비하는 중입니다.", ready: false });
       setLoaded(true);
     }
 
     load().catch((loadError) => {
-      setError(loadError instanceof Error ? loadError.message : "팀 녹음실을 불러오지 못했습니다.");
+      const errorMessage = loadError instanceof Error ? loadError.message : "팀 녹음실을 불러오지 못했습니다.";
+      setError(errorMessage);
+      setStudioLoadState({ step: "error", progress: 100, message: "녹음실을 불러오지 못했습니다.", ready: false, error: errorMessage });
       setLoaded(true);
     });
   }, [params.guideTrackId]);
@@ -256,7 +389,9 @@ export default function GuideTrackStudioPage() {
     let objectUrl = "";
 
     async function renderGuideAudio() {
+      setGuideAudioLoading(true);
       setGuideRenderError("");
+      setStudioLoadState({ step: "audioMetadata", progress: 88, message: "가이드 트랙 오디오를 준비하는 중입니다.", ready: false });
       try {
         const buffer = await renderGuideTrackToAudioBuffer(guideData);
         if (cancelled) return;
@@ -265,10 +400,20 @@ export default function GuideTrackStudioPage() {
         objectUrl = URL.createObjectURL(blob);
         setGuideAudioUrl(objectUrl);
         setGuideAudioDuration(buffer.duration);
+        setStudioLoadState({ step: "mixState", progress: 96, message: "믹서 설정을 적용하는 중입니다.", ready: false });
       } catch (renderError) {
         setGuideRenderError(renderError instanceof Error ? renderError.message : "가이드 트랙 오디오를 준비하지 못했습니다.");
         setGuideAudioUrl("");
         setGuideAudioDuration(fallbackGuideDuration);
+        setStudioLoadState({
+          step: "error",
+          progress: 100,
+          message: "가이드 트랙 오디오를 준비하지 못했습니다.",
+          ready: false,
+          error: renderError instanceof Error ? renderError.message : "가이드 트랙 오디오를 준비하지 못했습니다.",
+        });
+      } finally {
+        if (!cancelled) setGuideAudioLoading(false);
       }
     }
 
@@ -276,19 +421,75 @@ export default function GuideTrackStudioPage() {
 
     return () => {
       cancelled = true;
+      setGuideAudioLoading(false);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [fallbackGuideDuration, guideData, guideTrack]);
 
   useEffect(() => {
-    if (recorder.state !== "recording") return;
+    if (!loaded || !canUseRecordingStudio || !session) return;
+    if (guideAudioLoading || !guideAudioUrl) return;
+    setStudioLoadState({ step: "ready", progress: 100, message: "녹음실 준비가 완료되었습니다.", ready: true });
+  }, [canUseRecordingStudio, guideAudioLoading, guideAudioUrl, loaded, session]);
+
+  useEffect(() => {
+    if (!loaded || !canUseRecordingStudio || !session) return;
+    if (orderedTracks.length === 0) {
+      setAssetLoadState({ step: "ready", progress: 100, message: "팀원 녹음 트랙이 없습니다.", ready: true });
+      return;
+    }
+
+    let cancelled = false;
+    async function preloadReadUrls() {
+      setAssetLoadState({
+        step: "readUrls",
+        progress: 10,
+        message: "팀원 녹음 파일 주소를 준비하는 중입니다.",
+        ready: false,
+      });
+
+      let completed = 0;
+      let failed = 0;
+      for (const track of orderedTracks) {
+        try {
+          await ensureReadUrl(track.id);
+        } catch {
+          failed += 1;
+        } finally {
+          completed += 1;
+          if (!cancelled) {
+            setAssetLoadState({
+              step: completed === orderedTracks.length ? "ready" : "readUrls",
+              progress: Math.round((completed / orderedTracks.length) * 100),
+              message:
+                completed === orderedTracks.length
+                  ? failed > 0
+                    ? `${failed}개 트랙은 나중에 다시 불러올 수 있습니다.`
+                    : "팀원 녹음 트랙 준비가 완료되었습니다."
+                  : `팀원 녹음 트랙을 준비하는 중입니다. ${completed}/${orderedTracks.length}`,
+              ready: completed === orderedTracks.length,
+              error: failed > 0 ? "일부 녹음 파일 주소를 불러오지 못했습니다." : undefined,
+            });
+          }
+        }
+      }
+    }
+
+    void preloadReadUrls();
+    return () => {
+      cancelled = true;
+    };
+  }, [canUseRecordingStudio, ensureReadUrl, loaded, orderedTracks, session]);
+
+  useEffect(() => {
+    if (recorder.state !== "recording" && !uploading && !recorder.blob) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [recorder.state]);
+  }, [recorder.blob, recorder.state, uploading]);
 
   useEffect(() => {
     if (selectedTrackId && !orderedTracks.some((track) => track.id === selectedTrackId)) {
@@ -298,7 +499,12 @@ export default function GuideTrackStudioPage() {
 
   async function refreshTracks() {
     if (!session) return;
-    setTracks(await getRecordingTracks(session.id));
+    const nextTracks = await getRecordingTracks(session.id);
+    setTracks(nextTracks);
+    const nextTrackIds = new Set(nextTracks.map((track) => track.id));
+    setReadUrls((current) =>
+      Object.fromEntries(Object.entries(current).filter(([trackId]) => nextTrackIds.has(trackId))) as Record<string, TrackReadUrlState>,
+    );
   }
 
   async function refreshUsageSummary() {
@@ -307,15 +513,33 @@ export default function GuideTrackStudioPage() {
   }
 
   async function handleRequestPermission() {
+    if (!loaded) return;
     const granted = await recorder.requestMicrophonePermission();
     if (granted) setMessage("선택한 입력 장치를 사용할 준비가 되었습니다.");
   }
 
   async function startRecordingWithGuide(skipTest = false) {
+    if (recordingActionLockedRef.current) return;
     setError("");
     if (recorder.state === "recording") {
       recorder.stopRecording();
       player.pause();
+      return;
+    }
+
+    if (!studioReady) {
+      setError("녹음실 준비가 아직 끝나지 않았습니다. 잠시만 기다려 주세요.");
+      return;
+    }
+
+    if (uploading) {
+      setError("현재 업로드 중입니다. 업로드가 끝난 뒤 다시 시도해 주세요.");
+      return;
+    }
+
+    if (recorder.blob) {
+      setMessage("이미 녹음한 파일이 있습니다. 새로 녹음하려면 다시 녹음을 눌러 현재 미리듣기 녹음을 초기화해 주세요.");
+      recordingPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
 
@@ -331,17 +555,24 @@ export default function GuideTrackStudioPage() {
     }
 
     inputMeter.stopTest();
-    const started = await recorder.startRecording();
-    if (started) {
-      player.seek(0);
-      void player.play().catch((playError) => {
-        setError(playError instanceof Error ? playError.message : "가이드 트랙 재생을 시작하지 못했습니다.");
-      });
+    recordingActionLockedRef.current = true;
+    try {
+      const started = await recorder.startRecording();
+      if (started) {
+        player.seek(0);
+        void player.play().catch((playError) => {
+          setError(playError instanceof Error ? playError.message : "가이드 트랙 재생을 시작하지 못했습니다.");
+        });
+      }
+    } finally {
+      recordingActionLockedRef.current = false;
     }
   }
 
   async function handleSaveRecording() {
     if (!session || !guideTrack || !recorder.blob) return;
+    if (uploadActionLockedRef.current) return;
+    uploadActionLockedRef.current = true;
     setUploading(true);
     setError("");
     setMessage("");
@@ -361,6 +592,7 @@ export default function GuideTrackStudioPage() {
         latencyOffsetMs: 0,
       });
       setMessage("녹음을 저장했습니다.");
+      setLastUploadedAt(Date.now());
       recorder.resetRecording();
       setNotes("");
       await refreshTracks();
@@ -369,7 +601,14 @@ export default function GuideTrackStudioPage() {
       setError(uploadError instanceof Error ? uploadError.message : "녹음을 저장하지 못했습니다.");
     } finally {
       setUploading(false);
+      uploadActionLockedRef.current = false;
     }
+  }
+
+  function handleResetRecording() {
+    if (recorder.blob && !window.confirm("다시 녹음할까요? 현재 저장하지 않은 녹음은 사라집니다.")) return;
+    recorder.resetRecording();
+    setMessage("새 녹음을 시작할 수 있습니다.");
   }
 
   async function handleDeleteTrack(trackId: string) {
@@ -378,6 +617,11 @@ export default function GuideTrackStudioPage() {
     try {
       await markRecordingTrackDeleted(trackId);
       player.stop();
+      setReadUrls((current) => {
+        const next = { ...current };
+        delete next[trackId];
+        return next;
+      });
       await refreshTracks();
       await refreshUsageSummary();
       setMessage("녹음을 삭제했습니다.");
@@ -399,6 +643,14 @@ export default function GuideTrackStudioPage() {
 
   async function handleDownloadMixdown() {
     if (!song) return;
+    if (!studioReady) {
+      setError("녹음실 준비가 끝난 뒤 다운로드할 수 있습니다.");
+      return;
+    }
+    if (recorder.state === "recording" || uploading) {
+      setError("녹음이나 업로드가 끝난 뒤 다운로드해 주세요.");
+      return;
+    }
     setMixdowning(true);
     setError("");
     setMessage("");
@@ -459,7 +711,8 @@ export default function GuideTrackStudioPage() {
   if (!loaded) {
     return (
       <div className="page-shell">
-        <div className="card p-8 text-sm text-slate-500">팀 녹음실을 불러오는 중입니다.</div>
+        <StudioLoadingPanel state={studioLoadState} />
+        <StudioSkeleton />
       </div>
     );
   }
@@ -522,6 +775,7 @@ export default function GuideTrackStudioPage() {
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">DAW 스타일</span>
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">세션 {session.status}</span>
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">Cloudflare R2 저장</span>
+            <span className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 ${studioStatus.className}`}>{studioStatus.label}</span>
           </div>
           <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950">팀 녹음실</h1>
           <p className="mt-2 text-sm font-semibold text-slate-600">
@@ -538,11 +792,19 @@ export default function GuideTrackStudioPage() {
         <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error || recorder.error || guideRenderError}</p>
       ) : null}
 
+      <StudioPreparationNotice
+        studioState={studioReady ? { ...studioLoadState, ready: true, progress: 100, message: "녹음실 준비가 완료되었습니다." } : studioLoadState}
+        assetState={assetLoadState}
+        trackCount={orderedTracks.length}
+        ready={studioReady}
+      />
+
       <RecordingUsageNotice summary={usageSummary} labEnabled={Boolean(profile?.labEnabled)} />
 
       <StudioTransportBar
         playing={player.playing}
-        loading={player.loading}
+        loading={player.loading || !studioReady}
+        disabled={!studioReady || mixdowning || uploading}
         recording={recorder.state === "recording"}
         currentTime={player.currentTime}
         duration={player.duration}
@@ -559,7 +821,13 @@ export default function GuideTrackStudioPage() {
               }
             : undefined
         }
-        onPlayPause={() => (player.playing ? player.pause() : void player.play().catch((playError) => setError(playError instanceof Error ? playError.message : "재생을 시작하지 못했습니다.")))}
+        onPlayPause={() => {
+          if (!studioReady) {
+            setError("녹음실 준비가 아직 끝나지 않았습니다. 잠시만 기다려 주세요.");
+            return;
+          }
+          player.playing ? player.pause() : void player.play().catch((playError) => setError(playError instanceof Error ? playError.message : "재생을 시작하지 못했습니다."));
+        }}
         onStop={player.stop}
         onRewind={() => player.seek(0)}
         onSeek={player.seek}
@@ -575,10 +843,10 @@ export default function GuideTrackStudioPage() {
             <p className="mt-1 text-sm leading-6 text-slate-600">Guide는 맨 위에, 팀원 녹음은 파트별 색상으로 아래에 표시됩니다.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={handleDownloadMixdown} disabled={mixdowning} className="btn-primary">
+            <button type="button" onClick={handleDownloadMixdown} disabled={!studioReady || mixdowning || blockingBusy} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
               {mixdowning ? "믹스 만드는 중..." : "현재 믹스 다운로드"}
             </button>
-            <button type="button" onClick={refreshTracks} className="btn-secondary">목록 새로고침</button>
+            <button type="button" onClick={refreshTracks} disabled={recorder.state === "recording"} className="btn-secondary disabled:cursor-not-allowed disabled:opacity-50">목록 새로고침</button>
           </div>
         </div>
 
@@ -644,7 +912,8 @@ export default function GuideTrackStudioPage() {
               >
                 <RecordingWaveform
                   track={track}
-                  sourceUrl={readUrls[track.id]}
+                  sourceUrl={readUrlStrings[track.id]}
+                  readUrlState={readUrls[track.id]}
                   ensureReadUrl={ensureReadUrl}
                   currentTime={player.currentTime}
                   fallbackDuration={track.durationSeconds || player.duration}
@@ -680,10 +949,34 @@ export default function GuideTrackStudioPage() {
               녹음 시작을 누르면 현재 믹스 상태의 트랙이 함께 재생됩니다. 가이드만 들으며 녹음하려면 다른 트랙을 음소거해 주세요.
             </p>
           </div>
-          <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{recorder.state}</span>
+          <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">
+            {getRecordingWorkflowLabel(recordingWorkflowState)}
+          </span>
         </div>
 
         <MobileRecordingNotice />
+
+        {!studioReady ? (
+          <p className="mt-4 rounded-xl bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-700">
+            녹음실 준비가 아직 끝나지 않았습니다. 로딩이 완료되면 녹음 버튼이 활성화됩니다.
+          </p>
+        ) : null}
+
+        {recorder.blob ? (
+          <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+            <h3 className="font-black">현재 녹음 미리듣기 상태입니다.</h3>
+            <p className="mt-1 text-xs font-semibold leading-5 text-amber-900">
+              새로 녹음하려면 “다시 녹음”을 눌러 현재 미리듣기 녹음을 초기화해 주세요. 저장하지 않은 녹음은 사라집니다.
+            </p>
+          </section>
+        ) : lastUploadedAt ? (
+          <section className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">
+            <h3 className="font-black">저장된 녹음이 있습니다.</h3>
+            <p className="mt-1 text-xs font-semibold leading-5 text-emerald-900">
+              새 버전으로 녹음하면 기존 녹음은 목록에 유지되고 새 트랙이 추가됩니다.
+            </p>
+          </section>
+        ) : null}
 
         {!recorder.supported ? (
           <p className="mt-4 rounded-xl bg-rose-50 p-4 text-sm font-semibold leading-6 text-rose-700">
@@ -692,7 +985,7 @@ export default function GuideTrackStudioPage() {
         ) : (
           <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="space-y-4">
-              <button type="button" onClick={handleRequestPermission} className="btn-secondary w-full">
+              <button type="button" onClick={handleRequestPermission} disabled={!loaded || uploading || recorder.state === "recording"} className="btn-secondary w-full disabled:cursor-not-allowed disabled:opacity-50">
                 입력 장치 권한 요청
               </button>
 
@@ -755,9 +1048,9 @@ export default function GuideTrackStudioPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (inputMeter.testing) {
-                        inputMeter.stopTest();
+                  onClick={() => {
+                    if (inputMeter.testing) {
+                      inputMeter.stopTest();
                         return;
                       }
                       setSkipInputTest(false);
@@ -767,6 +1060,7 @@ export default function GuideTrackStudioPage() {
                         rawInputMode: recorder.rawInputMode,
                       });
                     }}
+                    disabled={!studioReady || recorder.state === "recording" || uploading}
                     className="rounded-xl bg-white px-4 py-2 text-xs font-black text-blue-700 ring-1 ring-blue-100 transition hover:bg-blue-50"
                   >
                     {inputMeter.testing ? "테스트 중지" : "테스트 시작"}
@@ -833,7 +1127,7 @@ export default function GuideTrackStudioPage() {
                 <button
                   type="button"
                   onClick={() => void startRecordingWithGuide()}
-                  disabled={!recorder.canRecord && recorder.state !== "recording"}
+                  disabled={(!recorder.canRecord && recorder.state !== "recording") || (!studioReady && recorder.state !== "recording") || uploading || Boolean(recorder.blob)}
                   className={
                     recorder.state === "recording"
                       ? "min-h-14 rounded-xl bg-rose-600 px-5 py-3 text-base font-black text-white shadow-sm transition hover:bg-rose-700"
@@ -842,7 +1136,7 @@ export default function GuideTrackStudioPage() {
                 >
                   {recorder.state === "recording" ? "녹음 중지" : "녹음 시작"}
                 </button>
-                <button type="button" onClick={recorder.resetRecording} className="btn-secondary min-h-14">
+                <button type="button" onClick={handleResetRecording} disabled={recorder.state === "recording" || uploading} className="btn-secondary min-h-14 disabled:cursor-not-allowed disabled:opacity-50">
                   다시 녹음
                 </button>
               </div>
@@ -853,7 +1147,7 @@ export default function GuideTrackStudioPage() {
                     setSkipInputTest(true);
                     void startRecordingWithGuide(true);
                   }}
-                  disabled={!recorder.canRecord}
+                  disabled={!recorder.canRecord || !studioReady || uploading || Boolean(recorder.blob)}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   테스트 건너뛰고 녹음
@@ -927,6 +1221,125 @@ function MobileRecordingNotice() {
       </div>
     </section>
   );
+}
+
+function StudioLoadingPanel({ state }: { state: StudioLoadState }) {
+  return (
+    <section className="card p-6 sm:p-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-blue-700">팀 녹음실</p>
+          <h1 className="mt-2 text-2xl font-black text-slate-950">녹음실을 준비하고 있습니다.</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{state.message}</p>
+        </div>
+        <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100">
+          {Math.round(state.progress)}%
+        </span>
+      </div>
+      <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.max(4, Math.min(100, state.progress))}%` }} />
+      </div>
+      <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+        가이드 트랙, 팀원 녹음 목록, 권한과 믹서 상태를 확인하는 중입니다.
+      </p>
+    </section>
+  );
+}
+
+function StudioSkeleton() {
+  return (
+    <section className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-slate-100/70 p-4">
+      <div className="h-20 animate-pulse rounded-2xl bg-white" />
+      <div className="h-16 animate-pulse rounded-2xl bg-white" />
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="grid gap-3 rounded-2xl bg-white p-3 sm:grid-cols-[160px_1fr]">
+          <div className="h-12 animate-pulse rounded-xl bg-slate-100" />
+          <div className="h-14 animate-pulse rounded-xl bg-slate-100" />
+        </div>
+      ))}
+      <div className="h-40 animate-pulse rounded-2xl bg-white" />
+    </section>
+  );
+}
+
+function StudioPreparationNotice({
+  studioState,
+  assetState,
+  trackCount,
+  ready,
+}: {
+  studioState: StudioLoadState;
+  assetState: StudioLoadState;
+  trackCount: number;
+  ready: boolean;
+}) {
+  if (ready && assetState.ready) {
+    return (
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+        녹음실 준비가 완료되었습니다. 재생과 녹음을 시작할 수 있습니다.
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-sm font-black text-blue-950">{ready ? "팀원 녹음 트랙 준비 중" : "녹음실 준비 중"}</h2>
+          <p className="mt-1 text-xs font-semibold leading-5 text-blue-800">
+            {ready ? assetState.message : studioState.message}
+          </p>
+          {trackCount > 0 ? (
+            <p className="mt-1 text-xs font-semibold leading-5 text-blue-700">
+              파형은 화면에 보이는 트랙부터 천천히 준비됩니다. 파형이 없어도 재생은 가능합니다.
+            </p>
+          ) : null}
+        </div>
+        <span className="w-fit rounded-full bg-white px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100">
+          {Math.round(ready ? assetState.progress : studioState.progress)}%
+        </span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all"
+          style={{ width: `${Math.max(4, Math.min(100, ready ? assetState.progress : studioState.progress))}%` }}
+        />
+      </div>
+      {assetState.error ? <p className="mt-2 text-xs font-bold text-rose-700">{assetState.error}</p> : null}
+    </section>
+  );
+}
+
+function getStudioStatus({
+  studioReady,
+  guideAudioLoading,
+  playerLoading,
+  recordingState,
+  hasError,
+}: {
+  studioReady: boolean;
+  guideAudioLoading: boolean;
+  playerLoading: boolean;
+  recordingState: RecordingWorkflowState;
+  hasError: boolean;
+}) {
+  if (hasError) return { label: "오류", className: "bg-rose-50 text-rose-700 ring-rose-100" };
+  if (recordingState === "recording") return { label: "녹음 중", className: "bg-rose-600 text-white ring-rose-600" };
+  if (recordingState === "uploading") return { label: "업로드 중", className: "bg-amber-50 text-amber-700 ring-amber-100" };
+  if (playerLoading) return { label: "오디오 준비 중", className: "bg-blue-50 text-blue-700 ring-blue-100" };
+  if (!studioReady || guideAudioLoading) return { label: "준비 중", className: "bg-slate-100 text-slate-600 ring-slate-200" };
+  return { label: "준비 완료", className: "bg-emerald-50 text-emerald-700 ring-emerald-100" };
+}
+
+function getRecordingWorkflowLabel(state: RecordingWorkflowState) {
+  if (state === "requesting_permission") return "권한 요청 중";
+  if (state === "ready") return "녹음 준비 완료";
+  if (state === "recording") return "녹음 중";
+  if (state === "preview") return "미리듣기";
+  if (state === "uploading") return "업로드 중";
+  if (state === "uploaded") return "저장 완료";
+  if (state === "failed") return "오류";
+  return "대기 중";
 }
 
 function RecordingUsageNotice({
@@ -1838,6 +2251,7 @@ function PanKnob({
 function RecordingWaveform({
   track,
   sourceUrl,
+  readUrlState,
   ensureReadUrl,
   currentTime,
   fallbackDuration,
@@ -1848,7 +2262,8 @@ function RecordingWaveform({
 }: {
   track: TeamRecordingTrack;
   sourceUrl?: string;
-  ensureReadUrl: (trackId: string) => Promise<string>;
+  readUrlState?: TrackReadUrlState;
+  ensureReadUrl: (trackId: string, options?: { force?: boolean }) => Promise<string>;
   currentTime: number;
   fallbackDuration: number;
   muted?: boolean;
@@ -1856,12 +2271,35 @@ function RecordingWaveform({
   theme: StudioTrackTheme;
   onSeek: (time: number) => void;
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
   const [peaks, setPeaks] = useState<number[]>([]);
   const [duration, setDuration] = useState(fallbackDuration);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
     let cancelled = false;
 
     async function loadPeaks() {
@@ -1885,22 +2323,40 @@ function RecordingWaveform({
     return () => {
       cancelled = true;
     };
-  }, [ensureReadUrl, fallbackDuration, sourceUrl, track.id]);
+  }, [ensureReadUrl, fallbackDuration, sourceUrl, track.id, visible]);
+
+  const displayError = error || readUrlState?.error;
 
   return (
-    <WaveformCanvas
-      peaks={peaks}
-      duration={duration || fallbackDuration}
-      currentTime={currentTime}
-      muted={muted}
-      solo={solo}
-      waveColor={theme.wave}
-      backgroundColor={theme.background}
-      height={56}
-      loading={loading}
-      error={error}
-      onSeek={onSeek}
-    />
+    <div ref={containerRef} className="space-y-2">
+      <WaveformCanvas
+        peaks={peaks}
+        duration={duration || fallbackDuration}
+        currentTime={currentTime}
+        muted={muted}
+        solo={solo}
+        waveColor={theme.wave}
+        backgroundColor={theme.background}
+        height={56}
+        loading={loading || readUrlState?.loading}
+        error={displayError}
+        onSeek={onSeek}
+      />
+      {displayError ? (
+        <button
+          type="button"
+          onClick={() => {
+            setError("");
+            void ensureReadUrl(track.id, { force: true }).catch((reloadError) => {
+              setError(reloadError instanceof Error ? reloadError.message : "녹음 파일을 다시 불러오지 못했습니다.");
+            });
+          }}
+          className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-black text-rose-700 ring-1 ring-rose-100 transition hover:bg-rose-50"
+        >
+          이 트랙 다시 불러오기
+        </button>
+      ) : null}
+    </div>
   );
 }
 
