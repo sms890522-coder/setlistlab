@@ -185,6 +185,18 @@ const guideFaqItems = [
       "기본적으로 곡 태그는 개인별로 저장됩니다. 같은 곡이라도 각자 자신만의 기준으로 태그를 관리할 수 있습니다.",
   },
   {
+    question: "곡에 태그를 여러 개 넣을 수 있나요?",
+    answer: "네. 곡의 주제에 맞게 감사, 보혈, 성령, 은혜, 찬양 같은 태그를 여러 개 선택할 수 있습니다.",
+  },
+  {
+    question: "추천 태그 외에 직접 태그를 만들 수 있나요?",
+    answer: "네. 곡 저장/수정 화면에서 직접 태그를 입력해 추가할 수 있습니다.",
+  },
+  {
+    question: "태그로 곡을 검색할 수 있나요?",
+    answer: "네. 곡 보관함에서 태그를 선택하면 해당 주제 태그가 붙은 곡을 빠르게 찾을 수 있습니다.",
+  },
+  {
     question: "실험실 기능은 무엇인가요?",
     answer:
       "내 계정에서 실험실을 켜면 테스트 중인 새 기능을 먼저 사용할 수 있습니다. 실험실 기능은 변경되거나 일시적으로 동작하지 않을 수 있습니다.",
@@ -567,9 +579,14 @@ export default function GuidePage() {
           곡 카드 안의 <InlineCode>보관함 저장</InlineCode> 버튼으로 현재 곡 정보를 보관함에 저장할 수 있습니다.
         </p>
         <p>
-          곡 보관함의 각 곡에는 개인 태그를 붙일 수 있습니다. 예를 들어 <InlineCode>#빠른곡</InlineCode>,
-          <InlineCode>#기도회</InlineCode>, <InlineCode>#G키</InlineCode>처럼 저장해두면 태그별로 곡을 빠르게
-          찾을 수 있습니다. 태그는 개인별로 저장되기 때문에 같은 곡이라도 사용자마다 다르게 관리할 수 있습니다.
+          곡 보관함의 각 곡에는 개인 주제 태그를 붙일 수 있습니다. 예를 들어 <InlineCode>#감사</InlineCode>,
+          <InlineCode>#보혈</InlineCode>, <InlineCode>#성령</InlineCode>, <InlineCode>#은혜</InlineCode>,
+          <InlineCode>#찬양</InlineCode>처럼 예배 주제별 추천 태그를 선택하거나 직접 태그를 추가할 수 있습니다.
+          태그는 개인별로 저장되기 때문에 같은 곡이라도 사용자마다 다르게 관리할 수 있습니다.
+        </p>
+        <p>
+          곡 보관함의 <InlineCode>태그로 찾기</InlineCode> 영역에서 태그를 선택하면 검색어와 함께 조건을 적용해
+          원하는 곡을 빠르게 찾을 수 있습니다.
         </p>
       </GuideSection>
 

@@ -50,7 +50,7 @@ export default function SongsPage() {
         .join(" ")
         .toLocaleLowerCase("ko-KR")
         .includes(normalizedQuery);
-      const matchesTags = normalizedSelectedTags.every((tag) => songNormalizedTags.has(tag));
+      const matchesTags = normalizedSelectedTags.length === 0 || normalizedSelectedTags.some((tag) => songNormalizedTags.has(tag));
       return matchesQuery && matchesTags;
     });
   }, [query, selectedTags, songs]);
@@ -279,12 +279,12 @@ export default function SongsPage() {
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="field-label">태그 필터</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">여러 태그를 선택하면 모두 포함한 곡만 보여줍니다.</p>
+                    <p className="field-label">태그로 찾기</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">여러 태그를 선택하면 그중 하나라도 포함한 곡을 보여줍니다.</p>
                   </div>
                   {selectedTags.length > 0 ? (
                     <button type="button" onClick={() => setSelectedTags([])} className="btn-secondary min-h-9 px-3 text-xs">
-                      필터 초기화
+                      전체 보기
                     </button>
                   ) : null}
                 </div>
@@ -319,7 +319,7 @@ export default function SongsPage() {
                 <p>{selectedTags.length > 0 || query.trim() ? "검색어와 태그 조건에 맞는 곡이 없습니다." : "검색 결과가 없습니다."}</p>
                 {selectedTags.length > 0 ? (
                   <button type="button" onClick={() => setSelectedTags([])} className="btn-secondary mt-3 min-h-10 px-3">
-                    필터 초기화
+                    전체 보기
                   </button>
                 ) : null}
               </div>

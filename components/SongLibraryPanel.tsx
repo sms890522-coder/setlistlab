@@ -54,7 +54,7 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase("ko-KR");
-      const matchesTags = normalizedTagFilters.every((tag) => songNormalizedTags.has(tag));
+      const matchesTags = normalizedTagFilters.length === 0 || normalizedTagFilters.some((tag) => songNormalizedTags.has(tag));
 
       return (!normalizedQuery || searchable.includes(normalizedQuery)) && (!keyFilter || songKey === keyFilter) && matchesTags;
     });
@@ -138,12 +138,12 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="field-label">태그 필터</p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">선택한 태그를 모두 가진 곡만 표시합니다.</p>
+              <p className="field-label">태그로 찾기</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">선택한 태그 중 하나라도 가진 곡을 표시합니다.</p>
             </div>
             {tagFilters.length > 0 ? (
               <button type="button" onClick={() => setTagFilters([])} className="btn-secondary min-h-9 px-3 text-xs">
-                태그 초기화
+                전체 보기
               </button>
             ) : null}
           </div>
@@ -178,7 +178,7 @@ export function SongLibraryPanel({ songs, onAdd, onDelete }: SongLibraryPanelPro
           <p>{tagFilters.length > 0 || query.trim() ? "검색어와 태그 조건에 맞는 곡이 없습니다." : "검색 결과가 없습니다."}</p>
           {tagFilters.length > 0 ? (
             <button type="button" onClick={() => setTagFilters([])} className="btn-secondary mt-3 min-h-10 px-3">
-              필터 초기화
+              전체 보기
             </button>
           ) : null}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { cleanTagName, normalizeTagName, RECOMMENDED_SONG_TAGS } from "@/lib/db/songTags";
+import { cleanTagName, DEFAULT_SONG_TAGS, normalizeTagName } from "@/lib/db/songTags";
 import { useMemo, useState } from "react";
 
 type SongTagsEditorProps = {
@@ -13,7 +13,7 @@ export function SongTagsEditor({ tags, onChange, usedTags = [] }: SongTagsEditor
   const [input, setInput] = useState("");
   const normalizedTags = useMemo(() => new Set(tags.map(normalizeTagName)), [tags]);
   const recommendations = useMemo(() => {
-    const merged = [...RECOMMENDED_SONG_TAGS, ...usedTags];
+    const merged = [...DEFAULT_SONG_TAGS, ...usedTags];
     const seen = new Set<string>();
     return merged.filter((tag) => {
       const normalized = normalizeTagName(tag);
@@ -51,32 +51,43 @@ export function SongTagsEditor({ tags, onChange, usedTags = [] }: SongTagsEditor
     onChange(tags.filter((item) => normalizeTagName(item) !== normalized));
   }
 
+  function toggleTag(tag: string) {
+    if (normalizedTags.has(normalizeTagName(tag))) {
+      removeTag(tag);
+      return;
+    }
+    addTag(tag);
+  }
+
   return (
     <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
       <div>
-        <h3 className="font-black text-slate-950">태그</h3>
+        <h3 className="font-black text-slate-950">주제 태그</h3>
         <p className="mt-1 text-sm leading-6 text-slate-500">
-          나중에 곡을 쉽게 찾을 수 있도록 개인 태그를 추가해보세요. 태그는 나에게만 저장됩니다.
+          곡의 주제에 맞는 태그를 선택해 주세요. 나중에 태그별로 곡을 쉽게 찾을 수 있습니다.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {tags.length === 0 ? (
-          <p className="text-sm font-semibold text-slate-400">아직 태그가 없습니다.</p>
-        ) : (
-          tags.map((tag) => (
-            <span key={normalizeTagName(tag)} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1.5 text-sm font-black text-blue-700">
-              #{tag}
-              <button type="button" onClick={() => removeTag(tag)} className="rounded-full px-1 text-blue-500 hover:bg-blue-100 hover:text-blue-900" aria-label={`${tag} 태그 삭제`}>
-                ×
-              </button>
-            </span>
-          ))
-        )}
+      <div>
+        <p className="field-label">선택된 태그</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {tags.length === 0 ? (
+            <p className="text-sm font-semibold text-slate-400">아직 선택한 태그가 없습니다.</p>
+          ) : (
+            tags.map((tag) => (
+              <span key={normalizeTagName(tag)} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1.5 text-sm font-black text-blue-700">
+                #{tag}
+                <button type="button" onClick={() => removeTag(tag)} className="rounded-full px-1 text-blue-500 hover:bg-blue-100 hover:text-blue-900" aria-label={`${tag} 태그 삭제`}>
+                  ×
+                </button>
+              </span>
+            ))
+          )}
+        </div>
       </div>
 
       <label className="block space-y-1">
-        <span className="field-label">태그 입력</span>
+        <span className="field-label">직접 태그 추가</span>
         <input
           value={input}
           onChange={(event) => {
@@ -94,7 +105,7 @@ export function SongTagsEditor({ tags, onChange, usedTags = [] }: SongTagsEditor
             }
           }}
           className="field-input bg-white"
-          placeholder="예: 빠른곡, 기도회, G키"
+          placeholder="직접 태그 추가"
         />
       </label>
 
@@ -112,20 +123,20 @@ export function SongTagsEditor({ tags, onChange, usedTags = [] }: SongTagsEditor
       ) : null}
 
       <div>
-        <p className="field-label">추천 태그</p>
+        <p className="field-label">추천 주제 태그</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {RECOMMENDED_SONG_TAGS.map((tag) => {
+          {DEFAULT_SONG_TAGS.map((tag) => {
             const selected = normalizedTags.has(normalizeTagName(tag));
             return (
               <button
                 key={tag}
                 type="button"
-                onClick={() => addTag(tag)}
-                disabled={selected}
+                onClick={() => toggleTag(tag)}
+                aria-pressed={selected}
                 className={
                   selected
-                    ? "rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white"
-                    : "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                    ? "rounded-full bg-blue-600 px-3 py-2 text-xs font-black text-white shadow-sm"
+                    : "rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                 }
               >
                 #{tag}
