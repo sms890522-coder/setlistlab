@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { AuthNav } from "@/components/AuthNav";
 import { TeamChatWidget } from "@/components/TeamChatWidget";
+import { TopAnnouncementBar } from "@/components/announcements/TopAnnouncementBar";
 import "./globals.css";
 
 const siteUrl = "https://setlistlab.vercel.app";
@@ -88,6 +89,7 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <header className="sticky top-0 z-30 border-b border-white/70 bg-white/80 backdrop-blur">
+          <TopAnnouncementBar />
           <nav className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
             <Link href="/" className="inline-flex items-center gap-2 text-lg font-black tracking-tight text-slate-950">
               <img
@@ -118,6 +120,10 @@ export default function RootLayout({
           ·{" "}
           <Link href="/guide" className="font-semibold text-slate-500 transition hover:text-blue-600">
             사용설명서
+          </Link>{" "}
+          ·{" "}
+          <Link href="/whats-new" className="font-semibold text-slate-500 transition hover:text-blue-600">
+            새소식
           </Link>{" "}
           ·{" "}
           <Link href="/contact" className="font-semibold text-slate-500 transition hover:text-blue-600">

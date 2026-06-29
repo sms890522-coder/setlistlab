@@ -19,6 +19,7 @@ export type Profile = {
   serviceName?: string;
   sharePracticePresence: boolean;
   labEnabled: boolean;
+  isAdmin: boolean;
   termsAcceptedAt?: string;
   privacyAcceptedAt?: string;
   ageConfirmedAt?: string;
@@ -39,6 +40,7 @@ type ProfileRow = {
   service_name: string | null;
   share_practice_presence: boolean | null;
   lab_enabled: boolean | null;
+  is_admin: boolean | null;
   terms_accepted_at: string | null;
   privacy_accepted_at: string | null;
   age_confirmed_at: string | null;
@@ -49,7 +51,7 @@ type ProfileRow = {
 };
 
 const PROFILE_SELECT =
-  "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, lab_enabled, terms_accepted_at, privacy_accepted_at, age_confirmed_at, terms_version, privacy_version, created_at, updated_at";
+  "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, lab_enabled, is_admin, terms_accepted_at, privacy_accepted_at, age_confirmed_at, terms_version, privacy_version, created_at, updated_at";
 const PROFILE_SELECT_LEGACY =
   "id, display_name, avatar_url, role, custom_role, church_name, praise_team_name, service_name, share_practice_presence, created_at, updated_at";
 
@@ -101,6 +103,7 @@ export async function ensureUserProfile(user?: User | null) {
     service_name: existingProfile?.serviceName ?? null,
     share_practice_presence: existingProfile?.sharePracticePresence ?? true,
     lab_enabled: existingProfile?.labEnabled ?? false,
+    is_admin: existingProfile?.isAdmin ?? false,
     terms_accepted_at: existingProfile?.termsAcceptedAt ?? legalConsent?.termsAcceptedAt ?? null,
     privacy_accepted_at: existingProfile?.privacyAcceptedAt ?? legalConsent?.privacyAcceptedAt ?? null,
     age_confirmed_at: existingProfile?.ageConfirmedAt ?? legalConsent?.ageConfirmedAt ?? null,
@@ -157,6 +160,7 @@ export async function upsertMyProfile(input: {
     service_name: normalizedInput.serviceName,
     share_practice_presence: normalizedInput.sharePracticePresence,
     lab_enabled: normalizedInput.labEnabled,
+    is_admin: existingProfile?.isAdmin ?? false,
     terms_accepted_at: existingProfile?.termsAcceptedAt ?? legalConsent?.termsAcceptedAt ?? null,
     privacy_accepted_at: existingProfile?.privacyAcceptedAt ?? legalConsent?.privacyAcceptedAt ?? null,
     age_confirmed_at: existingProfile?.ageConfirmedAt ?? legalConsent?.ageConfirmedAt ?? null,
@@ -239,6 +243,7 @@ function rowToProfile(row: ProfileRow): Profile {
     serviceName: row.service_name ?? undefined,
     sharePracticePresence: row.share_practice_presence ?? true,
     labEnabled: row.lab_enabled ?? false,
+    isAdmin: row.is_admin ?? false,
     termsAcceptedAt: row.terms_accepted_at ?? undefined,
     privacyAcceptedAt: row.privacy_accepted_at ?? undefined,
     ageConfirmedAt: row.age_confirmed_at ?? undefined,
@@ -261,6 +266,7 @@ async function upsertProfileRow(row: {
   service_name: string | null;
   share_practice_presence: boolean;
   lab_enabled: boolean;
+  is_admin: boolean;
   terms_accepted_at: string | null;
   privacy_accepted_at: string | null;
   age_confirmed_at: string | null;
@@ -279,6 +285,7 @@ async function upsertProfileRow(row: {
     email: _email,
     avatar_url: _avatarUrl,
     lab_enabled: _labEnabled,
+    is_admin: _isAdmin,
     terms_accepted_at: _termsAcceptedAt,
     privacy_accepted_at: _privacyAcceptedAt,
     age_confirmed_at: _ageConfirmedAt,
@@ -297,6 +304,7 @@ function isMissingProfileMetadataColumnError(error: { message?: string; code?: s
     message.includes("email") ||
     message.includes("avatar_url") ||
     message.includes("lab_enabled") ||
+    message.includes("is_admin") ||
     message.includes("terms_accepted_at") ||
     message.includes("privacy_accepted_at") ||
     message.includes("age_confirmed_at") ||

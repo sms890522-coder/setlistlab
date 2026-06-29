@@ -9,6 +9,7 @@ const publicRoutes = [
   "/teams",
   "/tools/tuner",
   "/guide",
+  "/whats-new",
   "/login",
   "/signup",
   "/contact",

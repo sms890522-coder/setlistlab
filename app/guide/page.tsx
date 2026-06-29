@@ -115,6 +115,7 @@ const guideSections = [
   ["posts", "공지사항"],
   ["calendar", "팀 캘린더와 가능 여부 체크"],
   ["notifications", "알림"],
+  ["whats-new", "새소식"],
   ["lab", "실험실과 팀 가이드 트랙/팀 녹음실"],
   ["tools", "튜너 & 메트로놈"],
   ["mobile", "휴대폰에서 사용하기"],
@@ -129,6 +130,18 @@ const guideFaqItems = [
   {
     question: "팀원도 로그인해야 하나요?",
     answer: "팀 초대, 팀 채팅, 1:1 대화, 공지사항, 캘린더 같은 팀 기능을 사용하려면 로그인이 필요합니다.",
+  },
+  {
+    question: "새소식이 사라졌는데 다시 볼 수 있나요?",
+    answer: "네. 상단 공지바에서 사라진 새소식도 /whats-new 새소식 기록 페이지에서 다시 확인할 수 있습니다.",
+  },
+  {
+    question: "새소식에서 X를 누르면 완전히 읽음 처리되나요?",
+    answer: "아니요. X는 오늘만 숨김 처리입니다. 확인했어요를 눌러야 읽음 처리되어 상단 공지바에 다시 나오지 않습니다.",
+  },
+  {
+    question: "새소식은 누가 등록하나요?",
+    answer: "관리자 권한이 있는 사용자만 새소식을 등록하고 발행할 수 있습니다.",
   },
   {
     question: "악보를 직접 제공하나요?",
@@ -704,7 +717,22 @@ export default function GuidePage() {
         </Callout>
       </GuideSection>
 
-      <GuideSection id="lab" index={14} title="실험실과 팀 가이드 트랙/팀 녹음실">
+      <GuideSection id="whats-new" index={14} title="새소식">
+        <p>
+          메뉴바 위 최상단에는 콘티연습실 업데이트를 알려주는 <InlineCode>새소식</InlineCode> 바가 표시될 수 있습니다.
+          새 기능, 개선사항, 버그 수정, 점검 안내처럼 짧게 확인하면 좋은 내용을 한 줄로 보여줍니다.
+        </p>
+        <StepList
+          items={[
+            ["자세히 보기", "상단 새소식 바의 자세히 보기를 누르면 상세 모달에서 본문과 추가 링크를 확인할 수 있습니다."],
+            ["확인했어요", "확인했어요를 누르면 읽음 처리되어 같은 새소식은 상단 공지바에 다시 표시되지 않습니다."],
+            ["오늘만 숨김", "X 버튼은 오늘만 숨김 처리입니다. 읽음 처리는 아니기 때문에 다음 날 다시 표시될 수 있습니다."],
+            ["지난 기록", "/whats-new 페이지에서 읽은 새소식과 지난 업데이트를 다시 확인할 수 있습니다."],
+          ]}
+        />
+      </GuideSection>
+
+      <GuideSection id="lab" index={15} title="실험실과 팀 가이드 트랙/팀 녹음실">
         <p>
           <InlineCode>내 계정</InlineCode>의 <InlineCode>실험실 기능 사용</InlineCode>을 켜면 테스트 중인 새 기능을
           먼저 사용할 수 있습니다. 실험실 기능은 변경되거나 일시적으로 동작하지 않을 수 있습니다.
@@ -775,7 +803,7 @@ export default function GuidePage() {
         </Callout>
       </GuideSection>
 
-      <GuideSection id="tools" index={15} title="튜너 & 메트로놈">
+      <GuideSection id="tools" index={16} title="튜너 & 메트로놈">
         <p>
           상단 메뉴 <InlineCode>연습도구</InlineCode>는 <InlineCode>/tools/tuner</InlineCode> 페이지로 연결됩니다.
           페이지 안에서 <InlineCode>튜너</InlineCode>와 <InlineCode>메트로놈</InlineCode> 탭을 전환합니다.
@@ -797,7 +825,7 @@ export default function GuidePage() {
         </Callout>
       </GuideSection>
 
-      <GuideSection id="mobile" index={16} title="휴대폰에서 사용하기">
+      <GuideSection id="mobile" index={17} title="휴대폰에서 사용하기">
         <p>
           휴대폰에서도 콘티 보기, 곡 상세 연습, 팀 채팅, 1:1 대화, 공지 확인, 가능 여부 체크, 튜너와 메트로놈을
           사용할 수 있습니다. PDF 미리보기와 인쇄 저장 화면도 모바일 화면에 맞춰 표시됩니다.
@@ -808,7 +836,7 @@ export default function GuidePage() {
         </p>
       </GuideSection>
 
-      <GuideSection id="faq" index={17} title="자주 묻는 질문">
+      <GuideSection id="faq" index={18} title="자주 묻는 질문">
         <div className="grid gap-3">
           {guideFaqItems.map((item) => (
             <details key={item.question} className="rounded-xl border border-slate-200 bg-white p-4">

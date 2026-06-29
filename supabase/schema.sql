@@ -41,6 +41,9 @@ alter table public.profiles
 add column if not exists lab_enabled boolean not null default false;
 
 alter table public.profiles
+add column if not exists is_admin boolean not null default false;
+
+alter table public.profiles
 add column if not exists terms_accepted_at timestamptz;
 
 alter table public.profiles
@@ -58,6 +61,83 @@ add column if not exists privacy_version text;
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at
 before update on public.profiles
+for each row
+execute function public.set_updated_at();
+
+create or replace function public.prevent_profile_is_admin_change()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.is_admin is distinct from new.is_admin and auth.role() <> 'service_role' then
+    raise exception 'is_admin can only be changed by service role';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_prevent_is_admin_change on public.profiles;
+create trigger profiles_prevent_is_admin_change
+before update on public.profiles
+for each row
+execute function public.prevent_profile_is_admin_change();
+
+create table if not exists public.app_announcements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  summary text not null,
+  body text not null,
+  type text not null default 'feature',
+  status text not null default 'draft',
+  priority integer not null default 0,
+  target text not null default 'all',
+  link_label text,
+  link_url text,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint app_announcements_type_check check (type in ('feature', 'improvement', 'fix', 'important', 'maintenance', 'tip')),
+  constraint app_announcements_status_check check (status in ('draft', 'published', 'archived')),
+  constraint app_announcements_target_check check (target in ('all', 'lab_users', 'logged_in_users')),
+  constraint app_announcements_title_check check (length(trim(title)) > 0),
+  constraint app_announcements_summary_check check (length(trim(summary)) > 0),
+  constraint app_announcements_body_check check (length(trim(body)) > 0)
+);
+
+create index if not exists app_announcements_visible_idx
+on public.app_announcements (status, priority desc, created_at desc);
+
+create index if not exists app_announcements_period_idx
+on public.app_announcements (starts_at, ends_at);
+
+drop trigger if exists app_announcements_set_updated_at on public.app_announcements;
+create trigger app_announcements_set_updated_at
+before update on public.app_announcements
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.app_announcement_reads (
+  id uuid primary key default gen_random_uuid(),
+  announcement_id uuid not null references public.app_announcements(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  read_at timestamptz,
+  hidden_until timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint app_announcement_reads_unique unique (announcement_id, user_id)
+);
+
+create index if not exists app_announcement_reads_user_idx
+on public.app_announcement_reads (user_id);
+
+create index if not exists app_announcement_reads_announcement_idx
+on public.app_announcement_reads (announcement_id);
+
+drop trigger if exists app_announcement_reads_set_updated_at on public.app_announcement_reads;
+create trigger app_announcement_reads_set_updated_at
+before update on public.app_announcement_reads
 for each row
 execute function public.set_updated_at();
 
@@ -1172,6 +1252,8 @@ for each row
 execute function public.set_updated_at();
 
 alter table public.profiles enable row level security;
+alter table public.app_announcements enable row level security;
+alter table public.app_announcement_reads enable row level security;
 alter table public.team_members enable row level security;
 alter table public.teams enable row level security;
 alter table public.team_memberships enable row level security;
@@ -1231,6 +1313,21 @@ as $$
       and status = 'approved'
       and role in ('owner', 'admin')
       and removed_at is null
+  );
+$$;
+
+create or replace function public.is_app_admin(p_user_id uuid default auth.uid())
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = p_user_id
+      and is_admin = true
   );
 $$;
 
@@ -2551,6 +2648,86 @@ on public.profiles
 for update
 using (auth.uid() = id)
 with check (auth.uid() = id);
+
+drop policy if exists "app_announcements_select_visible_or_admin" on public.app_announcements;
+create policy "app_announcements_select_visible_or_admin"
+on public.app_announcements
+for select
+using (
+  public.is_app_admin(auth.uid())
+  or (
+    status = 'published'
+    and (starts_at is null or starts_at <= now())
+    and (ends_at is null or ends_at >= now())
+    and (
+      target = 'all'
+      or (target = 'logged_in_users' and auth.uid() is not null)
+      or (
+        target = 'lab_users'
+        and exists (
+          select 1
+          from public.profiles
+          where profiles.id = auth.uid()
+            and profiles.lab_enabled = true
+        )
+      )
+    )
+  )
+);
+
+drop policy if exists "app_announcements_insert_admin" on public.app_announcements;
+create policy "app_announcements_insert_admin"
+on public.app_announcements
+for insert
+with check (public.is_app_admin(auth.uid()));
+
+drop policy if exists "app_announcements_update_admin" on public.app_announcements;
+create policy "app_announcements_update_admin"
+on public.app_announcements
+for update
+using (public.is_app_admin(auth.uid()))
+with check (public.is_app_admin(auth.uid()));
+
+drop policy if exists "app_announcements_delete_admin" on public.app_announcements;
+create policy "app_announcements_delete_admin"
+on public.app_announcements
+for delete
+using (public.is_app_admin(auth.uid()));
+
+drop policy if exists "app_announcement_reads_select_own" on public.app_announcement_reads;
+create policy "app_announcement_reads_select_own"
+on public.app_announcement_reads
+for select
+using (auth.uid() = user_id);
+
+drop policy if exists "app_announcement_reads_insert_own" on public.app_announcement_reads;
+create policy "app_announcement_reads_insert_own"
+on public.app_announcement_reads
+for insert
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.app_announcements announcements
+    where announcements.id = public.app_announcement_reads.announcement_id
+      and announcements.status = 'published'
+      and (announcements.starts_at is null or announcements.starts_at <= now())
+      and (announcements.ends_at is null or announcements.ends_at >= now())
+  )
+);
+
+drop policy if exists "app_announcement_reads_update_own" on public.app_announcement_reads;
+create policy "app_announcement_reads_update_own"
+on public.app_announcement_reads
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "app_announcement_reads_delete_own" on public.app_announcement_reads;
+create policy "app_announcement_reads_delete_own"
+on public.app_announcement_reads
+for delete
+using (auth.uid() = user_id);
 
 drop policy if exists "team_members_select_own" on public.team_members;
 create policy "team_members_select_own"
