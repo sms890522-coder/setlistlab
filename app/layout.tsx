@@ -83,17 +83,21 @@ export const viewport: Viewport = {
 const socialLinks = [
   {
     label: "Instagram",
-    href: process.env.NEXT_PUBLIC_INSTAGRAM_URL?.trim(),
+    href: getSocialUrl(process.env.NEXT_PUBLIC_INSTAGRAM_URL, "https://www.instagram.com/setlistlab"),
     ariaLabel: "콘티연습실 Instagram 열기",
     icon: "◎",
   },
   {
     label: "Threads",
-    href: process.env.NEXT_PUBLIC_THREADS_URL?.trim(),
+    href: getSocialUrl(process.env.NEXT_PUBLIC_THREADS_URL, "https://www.threads.net/@setlistlab"),
     ariaLabel: "콘티연습실 Threads 열기",
     icon: "T",
   },
 ].filter((link): link is { label: string; href: string; ariaLabel: string; icon: string } => Boolean(link.href));
+
+function getSocialUrl(value: string | undefined, fallback: string) {
+  return value?.trim() || fallback;
+}
 
 export default function RootLayout({
   children,
