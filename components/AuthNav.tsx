@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { NotificationBell } from "@/components/NotificationBell";
+import { isUserAppAdmin } from "@/lib/adminAccess";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyProfile, PROFILE_UPDATED_EVENT } from "@/lib/db/profiles";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -11,6 +12,7 @@ import { useEffect, useState } from "react";
 export function AuthNav() {
   const [loaded, setLoaded] = useState(false);
   const [displayName, setDisplayName] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
@@ -24,12 +26,14 @@ export function AuthNav() {
       const user = await getCurrentUser();
       if (!user) {
         setDisplayName("");
+        setIsAdmin(false);
         setLoaded(true);
         return;
       }
 
       const profile = await getMyProfile().catch(() => null);
       setDisplayName(profile?.displayName || user.email?.split("@")[0] || "내 계정");
+      setIsAdmin(Boolean(profile?.isAdmin) || isUserAppAdmin(user));
       setLoaded(true);
     }
 
@@ -68,6 +72,7 @@ export function AuthNav() {
     { href: "/tools/tuner", label: "연습도구" },
     { href: "/guide", label: "사용설명서" },
     { href: "/contact", label: "문의" },
+    ...(loaded && isAdmin ? [{ href: "/admin/announcements", label: "새소식 관리" }] : []),
   ];
   const accountLabel = loaded && displayName ? displayName : "로그인";
   const accountHref = loaded && displayName ? "/account" : "/login";

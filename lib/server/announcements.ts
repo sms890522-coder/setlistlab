@@ -1,4 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { isUserAppAdmin } from "@/lib/adminAccess";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export type AnnouncementType = "feature" | "improvement" | "fix" | "important" | "maintenance" | "tip";
@@ -100,6 +101,8 @@ export async function requireAnnouncementUser(request: Request) {
 
 export async function requireAnnouncementAdmin(request: Request) {
   const context = await requireAnnouncementUser(request);
+  if (isUserAppAdmin(context.user)) return context;
+
   const { data, error } = await context.supabase
     .from("profiles")
     .select("is_admin")
