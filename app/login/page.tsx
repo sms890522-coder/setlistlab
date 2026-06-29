@@ -85,6 +85,9 @@ export default function LoginPage() {
           </Link>
           이 적용됩니다.
         </p>
+        <p className="mt-2 text-center text-xs font-semibold leading-5 text-slate-500">
+          카카오톡/네이버앱 안에서 Google 로그인이 안 되면 Safari 또는 Chrome에서 열어주세요.
+        </p>
 
         <div className="my-6 flex items-center gap-3">
           <span className="h-px flex-1 bg-slate-200" />

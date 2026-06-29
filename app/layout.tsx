@@ -80,6 +80,21 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+const socialLinks = [
+  {
+    label: "Instagram",
+    href: process.env.NEXT_PUBLIC_INSTAGRAM_URL?.trim(),
+    ariaLabel: "콘티연습실 Instagram 열기",
+    icon: "◎",
+  },
+  {
+    label: "Threads",
+    href: process.env.NEXT_PUBLIC_THREADS_URL?.trim(),
+    ariaLabel: "콘티연습실 Threads 열기",
+    icon: "T",
+  },
+].filter((link): link is { label: string; href: string; ariaLabel: string; icon: string } => Boolean(link.href));
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -108,35 +123,59 @@ export default function RootLayout({
         <main>{children}</main>
         <TeamChatWidget />
         <footer className="px-4 pb-8 text-center text-xs text-slate-400 sm:px-6 lg:px-8">
-          made by{" "}
-          <a
-            href="https://missionlab.work/"
-            target="_blank"
-            rel="noreferrer"
-            className="font-semibold text-slate-500 transition hover:text-blue-600"
-          >
-            미션랩
-          </a>{" "}
-          ·{" "}
-          <Link href="/guide" className="font-semibold text-slate-500 transition hover:text-blue-600">
-            사용설명서
-          </Link>{" "}
-          ·{" "}
-          <Link href="/whats-new" className="font-semibold text-slate-500 transition hover:text-blue-600">
-            새소식
-          </Link>{" "}
-          ·{" "}
-          <Link href="/contact" className="font-semibold text-slate-500 transition hover:text-blue-600">
-            문의/피드백
-          </Link>{" "}
-          ·{" "}
-          <Link href="/terms" className="font-semibold text-slate-500 transition hover:text-blue-600">
-            이용약관
-          </Link>{" "}
-          ·{" "}
-          <Link href="/privacy" className="font-semibold text-slate-500 transition hover:text-blue-600">
-            개인정보처리방침
-          </Link>
+          {socialLinks.length > 0 ? (
+            <div className="mx-auto mb-4 flex max-w-6xl flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-white/70 px-4 py-4 shadow-sm">
+              <p className="text-sm font-black text-slate-700">콘티연습실 소식은 SNS에서도 확인해보세요</p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {socialLinks.map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={link.ariaLabel}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 text-sm font-black text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                  >
+                    <span className="grid size-6 place-items-center rounded-full bg-slate-100 text-xs font-black text-slate-700" aria-hidden="true">
+                      {link.icon}
+                    </span>
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="leading-6">
+            made by{" "}
+            <a
+              href="https://missionlab.work/"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-slate-500 transition hover:text-blue-600"
+            >
+              미션랩
+            </a>{" "}
+            ·{" "}
+            <Link href="/guide" className="font-semibold text-slate-500 transition hover:text-blue-600">
+              사용설명서
+            </Link>{" "}
+            ·{" "}
+            <Link href="/whats-new" className="font-semibold text-slate-500 transition hover:text-blue-600">
+              새소식
+            </Link>{" "}
+            ·{" "}
+            <Link href="/contact" className="font-semibold text-slate-500 transition hover:text-blue-600">
+              문의/피드백
+            </Link>{" "}
+            ·{" "}
+            <Link href="/terms" className="font-semibold text-slate-500 transition hover:text-blue-600">
+              이용약관
+            </Link>{" "}
+            ·{" "}
+            <Link href="/privacy" className="font-semibold text-slate-500 transition hover:text-blue-600">
+              개인정보처리방침
+            </Link>
+          </div>
         </footer>
       </body>
     </html>
