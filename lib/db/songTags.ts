@@ -41,7 +41,22 @@ export const DEFAULT_SONG_TAGS = [
   "하나님나라",
 ] as const;
 
-export const RECOMMENDED_SONG_TAGS = DEFAULT_SONG_TAGS;
+export const LEGACY_RECOMMENDED_SONG_TAGS = [
+  "빠른곡",
+  "느린곡",
+  "헌금송",
+  "기도회",
+  "청년부",
+  "성탄절",
+  "부활절",
+  "쉬운곡",
+  "마무리곡",
+] as const;
+
+export const RECOMMENDED_SONG_TAGS = [
+  ...DEFAULT_SONG_TAGS,
+  ...LEGACY_RECOMMENDED_SONG_TAGS,
+] as const;
 
 type SongTagRow = {
   id: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { cleanTagName, DEFAULT_SONG_TAGS, normalizeTagName } from "@/lib/db/songTags";
+import { cleanTagName, normalizeTagName, RECOMMENDED_SONG_TAGS } from "@/lib/db/songTags";
 import { useMemo, useState } from "react";
 
 type SongTagsEditorProps = {
@@ -13,7 +13,7 @@ export function SongTagsEditor({ tags, onChange, usedTags = [] }: SongTagsEditor
   const [input, setInput] = useState("");
   const normalizedTags = useMemo(() => new Set(tags.map(normalizeTagName)), [tags]);
   const recommendations = useMemo(() => {
-    const merged = [...DEFAULT_SONG_TAGS, ...usedTags];
+    const merged = [...RECOMMENDED_SONG_TAGS, ...usedTags];
     const seen = new Set<string>();
     return merged.filter((tag) => {
       const normalized = normalizeTagName(tag);
@@ -123,9 +123,9 @@ export function SongTagsEditor({ tags, onChange, usedTags = [] }: SongTagsEditor
       ) : null}
 
       <div>
-        <p className="field-label">추천 주제 태그</p>
+        <p className="field-label">추천 태그</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {DEFAULT_SONG_TAGS.map((tag) => {
+          {RECOMMENDED_SONG_TAGS.map((tag) => {
             const selected = normalizedTags.has(normalizeTagName(tag));
             return (
               <button
