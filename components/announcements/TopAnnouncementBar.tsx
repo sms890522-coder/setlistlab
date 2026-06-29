@@ -65,9 +65,21 @@ export function TopAnnouncementBar() {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-black text-white transition hover:bg-white/20"
+            className="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 px-2 text-xs font-black text-white transition hover:bg-white/20 sm:px-2.5"
+            aria-label="새소식 자세히 보기"
+            title="새소식 자세히 보기"
           >
-            자세히 보기
+            <svg className="size-4 sm:hidden" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="m21 21-4.35-4.35m2.1-5.4a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.2"
+              />
+            </svg>
+            <span className="hidden sm:inline">자세히 보기</span>
           </button>
           <button
             type="button"
