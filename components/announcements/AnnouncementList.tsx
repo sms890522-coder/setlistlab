@@ -52,11 +52,21 @@ export function AnnouncementList() {
   async function handleConfirm() {
     if (!selected) return;
     const id = selected.id;
+    markReadLocally(id);
+    setSelected(null);
+    await markAnnouncementRead(id).catch(() => undefined);
+  }
+
+  async function openAnnouncement(announcement: AppAnnouncement) {
+    setSelected(announcement);
+    markReadLocally(announcement.id);
+    await markAnnouncementRead(announcement.id).catch(() => undefined);
+  }
+
+  function markReadLocally(id: string) {
     setAnnouncements((current) =>
       current.map((announcement) => (announcement.id === id ? { ...announcement, readAt: new Date().toISOString() } : announcement)),
     );
-    setSelected(null);
-    await markAnnouncementRead(id).catch(() => undefined);
   }
 
   if (loading) {
@@ -94,7 +104,7 @@ export function AnnouncementList() {
             <button
               key={announcement.id}
               type="button"
-              onClick={() => setSelected(announcement)}
+              onClick={() => void openAnnouncement(announcement)}
               className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40"
             >
               <div className="flex flex-wrap items-center gap-2">

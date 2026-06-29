@@ -39,10 +39,24 @@ export function TopAnnouncementBar() {
 
   async function handleConfirm() {
     if (!announcement) return;
-    setLocalRead(announcement.id);
+    setLocalReadPermanently(announcement.id);
     setAnnouncement(null);
     setModalOpen(false);
     await markAnnouncementRead(announcement.id).catch(() => undefined);
+  }
+
+  async function handleOpenDetails() {
+    if (!announcement) return;
+    setModalOpen(true);
+    setLocalReadPermanently(announcement.id);
+    await markAnnouncementRead(announcement.id).catch(() => undefined);
+  }
+
+  function handleCloseModal() {
+    setModalOpen(false);
+    if (announcement && isLocallyRead(announcement.id)) {
+      setAnnouncement(null);
+    }
   }
 
   async function handleHideToday() {
@@ -64,7 +78,7 @@ export function TopAnnouncementBar() {
           </p>
           <button
             type="button"
-            onClick={() => setModalOpen(true)}
+            onClick={() => void handleOpenDetails()}
             className="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 px-2 text-xs font-black text-white transition hover:bg-white/20 sm:px-2.5"
             aria-label="새소식 자세히 보기"
             title="새소식 자세히 보기"
@@ -95,7 +109,7 @@ export function TopAnnouncementBar() {
           </Link>
         </div>
       </div>
-      {modalOpen ? <AnnouncementModal announcement={announcement} onClose={() => setModalOpen(false)} onConfirm={handleConfirm} /> : null}
+      {modalOpen ? <AnnouncementModal announcement={announcement} onClose={handleCloseModal} onConfirm={handleConfirm} /> : null}
     </>
   );
 }
@@ -126,7 +140,8 @@ function setLocalHiddenToday(id: string) {
   window.localStorage.setItem(getHiddenKey(id), tomorrow.toISOString());
 }
 
-function setLocalRead(id: string) {
+function setLocalReadPermanently(id: string) {
   if (typeof window === "undefined") return;
+  window.localStorage.removeItem(getHiddenKey(id));
   window.localStorage.setItem(getReadKey(id), "true");
 }
