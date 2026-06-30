@@ -4,12 +4,14 @@ import Link from "next/link";
 import { FaqSection } from "@/components/FaqSection";
 import { getCurrentSession, getCurrentUser } from "@/lib/auth";
 import { faqJsonLd } from "@/lib/faq";
+import { getWeeklyTeamSetlistForUser, type WeeklyHomeSetlistResult } from "@/lib/home/getWeeklyTeamSetlist";
 import { getSharedSetlistCount } from "@/lib/supabase";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 
 type AuthStatus = "loading" | "signedIn" | "signedOut";
 type SharedCountStatus = "loading" | "ready" | "unavailable";
+type WeeklySetlistStatus = "idle" | "loading" | "ready" | "error";
 
 const applicationJsonLd = {
   "@context": "https://schema.org",
@@ -25,6 +27,8 @@ export default function HomePage() {
   const [sharedCount, setSharedCount] = useState<number | null>(null);
   const [countStatus, setCountStatus] = useState<SharedCountStatus>("loading");
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
+  const [weeklySetlist, setWeeklySetlist] = useState<WeeklyHomeSetlistResult | null>(null);
+  const [weeklySetlistStatus, setWeeklySetlistStatus] = useState<WeeklySetlistStatus>("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +49,36 @@ export default function HomePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWeeklySetlist() {
+      if (authStatus !== "signedIn") {
+        setWeeklySetlist(null);
+        setWeeklySetlistStatus("idle");
+        return;
+      }
+
+      setWeeklySetlistStatus("loading");
+      try {
+        const result = await getWeeklyTeamSetlistForUser();
+        if (cancelled) return;
+        setWeeklySetlist(result);
+        setWeeklySetlistStatus("ready");
+      } catch {
+        if (cancelled) return;
+        setWeeklySetlist(null);
+        setWeeklySetlistStatus("error");
+      }
+    }
+
+    void loadWeeklySetlist();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +116,16 @@ export default function HomePage() {
   }, []);
 
   const signedIn = authStatus === "signedIn";
+  const realWeeklySetlist = signedIn && weeklySetlist?.status === "ready" ? weeklySetlist.setlist : null;
+  const weeklyCardTitle = realWeeklySetlist?.serviceName || realWeeklySetlist?.title || (signedIn ? "이번 주 팀 콘티" : "주일 2부예배");
+  const weeklyCardMeta = realWeeklySetlist
+    ? [realWeeklySetlist.teamName, formatHomeDate(realWeeklySetlist.serviceDate)].filter(Boolean).join(" · ")
+    : null;
+  const demoSongs = [
+    { order: "1", title: "나는 예배자입니다", keyName: "F", bpm: "68", sections: "Intro - Verse1 - Chorus" },
+    { order: "2", title: "주님은 산 같아서", keyName: "A", bpm: "72", sections: "Verse - Chorus - Bridge" },
+    { order: "3", title: "예수 열방의 소망", keyName: "G", bpm: "120", sections: "Pre-Chorus - Chorus - Ending" },
+  ];
   const storageMessage =
     authStatus === "loading"
       ? "계정 저장 상태를 확인하는 중입니다."
@@ -290,7 +334,8 @@ export default function HomePage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-blue-700">이번 주 콘티</p>
-                <h2 className="mt-2 text-2xl font-black text-slate-950">주일 2부예배</h2>
+                <h2 className="mt-2 text-2xl font-black text-slate-950">{weeklyCardTitle}</h2>
+                {weeklyCardMeta ? <p className="mt-1 text-sm font-semibold text-slate-600">{weeklyCardMeta}</p> : null}
               </div>
               <span className="rounded-2xl bg-white/80 px-3 py-2 text-2xl shadow-sm" aria-hidden="true">
                 🎧
@@ -303,26 +348,71 @@ export default function HomePage() {
             </div>
           </div>
           <div className="space-y-3 p-5">
-            {[
-              ["1", "나는 예배자입니다", "F", "68", "Intro - Verse1 - Chorus"],
-              ["2", "주님은 산 같아서", "A", "72", "Verse - Chorus - Bridge"],
-              ["3", "예수 열방의 소망", "G", "120", "Pre-Chorus - Chorus - Ending"],
-            ].map(([order, title, keyName, bpm, sections]) => (
-              <div key={title} className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="flex items-start gap-3">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                    {order}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-slate-950">{title}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Key {keyName} · BPM {bpm}
-                    </p>
-                    <p className="mt-2 truncate text-sm text-slate-600">{sections}</p>
+            {signedIn && weeklySetlistStatus === "loading" ? (
+              <div className="rounded-xl border border-slate-100 bg-white p-5 text-sm font-semibold text-slate-500">
+                이번 주 팀 콘티를 불러오는 중입니다.
+              </div>
+            ) : realWeeklySetlist ? (
+              <>
+                {realWeeklySetlist.songs.length > 0 ? (
+                  realWeeklySetlist.songs.map((song, index) => (
+                    <WeeklySongPreview
+                      key={`${realWeeklySetlist.id}-${song.title}-${index}`}
+                      order={String(index + 1)}
+                      title={song.title}
+                      keyName={song.key || "-"}
+                      bpm={song.bpm ? String(song.bpm) : "-"}
+                      sections={song.sections || "곡 구성이 아직 없습니다."}
+                    />
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-slate-100 bg-white p-5 text-sm font-semibold text-slate-500">
+                    아직 곡이 추가되지 않았습니다.
                   </div>
+                )}
+                <Link href={realWeeklySetlist.href} className="btn-primary w-full justify-center">
+                  콘티로
+                </Link>
+              </>
+            ) : signedIn && weeklySetlist?.status === "empty" ? (
+              <div className="rounded-xl border border-slate-100 bg-white p-5">
+                <p className="font-bold text-slate-950">이번 주 콘티가 아직 없습니다.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {weeklySetlist.teamName} 팀 콘티가 만들어지면 이곳에 바로 표시됩니다.
+                </p>
+                {weeklySetlist.canCreateSetlist ? (
+                  <Link href={`/setlists/new?teamId=${weeklySetlist.teamId}`} className="btn-primary mt-4">
+                    콘티 만들기
+                  </Link>
+                ) : null}
+              </div>
+            ) : signedIn && weeklySetlist?.status === "no_team" ? (
+              <div className="rounded-xl border border-slate-100 bg-white p-5">
+                <p className="font-bold text-slate-950">아직 참여 중인 팀이 없습니다.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">팀을 만들거나 초대코드로 참여하면 이번 주 콘티를 이곳에서 확인할 수 있습니다.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link href="/teams/new" className="btn-primary">팀 만들기</Link>
+                  <Link href="/teams/join" className="btn-secondary">팀 참여하기</Link>
                 </div>
               </div>
-            ))}
+            ) : signedIn && weeklySetlistStatus === "error" ? (
+              <div className="rounded-xl border border-slate-100 bg-white p-5">
+                <p className="font-bold text-slate-950">이번 주 콘티를 불러오지 못했습니다.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">팀 콘티 목록에서 직접 확인해 주세요.</p>
+                <Link href="/setlists" className="btn-secondary mt-4">콘티 목록으로</Link>
+              </div>
+            ) : (
+              demoSongs.map((song) => (
+                <WeeklySongPreview
+                  key={song.title}
+                  order={song.order}
+                  title={song.title}
+                  keyName={song.keyName}
+                  bpm={song.bpm}
+                  sections={song.sections}
+                />
+              ))
+            )}
           </div>
         </div>
       </section>
@@ -371,4 +461,46 @@ export default function HomePage() {
       </section>
     </div>
   );
+}
+
+function WeeklySongPreview({
+  order,
+  title,
+  keyName,
+  bpm,
+  sections,
+}: {
+  order: string;
+  title: string;
+  keyName: string;
+  bpm: string;
+  sections: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+          {order}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-slate-950">{title}</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Key {keyName} · BPM {bpm}
+          </p>
+          <p className="mt-2 truncate text-sm text-slate-600">{sections}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatHomeDate(value: string | null) {
+  if (!value) return "";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  }).format(date);
 }
