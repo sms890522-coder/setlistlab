@@ -13,7 +13,7 @@ import { getCloudSetlist, saveCloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { canUseFeature } from "@/lib/features";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
-import { isSampleSetlistId } from "@/lib/sampleData";
+import { createSampleGuideTrack, isSampleSetlistId } from "@/lib/sampleData";
 import {
   getPracticeCompletion,
   getPracticePosition,
@@ -72,10 +72,12 @@ export default function SongPracticePage() {
 
       if (!foundSetlist) {
         foundSetlist = getSetlist(params.id) ?? null;
+        const foundSong = foundSetlist?.songs.find((item) => item.id === params.songId) ?? null;
+        const sampleGuideTrack = foundSetlist && foundSong ? createSampleGuideTrack(foundSetlist, foundSong) : null;
         setCanEdit(true);
         setCanUseGuideTrack(isSampleSetlistId(foundSetlist?.id));
         setCanUseRecordingStudio(isSampleSetlistId(foundSetlist?.id));
-        setExistingGuideTrackId(null);
+        setExistingGuideTrackId(sampleGuideTrack?.id ?? null);
         setStorageMode("local");
       }
 
@@ -90,16 +92,18 @@ export default function SongPracticePage() {
 
     loadSong().catch(() => {
       const foundSetlist = getSetlist(params.id) ?? null;
+      const foundSong = foundSetlist?.songs.find((item) => item.id === params.songId) ?? null;
       const savedPosition = getPracticePosition(params.id, params.songId);
       setSetlist(foundSetlist);
-      setSong(foundSetlist?.songs.find((item) => item.id === params.songId) ?? null);
+      setSong(foundSong);
       setPracticeCompletedState(getPracticeCompletion(params.id, params.songId));
       setInitialPosition(savedPosition);
       lastSavedPositionRef.current = Math.round(savedPosition);
       setStorageMode("local");
       setCanUseGuideTrack(isSampleSetlistId(foundSetlist?.id));
       setCanUseRecordingStudio(isSampleSetlistId(foundSetlist?.id));
-      setExistingGuideTrackId(null);
+      const sampleGuideTrack = foundSetlist && foundSong ? createSampleGuideTrack(foundSetlist, foundSong) : null;
+      setExistingGuideTrackId(sampleGuideTrack?.id ?? null);
       setLoaded(true);
     });
   }, [params.id, params.songId]);

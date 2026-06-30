@@ -18,6 +18,7 @@ import { duplicateCloudSetlist, getCloudSetlist, type CloudSetlist } from "@/lib
 import { getMyRoleInTeam, type TeamMembership } from "@/lib/db/teamMemberships";
 import { canUseFeature } from "@/lib/features";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
+import { createSampleGuideTrack } from "@/lib/sampleData";
 import { duplicateSetlist, getPracticeCompletions, getSetlist, setPracticeCompletion } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
@@ -224,7 +225,7 @@ export default function SetlistDetailPage() {
                   index={index}
                   href={`/setlists/${setlist.id}/songs/${song.id}`}
                   completed={Boolean(completedSongs[song.id])}
-                  hasGuideTrack={guideTrackSongIds.has(song.id)}
+                  hasGuideTrack={guideTrackSongIds.has(song.id) || Boolean(createSampleGuideTrack(setlist, song))}
                   onCompletionChange={(completed) => toggleCompletion(song.id, completed)}
                 />
                 {song.transitionNote ? (

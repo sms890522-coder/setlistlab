@@ -46,6 +46,8 @@ import {
   upsertRecordingMixSetting,
   type RecordingMixSetting,
 } from "@/lib/recording/mixSettings";
+import { createSampleGuideTrack, SAMPLE_SETLIST_ID } from "@/lib/sampleData";
+import { getSetlist } from "@/lib/storage";
 import {
   getGuideTrackDurationSeconds,
   getStudioCurrentPosition,
@@ -53,7 +55,7 @@ import {
 import { useAudioInputMeter, type AudioInputMeterStatus } from "@/lib/recording/useAudioInputMeter";
 import { useAudioRecorder } from "@/lib/recording/useAudioRecorder";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import type { Song } from "@/lib/types";
+import type { Setlist, Song } from "@/lib/types";
 
 const GUIDE_TRACK_ID = "guide-track";
 const PART_OPTIONS = ["보컬", "싱어", "일렉", "어쿠스틱", "건반", "베이스", "드럼", "기타", "직접 입력"];
@@ -121,7 +123,7 @@ export default function GuideTrackStudioPage() {
   const [loaded, setLoaded] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [guideTrack, setGuideTrack] = useState<TeamGuideTrack | null>(null);
-  const [setlist, setSetlist] = useState<CloudSetlist | null>(null);
+  const [setlist, setSetlist] = useState<CloudSetlist | Setlist | null>(null);
   const [song, setSong] = useState<Song | null>(null);
   const [session, setSession] = useState<TeamRecordingSession | null>(null);
   const [tracks, setTracks] = useState<TeamRecordingTrack[]>([]);
@@ -167,7 +169,8 @@ export default function GuideTrackStudioPage() {
   const guideData = useMemo(() => normalizeGuideTrackData(guideTrack?.guideTrackData), [guideTrack?.guideTrackData]);
   const fallbackGuideDuration = useMemo(() => getGuideTrackDurationSeconds(guideData), [guideData]);
   const guidePeaks = useMemo(() => createSyntheticGuidePeaks(360), []);
-  const canUseRecordingStudio = canUseFeature(profile, "teamRecordingStudio");
+  const isSampleStudio = Boolean(guideTrack?.id.startsWith("sample-guide-track-"));
+  const canUseRecordingStudio = isSampleStudio || canUseFeature(profile, "teamRecordingStudio");
   const selectedPart = part === "직접 입력" ? customPart.trim() || "기타" : part;
   const fallbackTrackTitle = `${selectedPart} 녹음`;
   const orderedTracks = useMemo(() => orderTracks(tracks, myUserId), [myUserId, tracks]);
@@ -306,6 +309,7 @@ export default function GuideTrackStudioPage() {
 
   const scheduleMixSettingSave = useCallback(
     (trackKey: string, mix: TrackMixState) => {
+      if (isSampleStudio) return;
       if (!session || !mixSettingsLoaded || mixHydratedSessionRef.current !== session.id) return;
 
       const payload = toPersistableMixSetting(trackKey, mix);
@@ -332,7 +336,7 @@ export default function GuideTrackStudioPage() {
         }
       }, 700);
     },
-    [mixSettingsLoaded, session],
+    [isSampleStudio, mixSettingsLoaded, session],
   );
 
   useEffect(() => {
@@ -382,6 +386,52 @@ export default function GuideTrackStudioPage() {
       lastMixPayloadRef.current = {};
       Object.values(mixSaveTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
       mixSaveTimersRef.current = {};
+
+      if (params.guideTrackId.startsWith("sample-guide-track-")) {
+        const sampleSetlist = getSetlist(SAMPLE_SETLIST_ID) ?? null;
+        const sampleEntries = sampleSetlist?.songs
+          .map((sampleSong) => ({
+            song: sampleSong,
+            guideTrack: createSampleGuideTrack(sampleSetlist, sampleSong),
+          }))
+          .filter((entry): entry is { song: Song; guideTrack: TeamGuideTrack } => Boolean(entry.guideTrack)) ?? [];
+        const sampleEntry = sampleEntries.find((entry) => entry.guideTrack.id === params.guideTrackId) ?? null;
+
+        if (!sampleSetlist || !sampleEntry) {
+          setError("샘플 가이드 트랙을 찾을 수 없습니다. 콘티 목록에서 샘플 콘티를 다시 가져와 주세요.");
+          setStudioLoadState({ step: "error", progress: 100, message: "샘플 가이드 트랙을 찾을 수 없습니다.", ready: false, error: "샘플 가이드 트랙을 찾을 수 없습니다." });
+          setLoaded(true);
+          return;
+        }
+
+        const now = new Date().toISOString();
+        setProfile(null);
+        setGuideTrack(sampleEntry.guideTrack);
+        setSetlist(sampleSetlist);
+        setSong(sampleEntry.song);
+        setCanManage(false);
+        setMyUserId("sample-user");
+        setTrackTitle(`${sampleEntry.song.title} ${selectedPart} 녹음`);
+        setUsageSummary(null);
+        setTracks([]);
+        setSession({
+          id: `sample-recording-session-${sampleEntry.song.id}`,
+          setlistId: sampleSetlist.id,
+          songId: sampleEntry.song.id,
+          guideTrackId: sampleEntry.guideTrack.id,
+          title: `${sampleEntry.song.title} 샘플 녹음실`,
+          status: "open",
+          createdAt: now,
+          updatedAt: now,
+        });
+        setSavedMixSettings([]);
+        setMixSettingsLoaded(true);
+        setMessage("샘플 녹음실입니다. 가이드 트랙 재생과 화면 흐름을 체험할 수 있고, 실제 녹음 저장은 팀 콘티에서 사용할 수 있습니다.");
+        setStudioLoadState({ step: "audioMetadata", progress: 82, message: "샘플 가이드 오디오와 믹서를 준비하는 중입니다.", ready: false });
+        setLoaded(true);
+        return;
+      }
+
       if (!isSupabaseConfigured()) {
         setError("팀 녹음실은 로그인 저장소가 설정된 콘티에서 사용할 수 있습니다.");
         setStudioLoadState({ step: "error", progress: 100, message: "녹음실을 열 수 없습니다.", ready: false, error: "저장소 설정이 필요합니다." });
@@ -611,6 +661,12 @@ export default function GuideTrackStudioPage() {
 
   async function refreshTracks() {
     if (!session) return;
+    if (isSampleStudio) {
+      setTracks([]);
+      setReadUrls({});
+      setMessage("샘플 녹음실에는 저장된 팀원 녹음 트랙이 없습니다.");
+      return;
+    }
     const nextTracks = await getRecordingTracks(session.id);
     setTracks(nextTracks);
     const nextTrackIds = new Set(nextTracks.map((track) => track.id));
@@ -683,6 +739,10 @@ export default function GuideTrackStudioPage() {
 
   async function handleSaveRecording() {
     if (!session || !guideTrack || !recorder.blob) return;
+    if (isSampleStudio) {
+      setMessage("샘플 녹음실에서는 실제 녹음 파일을 저장하지 않습니다. 팀 콘티에서 팀 녹음실을 열면 저장할 수 있습니다.");
+      return;
+    }
     if (uploadActionLockedRef.current) return;
     uploadActionLockedRef.current = true;
     setUploading(true);
@@ -877,10 +937,12 @@ export default function GuideTrackStudioPage() {
             가이드 트랙으로 돌아가기
           </Link>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-black text-white">실험실</span>
+            <span className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-black text-white">{isSampleStudio ? "샘플 모드" : "실험실"}</span>
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">DAW 스타일</span>
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">세션 {session.status}</span>
-            <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">Cloudflare R2 저장</span>
+            <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">
+              {isSampleStudio ? "저장 없는 체험" : "Cloudflare R2 저장"}
+            </span>
             <span className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 ${studioStatus.className}`}>{studioStatus.label}</span>
           </div>
           <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950">팀 녹음실</h1>
@@ -888,7 +950,9 @@ export default function GuideTrackStudioPage() {
             {song.title} · {guideTrack.title} · Key {guideData.key || "-"} · BPM {guideData.bpm ?? "-"} · {guideData.timeSignature}
           </p>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-            가이드 트랙을 기준으로 팀원 녹음을 쌓아 함께 들어볼 수 있습니다. 음소거, Solo, 볼륨을 조절해 파트별 연습 상태를 확인해보세요.
+            {isSampleStudio
+              ? "샘플 가이드 트랙을 기준으로 팀 녹음실 화면과 재생 흐름을 체험할 수 있습니다. 실제 녹음 저장은 팀 콘티의 녹음실에서 사용할 수 있습니다."
+              : "가이드 트랙을 기준으로 팀원 녹음을 쌓아 함께 들어볼 수 있습니다. 음소거, Solo, 볼륨을 조절해 파트별 연습 상태를 확인해보세요."}
           </p>
         </div>
       </section>

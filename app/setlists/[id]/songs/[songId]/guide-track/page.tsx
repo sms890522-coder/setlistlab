@@ -471,10 +471,10 @@ export default function SongGuideTrackPage() {
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">
               {track ? "저장된 가이드 트랙 있음" : "새 가이드 트랙"}
             </span>
-            {isSampleSetlist ? (
-              <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100">
-                팀 녹음실 버튼 미리보기
-              </span>
+            {isSampleSetlist && track ? (
+              <Link href={`/guide-tracks/${track.id}/studio`} className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white">
+                팀 녹음실 열기
+              </Link>
             ) : track && canUseRecordingStudio ? (
               <Link href={`/guide-tracks/${track.id}/studio`} className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white">
                 팀 녹음실 열기
@@ -874,11 +874,11 @@ export default function SongGuideTrackPage() {
               <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
                 <h3 className="font-black text-slate-950">팀 녹음실</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
-                  샘플 콘티에서는 버튼 위치와 흐름을 미리 볼 수 있습니다. 실제 녹음 파일 저장과 팀원 녹음실은 저장된 팀 가이드 트랙에서 열 수 있습니다.
+                  샘플 콘티에서는 저장 없이 녹음실 화면과 가이드 트랙 재생 흐름을 체험할 수 있습니다. 실제 녹음 파일 저장은 팀 콘티에서 사용할 수 있습니다.
                 </p>
-                <button type="button" disabled className="btn-secondary mt-3" title="샘플 콘티에서는 실제 팀 녹음실 세션을 만들지 않습니다.">
+                <Link href={track ? `/guide-tracks/${track.id}/studio` : "#"} className="btn-primary mt-3">
                   팀 녹음실 열기
-                </button>
+                </Link>
               </div>
             ) : track ? (
               <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
