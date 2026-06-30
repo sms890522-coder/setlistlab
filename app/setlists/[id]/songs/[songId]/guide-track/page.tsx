@@ -22,8 +22,10 @@ import { extractChordsWithTesseract, getGuideTrackOcrProvider } from "@/lib/guid
 import { getFirstImageLink, getImagePreviewUrl } from "@/lib/images";
 import { dedupeChords, parseChordLine } from "@/lib/music/chords";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
+import { isSampleSetlistId } from "@/lib/sampleData";
+import { getSetlist } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import type { Song } from "@/lib/types";
+import type { Setlist, Song } from "@/lib/types";
 import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -40,7 +42,7 @@ type SectionDraft = {
 export default function SongGuideTrackPage() {
   const params = useParams<{ id: string; songId: string }>();
   const [loaded, setLoaded] = useState(false);
-  const [setlist, setSetlist] = useState<CloudSetlist | null>(null);
+  const [setlist, setSetlist] = useState<CloudSetlist | Setlist | null>(null);
   const [song, setSong] = useState<Song | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [track, setTrack] = useState<TeamGuideTrack | null>(null);
@@ -76,8 +78,9 @@ export default function SongGuideTrackPage() {
   const [downloading, setDownloading] = useState(false);
 
   const sourceImage = getFirstImageLink(song?.imageLinks);
-  const canUseGuideTrack = canUseFeature(profile, "teamGuideTrack");
-  const canUseRecordingStudio = canUseFeature(profile, "teamRecordingStudio");
+  const isSampleSetlist = isSampleSetlistId(setlist?.id);
+  const canUseGuideTrack = isSampleSetlist || canUseFeature(profile, "teamGuideTrack");
+  const canUseRecordingStudio = isSampleSetlist || canUseFeature(profile, "teamRecordingStudio");
   const hasScoreImage = Boolean(sourceImage?.url);
   const hasSongForm = Boolean(song?.sections?.length);
   const guideData = useMemo(
@@ -138,36 +141,46 @@ export default function SongGuideTrackPage() {
 
   useEffect(() => {
     async function load() {
-      if (!isSupabaseConfigured()) {
-        setError("가이드 트랙은 로그인 저장소가 설정된 콘티에서 사용할 수 있습니다.");
+      let nextProfile: Profile | null = null;
+      let nextSetlist: CloudSetlist | Setlist | null = null;
+      let nextSong: Song | null = null;
+      let nextTrack: TeamGuideTrack | null = null;
+      let nextCanManage = false;
+
+      if (isSupabaseConfigured()) {
+        const user = await getCurrentUser();
+        if (user) {
+          const [profileResult, cloudSetlist] = await Promise.all([getMyProfile(), getCloudSetlist(params.id)]);
+          nextProfile = profileResult;
+          if (cloudSetlist) {
+            nextSong = cloudSetlist.songs.find((item) => item.id === params.songId) ?? null;
+            if (!nextSong) {
+              setError("곡을 찾을 수 없습니다.");
+              setLoaded(true);
+              return;
+            }
+
+            const nextMembership = cloudSetlist.teamId ? await getMyRoleInTeam(cloudSetlist.teamId) : null;
+            nextCanManage = Boolean(cloudSetlist.ownerId === user.id || canManageTeamSetlist(nextMembership));
+            nextTrack = await getFirstGuideTrackForSong(cloudSetlist.id, nextSong.id).catch(() => null);
+            nextSetlist = cloudSetlist;
+          }
+        }
+      }
+
+      if (!nextSetlist && isSampleSetlistId(params.id)) {
+        const localSetlist = getSetlist(params.id) ?? null;
+        nextSetlist = localSetlist;
+        nextSong = localSetlist?.songs.find((item) => item.id === params.songId) ?? null;
+        nextTrack = null;
+        nextCanManage = Boolean(localSetlist && nextSong);
+      }
+
+      if (!nextSetlist || !nextSong) {
+        setError(nextSetlist ? "곡을 찾을 수 없습니다." : isSupabaseConfigured() ? "로그인이 필요하거나 콘티를 찾을 수 없습니다." : "가이드 트랙은 로그인 저장소가 설정된 콘티에서 사용할 수 있습니다.");
         setLoaded(true);
         return;
       }
-
-      const user = await getCurrentUser();
-      if (!user) {
-        setError("로그인이 필요합니다.");
-        setLoaded(true);
-        return;
-      }
-
-      const [nextProfile, nextSetlist] = await Promise.all([getMyProfile(), getCloudSetlist(params.id)]);
-      if (!nextSetlist) {
-        setError("콘티를 찾을 수 없습니다.");
-        setLoaded(true);
-        return;
-      }
-
-      const nextSong = nextSetlist.songs.find((item) => item.id === params.songId) ?? null;
-      if (!nextSong) {
-        setError("곡을 찾을 수 없습니다.");
-        setLoaded(true);
-        return;
-      }
-
-      const nextMembership = nextSetlist.teamId ? await getMyRoleInTeam(nextSetlist.teamId) : null;
-      const nextCanManage = Boolean(nextSetlist.ownerId === user.id || canManageTeamSetlist(nextMembership));
-      const nextTrack = await getFirstGuideTrackForSong(nextSetlist.id, nextSong.id).catch(() => null);
 
       setProfile(nextProfile);
       setSetlist(nextSetlist);
@@ -336,6 +349,10 @@ export default function SongGuideTrackPage() {
 
   async function handleSaveGuideTrack() {
     if (!setlist || !song || !sourceImage?.url) return;
+    if (isSampleSetlist) {
+      setMessage("샘플 콘티에서는 저장 없이 미리보기와 다운로드로 가이드 트랙을 체험할 수 있습니다.");
+      return;
+    }
     setSaving(true);
     setError("");
     setMessage("");
@@ -450,7 +467,7 @@ export default function SongGuideTrackPage() {
             악보 이미지와 송폼을 바탕으로 코드 진행을 정리하고, 팀 연습용 기준 트랙 데이터를 생성합니다.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <span className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-black text-white">실험실</span>
+            <span className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-black text-white">{isSampleSetlist ? "샘플 체험" : "실험실"}</span>
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">
               {track ? "저장된 가이드 트랙 있음" : "새 가이드 트랙"}
             </span>
@@ -458,6 +475,10 @@ export default function SongGuideTrackPage() {
               <Link href={`/guide-tracks/${track.id}/studio`} className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white">
                 팀 녹음실 열기
               </Link>
+            ) : isSampleSetlist ? (
+              <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100">
+                팀 녹음실 버튼 미리보기
+              </span>
             ) : null}
           </div>
         </div>
@@ -824,8 +845,13 @@ export default function SongGuideTrackPage() {
                 생성과 수정은 리더/부리더 또는 콘티 작성자만 할 수 있습니다. 팀원은 생성된 가이드 트랙을 조회하고 재생할 수 있습니다.
               </p>
             ) : null}
+            {isSampleSetlist ? (
+              <p className="mt-3 rounded-xl bg-blue-50 p-3 text-sm font-semibold leading-6 text-blue-800">
+                샘플 콘티에서는 실험실 설정 없이 가이드 트랙 화면을 체험할 수 있습니다. 실제 저장과 팀 녹음실 생성은 팀 콘티에서 진행해 주세요.
+              </p>
+            ) : null}
             <button type="button" onClick={handleSaveGuideTrack} disabled={!canSave || saving} className="btn-primary mt-4 w-full">
-              {saving ? "저장 중..." : track ? "가이드 트랙 수정 저장" : "가이드 트랙 만들기"}
+              {saving ? "저장 중..." : isSampleSetlist ? "샘플 가이드 트랙 체험" : track ? "가이드 트랙 수정 저장" : "가이드 트랙 만들기"}
             </button>
             <div className="mt-4">
               <GuideTrackPreviewPlayer data={guideData} />
@@ -859,6 +885,16 @@ export default function SongGuideTrackPage() {
                     팀 녹음실은 실험실 기능입니다. 내 계정에서 실험실 기능을 켜면 사용할 수 있습니다.
                   </p>
                 )}
+              </div>
+            ) : isSampleSetlist ? (
+              <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                <h3 className="font-black text-slate-950">팀 녹음실</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  샘플 콘티에서는 버튼 위치와 흐름을 미리 볼 수 있습니다. 실제 녹음 파일 저장과 팀원 녹음실은 저장된 팀 가이드 트랙에서 열 수 있습니다.
+                </p>
+                <button type="button" disabled className="btn-secondary mt-3" title="샘플 콘티에서는 실제 팀 녹음실 세션을 만들지 않습니다.">
+                  팀 녹음실 열기
+                </button>
               </div>
             ) : (
               <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-600">

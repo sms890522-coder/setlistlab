@@ -13,6 +13,7 @@ import { getCloudSetlist, saveCloudSetlist } from "@/lib/db/setlists";
 import { getMyRoleInTeam } from "@/lib/db/teamMemberships";
 import { canUseFeature } from "@/lib/features";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
+import { isSampleSetlistId } from "@/lib/sampleData";
 import {
   getPracticeCompletion,
   getPracticePosition,
@@ -72,8 +73,8 @@ export default function SongPracticePage() {
       if (!foundSetlist) {
         foundSetlist = getSetlist(params.id) ?? null;
         setCanEdit(true);
-        setCanUseGuideTrack(false);
-        setCanUseRecordingStudio(false);
+        setCanUseGuideTrack(isSampleSetlistId(foundSetlist?.id));
+        setCanUseRecordingStudio(isSampleSetlistId(foundSetlist?.id));
         setExistingGuideTrackId(null);
         setStorageMode("local");
       }
@@ -96,8 +97,8 @@ export default function SongPracticePage() {
       setInitialPosition(savedPosition);
       lastSavedPositionRef.current = Math.round(savedPosition);
       setStorageMode("local");
-      setCanUseGuideTrack(false);
-      setCanUseRecordingStudio(false);
+      setCanUseGuideTrack(isSampleSetlistId(foundSetlist?.id));
+      setCanUseRecordingStudio(isSampleSetlistId(foundSetlist?.id));
       setExistingGuideTrackId(null);
       setLoaded(true);
     });
@@ -163,7 +164,9 @@ export default function SongPracticePage() {
       : undefined;
   const hasScoreImage = Boolean(song.imageLinks?.some((link) => /^https?:\/\/\S+$/i.test(link.url.trim())));
   const hasSongForm = song.sections.length > 0;
-  const canCreateGuideTrack = canUseGuideTrack && storageMode === "cloud" && canEdit && hasScoreImage && hasSongForm;
+  const isSampleSetlist = isSampleSetlistId(setlist.id);
+  const canShowGuideTrackControls = canUseGuideTrack && (storageMode === "cloud" || isSampleSetlist);
+  const canCreateGuideTrack = canUseGuideTrack && (storageMode === "cloud" || isSampleSetlist) && canEdit && hasScoreImage && hasSongForm;
   const guideTrackDisabledReason = !hasScoreImage
     ? "악보 이미지가 필요합니다."
     : !hasSongForm
@@ -203,7 +206,7 @@ export default function SongPracticePage() {
             콘티 수정
           </Link>
           <SongLibrarySaveButton song={song} />
-          {canUseGuideTrack && storageMode === "cloud" ? (
+          {canShowGuideTrackControls ? (
             existingGuideTrackId ? (
               <>
                 <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-secondary">
@@ -216,9 +219,16 @@ export default function SongPracticePage() {
                 ) : null}
               </>
             ) : canCreateGuideTrack ? (
-              <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary">
-                팀 가이드 트랙 만들기
-              </Link>
+              <>
+                <Link href={`/setlists/${setlist.id}/songs/${song.id}/guide-track`} className="btn-primary">
+                  팀 가이드 트랙 만들기
+                </Link>
+                {isSampleSetlist ? (
+                  <button type="button" disabled className="btn-secondary" title="샘플 콘티에서는 가이드 트랙을 체험한 뒤 실제 팀 콘티에서 팀 녹음실을 사용할 수 있습니다.">
+                    팀 녹음실
+                  </button>
+                ) : null}
+              </>
             ) : (
               <button type="button" disabled className="btn-secondary" title={guideTrackDisabledReason}>
                 팀 가이드 트랙 만들기
@@ -347,9 +357,9 @@ export default function SongPracticePage() {
 
       <SongImageGallery imageLinks={song.imageLinks} />
 
-      {canUseGuideTrack && storageMode === "cloud" ? (
+      {canShowGuideTrackControls ? (
         <section className="rounded-2xl border border-violet-100 bg-violet-50/70 p-5">
-          <p className="text-sm font-black text-violet-700">실험실 · 팀 가이드 트랙</p>
+          <p className="text-sm font-black text-violet-700">{isSampleSetlist ? "샘플 체험 · 팀 가이드 트랙" : "실험실 · 팀 가이드 트랙"}</p>
           <h2 className="mt-1 text-lg font-black text-slate-950">악보 이미지와 송폼을 바탕으로 팀 연습용 가이드 트랙을 만들 수 있습니다.</h2>
           {existingGuideTrackId ? (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -369,6 +379,14 @@ export default function SongPracticePage() {
           ) : (
             <p className="mt-3 rounded-xl bg-white p-3 text-sm font-semibold text-violet-800">{guideTrackDisabledReason}</p>
           )}
+          {isSampleSetlist && !existingGuideTrackId ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" disabled className="btn-secondary" title="샘플 콘티에서는 실제 녹음실 저장소를 만들지 않고 버튼 위치만 미리 볼 수 있습니다.">
+                팀 녹음실 열기
+              </button>
+              <p className="text-sm font-semibold leading-10 text-violet-800">샘플에서는 실험실 설정 없이 버튼을 확인할 수 있어요.</p>
+            </div>
+          ) : null}
         </section>
       ) : null}
 

@@ -15,6 +15,10 @@ export const SAMPLE_SCORE_IMAGE_URLS: Record<string, string> = {
   "예수 열방의 소망": "https://res.cloudinary.com/ddcdsmsv1/image/upload/v1782803620/eegh0rudtvoz1k0joxxo.png",
 };
 
+export function isSampleSetlistId(setlistId: string | null | undefined) {
+  return setlistId === SAMPLE_SETLIST_ID;
+}
+
 function makeSections(names: Array<[string, number, number, string]>) {
   return names.map(([name, startTime, endTime, memo]) => ({
     id: createId("section"),
