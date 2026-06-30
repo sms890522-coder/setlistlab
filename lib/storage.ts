@@ -92,6 +92,17 @@ export function clearSetlists() {
   writeStoredSetlists([]);
 }
 
+export function restoreSampleSetlist() {
+  if (!canUseStorage()) {
+    throw new Error("브라우저 저장소를 사용할 수 없습니다.");
+  }
+
+  const sample = normalizeSetlist(createSampleSetlist());
+  const setlists = readStoredSetlists().filter((setlist) => setlist.id !== SAMPLE_SETLIST_ID);
+  writeStoredSetlists([sample, ...setlists]);
+  return sample;
+}
+
 export function duplicateSetlist(id: string) {
   const source = getSetlist(id);
   if (!source) {

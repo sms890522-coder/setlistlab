@@ -12,7 +12,8 @@ import {
 } from "@/lib/db/setlists";
 import { getSetlistCommentCounts } from "@/lib/db/setlistComments";
 import { getApprovedMemberships, type TeamMembership } from "@/lib/db/teamMemberships";
-import { clearSetlists, deleteSetlist, duplicateSetlist, getSetlists, getStoredSetlists } from "@/lib/storage";
+import { SAMPLE_SETLIST_ID } from "@/lib/sampleData";
+import { clearSetlists, deleteSetlist, duplicateSetlist, getSetlists, getStoredSetlists, restoreSampleSetlist } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist } from "@/lib/types";
 import { useRouter } from "next/navigation";
@@ -144,6 +145,28 @@ export default function SetlistsPage() {
     }
   }
 
+  function handleRestoreSampleSetlist() {
+    const hasExistingSample = getStoredSetlists().some((setlist) => setlist.id === SAMPLE_SETLIST_ID);
+    if (
+      hasExistingSample &&
+      !window.confirm("기존 샘플 콘티를 최신 샘플로 다시 가져올까요? 샘플 콘티에 직접 수정한 내용은 최신 샘플 데이터로 바뀝니다.")
+    ) {
+      return;
+    }
+
+    try {
+      const sample = restoreSampleSetlist();
+      const nextLocalSetlists = getStoredSetlists();
+      setLocalSetlists(nextLocalSetlists);
+      if (storageMode === "local") {
+        setSetlists(getSetlists());
+      }
+      router.push(`/setlists/${sample.id}`);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "샘플 콘티를 다시 가져오지 못했습니다.");
+    }
+  }
+
   return (
     <div className="page-shell space-y-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -156,7 +179,10 @@ export default function SetlistsPage() {
               : "로그인 전에는 이 브라우저에만 임시 저장됩니다."}
           </p>
         </div>
-      <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={handleRestoreSampleSetlist} className="btn-secondary">
+            샘플 콘티 다시 가져오기
+          </button>
           <Link href="/setlists/new" className="btn-primary">
             새 콘티 만들기
           </Link>
@@ -213,6 +239,9 @@ export default function SetlistsPage() {
             </p>
           </div>
           <div className="flex flex-col justify-center gap-2 sm:flex-row">
+            <button type="button" onClick={handleRestoreSampleSetlist} className="btn-secondary">
+              샘플 콘티 다시 가져오기
+            </button>
             <Link href="/setlists/new" className="btn-primary">
               새 콘티 만들기
             </Link>
