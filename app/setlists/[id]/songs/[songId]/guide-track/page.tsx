@@ -22,7 +22,7 @@ import { extractChordsWithTesseract, getGuideTrackOcrProvider } from "@/lib/guid
 import { getFirstImageLink, getImagePreviewUrl } from "@/lib/images";
 import { dedupeChords, parseChordLine } from "@/lib/music/chords";
 import { canManageTeamSetlist } from "@/lib/permissions/teamPermissions";
-import { isSampleSetlistId } from "@/lib/sampleData";
+import { createSampleGuideTrack, isSampleSetlistId } from "@/lib/sampleData";
 import { getSetlist } from "@/lib/storage";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Setlist, Song } from "@/lib/types";
@@ -172,7 +172,7 @@ export default function SongGuideTrackPage() {
         const localSetlist = getSetlist(params.id) ?? null;
         nextSetlist = localSetlist;
         nextSong = localSetlist?.songs.find((item) => item.id === params.songId) ?? null;
-        nextTrack = null;
+        nextTrack = localSetlist && nextSong ? createSampleGuideTrack(localSetlist, nextSong) : null;
         nextCanManage = Boolean(localSetlist && nextSong);
       }
 
@@ -471,14 +471,14 @@ export default function SongGuideTrackPage() {
             <span className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 ring-1 ring-slate-200">
               {track ? "저장된 가이드 트랙 있음" : "새 가이드 트랙"}
             </span>
-            {track && canUseRecordingStudio ? (
-              <Link href={`/guide-tracks/${track.id}/studio`} className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white">
-                팀 녹음실 열기
-              </Link>
-            ) : isSampleSetlist ? (
+            {isSampleSetlist ? (
               <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100">
                 팀 녹음실 버튼 미리보기
               </span>
+            ) : track && canUseRecordingStudio ? (
+              <Link href={`/guide-tracks/${track.id}/studio`} className="rounded-full bg-blue-600 px-3 py-1.5 text-xs font-black text-white">
+                팀 녹음실 열기
+              </Link>
             ) : null}
           </div>
         </div>
@@ -870,7 +870,17 @@ export default function SongGuideTrackPage() {
                 </button>
               </div>
             </div>
-            {track ? (
+            {isSampleSetlist ? (
+              <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                <h3 className="font-black text-slate-950">팀 녹음실</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  샘플 콘티에서는 버튼 위치와 흐름을 미리 볼 수 있습니다. 실제 녹음 파일 저장과 팀원 녹음실은 저장된 팀 가이드 트랙에서 열 수 있습니다.
+                </p>
+                <button type="button" disabled className="btn-secondary mt-3" title="샘플 콘티에서는 실제 팀 녹음실 세션을 만들지 않습니다.">
+                  팀 녹음실 열기
+                </button>
+              </div>
+            ) : track ? (
               <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
                 <h3 className="font-black text-slate-950">팀 녹음실</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
@@ -885,16 +895,6 @@ export default function SongGuideTrackPage() {
                     팀 녹음실은 실험실 기능입니다. 내 계정에서 실험실 기능을 켜면 사용할 수 있습니다.
                   </p>
                 )}
-              </div>
-            ) : isSampleSetlist ? (
-              <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
-                <h3 className="font-black text-slate-950">팀 녹음실</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  샘플 콘티에서는 버튼 위치와 흐름을 미리 볼 수 있습니다. 실제 녹음 파일 저장과 팀원 녹음실은 저장된 팀 가이드 트랙에서 열 수 있습니다.
-                </p>
-                <button type="button" disabled className="btn-secondary mt-3" title="샘플 콘티에서는 실제 팀 녹음실 세션을 만들지 않습니다.">
-                  팀 녹음실 열기
-                </button>
               </div>
             ) : (
               <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-600">

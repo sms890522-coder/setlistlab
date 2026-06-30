@@ -1,4 +1,5 @@
 import { createId } from "./id";
+import type { GuideTrackData, GuideTrackSection, TeamGuideTrack } from "./db/teamGuideTracks";
 import type { Setlist, Song } from "./types";
 
 export const SAMPLE_SETLIST_ID = "sample-2026-06-07";
@@ -17,6 +18,125 @@ export const SAMPLE_SCORE_IMAGE_URLS: Record<string, string> = {
 
 export function isSampleSetlistId(setlistId: string | null | undefined) {
   return setlistId === SAMPLE_SETLIST_ID;
+}
+
+export function createSampleGuideTrack(setlist: Setlist, song: Song): TeamGuideTrack | null {
+  if (!isSampleSetlistId(setlist.id) || song.title !== "나는 예배자입니다") return null;
+
+  const guideTrackData = createSampleGuideTrackData(song);
+  const now = new Date().toISOString();
+
+  return {
+    id: `sample-guide-track-${song.id}`,
+    setlistId: setlist.id,
+    songId: song.id,
+    title: `${song.title} 샘플 가이드 트랙`,
+    status: "ready",
+    sourceScoreImageUrl: SAMPLE_SCORE_IMAGE_URLS[song.title],
+    extractionStatus: "manual",
+    extractedChords: dedupeSampleChords(guideTrackData.sections.flatMap((section) => section.chords)).map((chord) => ({
+      chord,
+      rawText: chord,
+      confidence: 1,
+      source: "manual",
+    })),
+    songFormMap: guideTrackData.sections,
+    guideTrackData,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function createSampleGuideTrackData(song: Song): GuideTrackData {
+  const sections = createSampleGuideTrackSections(song);
+
+  return {
+    bpm: 68,
+    key: "F",
+    timeSignature: "4/4",
+    sound: "piano_pad",
+    metronome: {
+      enabled: true,
+      sound: "click",
+      accentFirstBeat: true,
+      volume: 0.7,
+    },
+    countIn: {
+      enabled: true,
+      bars: 1,
+      click: true,
+      visualCounter: true,
+    },
+    voiceCue: {
+      enabled: true,
+      language: "en",
+      announceSections: true,
+      announceBeforeBeats: 1,
+      volume: 0.9,
+    },
+    download: {
+      format: "wav",
+      lastExportedAt: null,
+    },
+    sections,
+    totalBars: calculateSampleGuideTrackBars(sections),
+  };
+}
+
+function createSampleGuideTrackSections(song: Song): GuideTrackSection[] {
+  const sectionIds = createSampleSectionIdResolver(song);
+
+  return [
+    createGuideSection(sectionIds("Intro"), "Intro", [["F", "C/E"], ["Bb/D", "F/C"], ["Bb", "C", "Dm", "Dm"], ["CSus4"]]),
+    createGuideSection(sectionIds("Verse1"), "Verse1", [["F", "C/E"], ["Bb/D", "F/C"], ["Bb", "C", "Dm", "Dm"], ["CSus4"]]),
+    createGuideSection(sectionIds("Verse2"), "Verse2", [["F", "C/E"], ["Bb/D", "F/C"], ["Bb", "Dm"], ["G/B", "C", "C", "Csus4"]]),
+    createGuideSection(
+      sectionIds("Chorus"),
+      "Chorus",
+      [["Bb", "C"], ["Dm", "F/A"], ["Bb", "C"], ["F", "F/A"], ["Bb"], ["F/A", "Dm"], ["Gm", "CSus4"], ["F"]],
+    ),
+    createGuideSection(sectionIds("Interlude"), "Interlude", [["F", "C/E"], ["Bb/D", "F/C"], ["Bb", "C", "Dm", "Dm"], ["CSus4"]]),
+    createGuideSection(
+      sectionIds("Chorus"),
+      "Chorus",
+      [["Bb", "C"], ["Dm", "F/A"], ["Bb", "C"], ["F", "F/A"], ["Bb"], ["F/A", "Dm"], ["Gm", "CSus4"], ["F"]],
+    ),
+    createGuideSection(sectionIds("Ending"), "Ending", [["F"], ["F"], ["F"], ["F"]]),
+  ];
+}
+
+function createGuideSection(sectionId: string, label: string, chordBars: string[][]): GuideTrackSection {
+  return {
+    sectionId,
+    label,
+    chords: chordBars.flat(),
+    chordBars,
+    bars: chordBars.length,
+    repeat: 1,
+    memo: "",
+  };
+}
+
+function createSampleSectionIdResolver(song: Song) {
+  const usedIndexes = new Set<number>();
+
+  return (label: string) => {
+    const index = song.sections.findIndex((section, sectionIndex) => !usedIndexes.has(sectionIndex) && section.name === label);
+    if (index >= 0) {
+      usedIndexes.add(index);
+      return song.sections[index]?.id ?? createId("section");
+    }
+
+    return song.sections.find((section) => section.name === label)?.id ?? createId("section");
+  };
+}
+
+function calculateSampleGuideTrackBars(sections: GuideTrackSection[]) {
+  return sections.reduce((sum, section) => sum + Math.max(1, section.bars) * Math.max(1, section.repeat), 0);
+}
+
+function dedupeSampleChords(chords: string[]) {
+  return Array.from(new Set(chords.filter(Boolean)));
 }
 
 function makeSections(names: Array<[string, number, number, string]>) {
