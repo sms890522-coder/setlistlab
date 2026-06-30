@@ -11,6 +11,7 @@ const siteDescription =
   "콘티연습실은 찬양팀을 위한 콘티 작성, 악보 이미지 관리, 유튜브 연습 링크, 팀 채팅, 공지사항, 캘린더, PDF 공유, 튜너와 메트로놈을 한 곳에서 사용할 수 있는 예배 준비 도구입니다.";
 const socialDescription =
   "콘티 작성부터 팀 채팅, 공지사항, 캘린더, 악보 검색, PDF 공유, 튜너와 메트로놈까지 찬양팀 예배 준비를 한 곳에서 관리하세요.";
+const ogImageUrl = "/og-image.png?v=20260630";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -47,7 +48,7 @@ export const metadata: Metadata = {
     locale: "ko_KR",
     images: [
       {
-        url: "/og-image.png",
+        url: ogImageUrl,
         width: 1200,
         height: 630,
         alt: "콘티연습실",
@@ -58,7 +59,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: siteTitle,
     description: socialDescription,
-    images: ["/og-image.png"],
+    images: [ogImageUrl],
   },
   manifest: "/manifest.json",
   icons: {
