@@ -121,6 +121,9 @@ export default function HomePage() {
   const weeklyCardMeta = realWeeklySetlist
     ? [realWeeklySetlist.teamName, formatHomeDate(realWeeklySetlist.serviceDate)].filter(Boolean).join(" · ")
     : null;
+  const weeklyPlayHref = realWeeklySetlist ? `/setlists/${realWeeklySetlist.id}/play` : null;
+  const weeklyPdfHref = realWeeklySetlist ? `/setlists/${realWeeklySetlist.id}/pdf` : null;
+  const weeklyTeamChatHref = realWeeklySetlist ? `/teams/${realWeeklySetlist.teamId}/chat` : null;
   const demoSongs = [
     { order: "1", title: "나는 예배자입니다", keyName: "F", bpm: "68", sections: "Intro - Verse1 - Chorus" },
     { order: "2", title: "주님은 산 같아서", keyName: "A", bpm: "72", sections: "Verse - Chorus - Bridge" },
@@ -253,6 +256,22 @@ export default function HomePage() {
         },
       ],
     },
+    {
+      eyebrow: "실험실",
+      title: "팀 연습을 더 깊게 돕는 테스트 기능",
+      features: [
+        {
+          icon: "🎛️",
+          title: "팀 가이드 트랙",
+          description: "악보 이미지와 송폼을 바탕으로 코드 진행, 메트로놈, 카운트인을 정리해 팀 연습용 기준 트랙을 만듭니다.",
+        },
+        {
+          icon: "🎙️",
+          title: "팀 녹음실",
+          description: "가이드 트랙을 들으며 파트별로 녹음하고, 파형과 믹서, 이펙터로 팀 녹음을 함께 확인합니다.",
+        },
+      ],
+    },
   ];
 
   return (
@@ -337,13 +356,36 @@ export default function HomePage() {
                 <h2 className="mt-2 text-2xl font-black text-slate-950">{weeklyCardTitle}</h2>
                 {weeklyCardMeta ? <p className="mt-1 text-sm font-semibold text-slate-600">{weeklyCardMeta}</p> : null}
               </div>
-              <span className="rounded-2xl bg-white/80 px-3 py-2 text-2xl shadow-sm" aria-hidden="true">
-                🎧
-              </span>
+              {weeklyPlayHref ? (
+                <Link
+                  href={weeklyPlayHref}
+                  className="rounded-2xl bg-white/80 px-3 py-2 text-2xl shadow-sm transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="이번 주 콘티 유튜브 전체재생 열기"
+                  title="유튜브 전체재생"
+                >
+                  🎧
+                </Link>
+              ) : (
+                <span className="rounded-2xl bg-white/80 px-3 py-2 text-2xl shadow-sm" aria-hidden="true">
+                  🎧
+                </span>
+              )}
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-bold text-slate-600">
-              <span className="rounded-xl bg-white/80 px-2 py-2">💬 팀 채팅</span>
-              <span className="rounded-xl bg-white/80 px-2 py-2">📄 PDF</span>
+              {weeklyTeamChatHref ? (
+                <Link className="rounded-xl bg-white/80 px-2 py-2 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" href={weeklyTeamChatHref}>
+                  💬 팀 채팅
+                </Link>
+              ) : (
+                <span className="rounded-xl bg-white/80 px-2 py-2">💬 팀 채팅</span>
+              )}
+              {weeklyPdfHref ? (
+                <Link className="rounded-xl bg-white/80 px-2 py-2 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" href={weeklyPdfHref}>
+                  📄 PDF
+                </Link>
+              ) : (
+                <span className="rounded-xl bg-white/80 px-2 py-2">📄 PDF</span>
+              )}
               <span className="rounded-xl bg-white/80 px-2 py-2">🔔 알림</span>
             </div>
           </div>
