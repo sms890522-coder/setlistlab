@@ -53,6 +53,10 @@ export async function getCloudSetlists() {
 }
 
 export async function getCloudSetlist(id: string) {
+  if (!isCloudSetlistId(id)) {
+    return null;
+  }
+
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase.from("setlists").select("*").eq("id", id).maybeSingle<SetlistRow>();
 
@@ -101,7 +105,7 @@ export async function createCloudSetlist(setlist: Setlist) {
 }
 
 export async function saveCloudSetlist(setlist: Setlist) {
-  if (!isUuid(setlist.id)) {
+  if (!isCloudSetlistId(setlist.id)) {
     return createCloudSetlist(setlist);
   }
 
@@ -317,6 +321,6 @@ function createShareSlug() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function isUuid(value: string) {
+export function isCloudSetlistId(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
