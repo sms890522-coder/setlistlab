@@ -1,6 +1,7 @@
 import type { Profile } from "@/lib/db/profiles";
 
-export type FeatureStatus = "lab" | "public" | "disabled";
+export type FeatureStatus = "admin" | "lab" | "public" | "disabled";
+type FeatureProfile = Pick<Profile, "labEnabled" | "isAdmin">;
 
 export const FEATURES = {
   teamGuideTrack: {
@@ -13,6 +14,11 @@ export const FEATURES = {
     label: "팀 녹음실",
     status: "lab",
   },
+  profileCharacterBuilder: {
+    key: "profileCharacterBuilder",
+    label: "프로필 캐릭터 만들기",
+    status: "admin",
+  },
 } as const satisfies Record<string, { key: string; label: string; status: FeatureStatus }>;
 
 export type FeatureKey = keyof typeof FEATURES;
@@ -21,14 +27,15 @@ export function isFeaturePublic(featureKey: FeatureKey) {
   return getFeatureStatus(featureKey) === "public";
 }
 
-export function canUseLabFeature(profile: Pick<Profile, "labEnabled"> | null | undefined, featureKey: FeatureKey) {
+export function canUseLabFeature(profile: Partial<Pick<FeatureProfile, "labEnabled">> | null | undefined, featureKey: FeatureKey) {
   return getFeatureStatus(featureKey) === "lab" && Boolean(profile?.labEnabled);
 }
 
-export function canUseFeature(profile: Pick<Profile, "labEnabled"> | null | undefined, featureKey: FeatureKey) {
+export function canUseFeature(profile: Partial<FeatureProfile> | null | undefined, featureKey: FeatureKey) {
   const status = getFeatureStatus(featureKey);
   if (status === "disabled") return false;
   if (status === "public") return true;
+  if (status === "admin") return Boolean(profile?.isAdmin);
   return canUseLabFeature(profile, featureKey);
 }
 

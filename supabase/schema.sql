@@ -58,6 +58,12 @@ add column if not exists terms_version text;
 alter table public.profiles
 add column if not exists privacy_version text;
 
+alter table public.profiles
+add column if not exists character_config jsonb;
+
+alter table public.profiles
+add column if not exists character_updated_at timestamptz;
+
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at
 before update on public.profiles
@@ -81,6 +87,39 @@ create trigger profiles_prevent_is_admin_change
 before update on public.profiles
 for each row
 execute function public.prevent_profile_is_admin_change();
+
+create or replace function public.prevent_profile_character_change()
+returns trigger
+language plpgsql
+as $$
+begin
+  if auth.role() = 'service_role' then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if (new.character_config is not null or new.character_updated_at is not null) and coalesce(new.is_admin, false) is not true then
+      raise exception 'character_config can only be changed by an enabled feature';
+    end if;
+    return new;
+  end if;
+
+  if (
+    old.character_config is distinct from new.character_config
+    or old.character_updated_at is distinct from new.character_updated_at
+  ) and coalesce(old.is_admin, false) is not true then
+    raise exception 'character_config can only be changed by an enabled feature';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_prevent_character_change on public.profiles;
+create trigger profiles_prevent_character_change
+before insert or update on public.profiles
+for each row
+execute function public.prevent_profile_character_change();
 
 create table if not exists public.app_announcements (
   id uuid primary key default gen_random_uuid(),

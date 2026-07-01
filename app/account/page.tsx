@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { CharacterBuilder } from "@/components/characters/CharacterBuilder";
 import { USER_ROLES, getCurrentUser, signOut } from "@/lib/auth";
 import { AVAILABILITY_LABELS, getMyUpcomingTeamEvents, type TeamCalendarEventWithAvailability } from "@/lib/db/teamCalendar";
 import { getCloudSetlists } from "@/lib/db/setlists";
 import { getCloudSongLibrary } from "@/lib/db/savedSongs";
-import { getMyProfile, upsertMyProfile } from "@/lib/db/profiles";
+import { getMyProfile, upsertMyProfile, type Profile } from "@/lib/db/profiles";
 import { getTeamMembers } from "@/lib/db/teamMembers";
+import { canUseFeature } from "@/lib/features";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
@@ -29,6 +31,7 @@ export default function AccountPage() {
   const [upcomingEvents, setUpcomingEvents] = useState<TeamCalendarEventWithAvailability[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     async function loadAccount() {
@@ -50,6 +53,7 @@ export default function AccountPage() {
         getTeamMembers().catch(() => []),
         getMyUpcomingTeamEvents().catch(() => []),
       ]);
+      setProfile(profile);
       setEmail(user.email ?? "");
       setAuthProviderMessage(getAuthProviderMessage(user));
       setDisplayName(profile?.displayName || user.email?.split("@")[0] || "");
@@ -77,7 +81,8 @@ export default function AccountPage() {
     setError("");
 
     try {
-      await upsertMyProfile({ displayName, role, customRole, churchName, praiseTeamName, serviceName, sharePracticePresence, labEnabled });
+      const savedProfile = await upsertMyProfile({ displayName, role, customRole, churchName, praiseTeamName, serviceName, sharePracticePresence, labEnabled });
+      setProfile(savedProfile);
       setMessage("프로필을 저장했습니다.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "프로필을 저장하지 못했습니다.");
@@ -259,6 +264,8 @@ export default function AccountPage() {
             {message ? <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
             {error ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
           </section>
+
+          <CharacterBuilder enabled={canUseFeature(profile, "profileCharacterBuilder")} />
         </>
       )}
     </div>
