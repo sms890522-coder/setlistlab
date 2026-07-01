@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   CHARACTER_GENDERS,
@@ -126,7 +127,12 @@ function CharacterBuilderModal({
   const [instrument, setInstrument] = useState<CharacterInstrument>(initialCharacter.instrument);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState("");
+  const [mounted, setMounted] = useState(false);
   const previewCharacter = useMemo(() => getCharacterConfig(gender, instrument), [gender, instrument]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleSave() {
     setStatus("saving");
@@ -148,7 +154,7 @@ function CharacterBuilderModal({
     setStatus("idle");
   }
 
-  return (
+  const modal = (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="character-builder-title">
       <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-[2rem] bg-white shadow-2xl sm:max-w-4xl sm:rounded-[2rem]">
         <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
@@ -214,6 +220,8 @@ function CharacterBuilderModal({
       </div>
     </div>
   );
+
+  return mounted ? createPortal(modal, document.body) : null;
 }
 
 function OptionGroup({ title, children }: { title: string; children: ReactNode }) {
