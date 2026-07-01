@@ -1,5 +1,5 @@
 import { isUserAppAdmin } from "@/lib/adminAccess";
-import { getDefaultCharacterConfig, normalizeCharacterConfig } from "@/lib/characters/characterConfig";
+import { getDefaultCharacterPreset, getCharacterPresetById, resolveCharacterPreset } from "@/lib/characters/characterPresets";
 import { canUseFeature } from "@/lib/features";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
@@ -7,23 +7,27 @@ import { NextResponse } from "next/server";
 type ProfileCharacterRow = {
   lab_enabled: boolean | null;
   is_admin: boolean | null;
-  character_config: unknown | null;
+  character_preset_id: string | null;
+  character_image_url: string | null;
   character_updated_at: string | null;
 };
 
 type CharacterRequestBody = {
-  characterConfig?: unknown;
+  presetId?: unknown;
 };
 
 export async function GET(request: Request) {
   try {
     const context = await getCharacterAccessContext(request);
     if (!context.canUseCharacterBuilder) {
-      return NextResponse.json({ error: "캐릭터 만들기 권한이 없습니다." }, { status: 403 });
+      return NextResponse.json({ error: "캐릭터 선택 권한이 없습니다." }, { status: 403 });
     }
 
+    const preset = getCharacterPresetById(context.profile?.character_preset_id) ?? getDefaultCharacterPreset();
     return NextResponse.json({
-      characterConfig: normalizeCharacterConfig(context.profile?.character_config ?? getDefaultCharacterConfig()),
+      presetId: preset.id,
+      imageUrl: preset.imageUrl,
+      preset,
       updatedAt: context.profile?.character_updated_at ?? null,
     });
   } catch (error) {
@@ -38,28 +42,36 @@ export async function POST(request: Request) {
   try {
     const context = await getCharacterAccessContext(request);
     if (!context.canUseCharacterBuilder) {
-      return NextResponse.json({ error: "캐릭터 만들기 권한이 없습니다." }, { status: 403 });
+      return NextResponse.json({ error: "캐릭터 선택 권한이 없습니다." }, { status: 403 });
     }
 
     const body = (await request.json()) as CharacterRequestBody;
-    const characterConfig = normalizeCharacterConfig(body.characterConfig);
+    const preset = resolveCharacterPreset(body.presetId);
     const now = new Date().toISOString();
     const { data, error } = await context.supabase
       .from("profiles")
       .update({
-        character_config: characterConfig,
+        character_preset_id: preset.id,
+        character_image_url: preset.imageUrl,
         character_updated_at: now,
       })
       .eq("id", context.user.id)
-      .select("character_config, character_updated_at")
-      .single<{ character_config: unknown | null; character_updated_at: string | null }>();
+      .select("character_preset_id, character_image_url, character_updated_at")
+      .single<{
+        character_preset_id: string | null;
+        character_image_url: string | null;
+        character_updated_at: string | null;
+      }>();
 
     if (error || !data) {
       throw new CharacterApiError(error?.message || "캐릭터를 저장하지 못했습니다.", 500);
     }
 
+    const savedPreset = getCharacterPresetById(data.character_preset_id) ?? preset;
     return NextResponse.json({
-      characterConfig: normalizeCharacterConfig(data.character_config),
+      presetId: savedPreset.id,
+      imageUrl: savedPreset.imageUrl,
+      preset: savedPreset,
       updatedAt: data.character_updated_at,
     });
   } catch (error) {
@@ -83,7 +95,7 @@ async function getCharacterAccessContext(request: Request) {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("lab_enabled, is_admin, character_config, character_updated_at")
+    .select("lab_enabled, is_admin, character_preset_id, character_image_url, character_updated_at")
     .eq("id", user.id)
     .maybeSingle<ProfileCharacterRow>();
   if (profileError) throw new CharacterApiError(profileError.message || "프로필 권한을 확인하지 못했습니다.", 500);

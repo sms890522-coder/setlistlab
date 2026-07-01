@@ -16,7 +16,7 @@ export const FEATURES = {
   },
   profileCharacterBuilder: {
     key: "profileCharacterBuilder",
-    label: "프로필 캐릭터 만들기",
+    label: "내 캐릭터 선택",
     status: "admin",
   },
 } as const satisfies Record<string, { key: string; label: string; status: FeatureStatus }>;
