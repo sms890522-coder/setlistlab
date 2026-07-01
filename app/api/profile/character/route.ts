@@ -1,5 +1,12 @@
 import { isUserAppAdmin } from "@/lib/adminAccess";
-import { getDefaultCharacterPreset, getCharacterPresetById, resolveCharacterPreset } from "@/lib/characters/characterPresets";
+import {
+  getCharacterConfig,
+  isCharacterGender,
+  isCharacterInstrument,
+  normalizeCharacterConfig,
+  type CharacterGender,
+  type CharacterInstrument,
+} from "@/lib/characters/characterPresets";
 import { canUseFeature } from "@/lib/features";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
@@ -7,13 +14,15 @@ import { NextResponse } from "next/server";
 type ProfileCharacterRow = {
   lab_enabled: boolean | null;
   is_admin: boolean | null;
-  character_preset_id: string | null;
+  character_gender: string | null;
+  character_instrument: string | null;
   character_image_url: string | null;
   character_updated_at: string | null;
 };
 
 type CharacterRequestBody = {
-  presetId?: unknown;
+  gender?: unknown;
+  instrument?: unknown;
 };
 
 export async function GET(request: Request) {
@@ -23,12 +32,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "캐릭터 선택 권한이 없습니다." }, { status: 403 });
     }
 
-    const preset = getCharacterPresetById(context.profile?.character_preset_id) ?? getDefaultCharacterPreset();
+    const character = normalizeCharacterConfig({
+      gender: context.profile?.character_gender,
+      instrument: context.profile?.character_instrument,
+      imageUrl: context.profile?.character_image_url,
+    });
     return NextResponse.json({
-      presetId: preset.id,
-      imageUrl: preset.imageUrl,
-      preset,
+      ...character,
       updatedAt: context.profile?.character_updated_at ?? null,
+      hasCharacter: Boolean(context.profile?.character_gender && context.profile?.character_instrument),
     });
   } catch (error) {
     return NextResponse.json(
@@ -46,19 +58,25 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as CharacterRequestBody;
-    const preset = resolveCharacterPreset(body.presetId);
+    if (!isCharacterGender(body.gender) || !isCharacterInstrument(body.instrument)) {
+      return NextResponse.json({ error: "지원하지 않는 캐릭터 설정입니다." }, { status: 400 });
+    }
+
+    const character = getCharacterConfig(body.gender, body.instrument);
     const now = new Date().toISOString();
     const { data, error } = await context.supabase
       .from("profiles")
       .update({
-        character_preset_id: preset.id,
-        character_image_url: preset.imageUrl,
+        character_gender: character.gender,
+        character_instrument: character.instrument,
+        character_image_url: character.imageUrl,
         character_updated_at: now,
       })
       .eq("id", context.user.id)
-      .select("character_preset_id, character_image_url, character_updated_at")
+      .select("character_gender, character_instrument, character_image_url, character_updated_at")
       .single<{
-        character_preset_id: string | null;
+        character_gender: CharacterGender | null;
+        character_instrument: CharacterInstrument | null;
         character_image_url: string | null;
         character_updated_at: string | null;
       }>();
@@ -67,12 +85,15 @@ export async function POST(request: Request) {
       throw new CharacterApiError(error?.message || "캐릭터를 저장하지 못했습니다.", 500);
     }
 
-    const savedPreset = getCharacterPresetById(data.character_preset_id) ?? preset;
+    const savedCharacter = normalizeCharacterConfig({
+      gender: data.character_gender,
+      instrument: data.character_instrument,
+      imageUrl: data.character_image_url,
+    });
     return NextResponse.json({
-      presetId: savedPreset.id,
-      imageUrl: savedPreset.imageUrl,
-      preset: savedPreset,
+      ...savedCharacter,
       updatedAt: data.character_updated_at,
+      hasCharacter: true,
     });
   } catch (error) {
     return NextResponse.json(
@@ -95,7 +116,7 @@ async function getCharacterAccessContext(request: Request) {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("lab_enabled, is_admin, character_preset_id, character_image_url, character_updated_at")
+    .select("lab_enabled, is_admin, character_gender, character_instrument, character_image_url, character_updated_at")
     .eq("id", user.id)
     .maybeSingle<ProfileCharacterRow>();
   if (profileError) throw new CharacterApiError(profileError.message || "프로필 권한을 확인하지 못했습니다.", 500);

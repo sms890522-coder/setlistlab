@@ -1,100 +1,90 @@
-# 프로필 캐릭터 프리셋
+# 프로필 캐릭터 에셋 규칙
 
-SetlistLab의 `내 캐릭터 선택` 기능은 무대배치도에서 사용할 개인 캐릭터를 고르는 기능입니다.
+SetlistLab의 프로필 캐릭터는 완성형 이미지 에셋을 `성별 + 악기/역할` 조합으로 선택합니다.
 
-## 방식
+## 왜 모달 방식인가
 
-SVG 레이어 조합이 아니라 완성형 이미지 에셋을 선택합니다.
+프로필 화면에서 모든 캐릭터 이미지를 한 번에 보여주면 에셋이 늘어날수록 트래픽이 커집니다.
 
-이 방식을 선택한 이유:
+현재 구조:
 
-- 캐릭터 완성도를 이미지 에셋 품질로 끌어올릴 수 있음
-- 무대배치도에서 64-96px로 줄였을 때 실루엣이 더 안정적임
-- 사용자에게 복잡한 커스터마이징 UI를 보여주지 않아도 됨
-- 나중에 캐릭터 프리셋만 추가하면 확장 가능
+- 프로필 화면은 선택된 캐릭터 이미지 1개만 로드
+- `캐릭터 만들기/변경` 모달을 열었을 때만 옵션 표시
+- 모달에서도 현재 조합의 미리보기 이미지 1개만 로드
 
-## Feature flag
+## 에셋 경로
 
-- key: `profileCharacterBuilder`
-- label: `내 캐릭터 선택`
-- 현재 status: `admin`
+이미지는 `public/characters`에 둡니다.
 
-상태별 노출:
+```text
+public/characters/{gender}-{instrument}.webp
+```
 
-- `admin`: `profiles.is_admin = true` 또는 app metadata admin 사용자만 사용
-- `lab`: `profiles.lab_enabled = true` 사용자 사용
-- `public`: 로그인 사용자 전체 사용
-- `disabled`: 비활성화
+예:
 
-API에서도 같은 권한을 확인하므로 UI를 우회해도 저장할 수 없습니다.
+- `female-none.webp`
+- `male-vocal.webp`
+- `female-keyboard.webp`
+- `male-acoustic-guitar.webp`
+
+## 지원 값
+
+성별:
+
+- `female`
+- `male`
+
+악기/역할:
+
+- `none`
+- `vocal`
+- `keyboard`
+- `electric_guitar`
+- `acoustic_guitar`
+- `bass`
+- `drums`
+- `cajon`
+- `leader`
+- `in_ear`
+
+파일명에서는 `_`를 `-`로 바꿉니다.
 
 ## DB 저장
 
 `profiles` 테이블:
 
-- `character_preset_id text`
+- `character_gender text`
+- `character_instrument text`
 - `character_image_url text`
 - `character_updated_at timestamptz`
 
-저장 시 클라이언트가 보낸 이미지 URL은 믿지 않습니다. 서버가 `presetId`를 받아 `CHARACTER_PRESETS`에서 `imageUrl`을 찾아 저장합니다.
+기존 호환용으로 남아 있는 `character_preset_id`는 새 저장 흐름에서는 사용하지 않습니다.
 
-## 프리셋 정의
+## Feature flag
 
-파일:
+- key: `profileCharacterBuilder`
+- 현재 status: `admin`
 
-- `lib/characters/characterPresets.ts`
+상태별 노출:
 
-타입:
+- `admin`: admin 사용자만 사용
+- `lab`: 실험실 사용자가 사용
+- `public`: 로그인 사용자 전체 사용
+- `disabled`: 비활성화
 
-```ts
-type CharacterPreset = {
-  id: string
-  name: string
-  description?: string
-  imageUrl: string
-  thumbnailUrl?: string
-  category: 'vocal' | 'instrument' | 'leader' | 'casual' | 'etc'
-  recommendedPart?: string
-}
-```
-
-프리셋을 추가하려면:
-
-1. `public/characters`에 이미지 파일 추가
-2. `CHARACTER_PRESETS`에 id, 이름, imageUrl 추가
-3. 필요하면 category와 recommendedPart 지정
-
-## 에셋 규칙
-
-위치:
-
-- `public/characters/`
-
-권장:
+## 에셋 권장 규격
 
 - WebP 우선
-- PNG 가능
 - 투명 배경
 - 1:1 비율
-- 512x512 또는 1024x1024 원본
-- 작은 크기에서도 알아볼 수 있는 실루엣
+- 512x512 또는 1024x1024 이상 원본
+- 무대배치도에서 64-96px로 줄여도 실루엣이 잘 보이는 캐릭터
 
-이미지가 아직 없으면 앱은 깨진 이미지 대신 placeholder를 보여줍니다.
-
-## 무대배치도 연동 예정
+## 무대배치도 연동
 
 준비된 유틸:
 
 - `getUserCharacter(userId)`
 - `getTeamMembersWithCharacters(teamId)`
 
-무대배치도에서는 `character_image_url`을 사용해 `StageCharacterNode` 이미지를 렌더링할 예정입니다.
-
-TODO:
-
-- 파트별 추천 캐릭터 자동 선택
-- 색상만 바꾸는 간단 커스터마이징
-- 캐릭터 프리셋 추가 업로드
-- 캐릭터 PNG/WebP 최적화
-- 무대배치도 드래그 배치 연동
-- admin 캐릭터 프리셋 관리 화면
+무대배치도에서는 `character_image_url`을 사용해 팀원 캐릭터 이미지를 렌더링할 예정입니다.

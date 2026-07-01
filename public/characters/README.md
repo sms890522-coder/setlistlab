@@ -1,6 +1,6 @@
 # Character assets
 
-Place profile character preset images here.
+Place profile character images here.
 
 Recommended:
 
@@ -10,17 +10,28 @@ Recommended:
 - 512x512 or 1024x1024 source
 - Keep silhouettes readable at 64-96px
 
-Current preset filenames:
+Current filename rule:
 
-- worship-leader-01.webp
-- vocalist-01.webp
-- keyboard-01.webp
-- electric-guitar-01.webp
-- acoustic-guitar-01.webp
-- bass-01.webp
-- drummer-01.webp
-- pastor-style-01.webp
-- casual-01.webp
-- casual-02.webp
+```text
+{gender}-{instrument}.webp
+```
+
+Supported genders:
+
+- female
+- male
+
+Supported instruments:
+
+- none
+- vocal
+- keyboard
+- electric-guitar
+- acoustic-guitar
+- bass
+- drums
+- cajon
+- leader
+- in-ear
 
 If a file is missing, SetlistLab shows an in-app fallback placeholder instead of a broken image.

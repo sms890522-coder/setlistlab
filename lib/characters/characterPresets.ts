@@ -1,131 +1,92 @@
-export type CharacterPresetCategory = "vocal" | "instrument" | "leader" | "casual" | "etc";
+export type CharacterGender = "female" | "male";
 
-export type CharacterPreset = {
-  id: string;
-  name: string;
-  description?: string;
+export type CharacterInstrument =
+  | "none"
+  | "vocal"
+  | "keyboard"
+  | "electric_guitar"
+  | "acoustic_guitar"
+  | "bass"
+  | "drums"
+  | "cajon"
+  | "leader"
+  | "in_ear";
+
+export type CharacterConfig = {
+  version: 1;
+  gender: CharacterGender;
+  instrument: CharacterInstrument;
   imageUrl: string;
-  thumbnailUrl?: string;
-  category: CharacterPresetCategory;
-  recommendedPart?: string;
 };
 
-export const DEFAULT_CHARACTER_PRESET_ID = "casual_01";
+export const CHARACTER_GENDERS = [
+  { value: "female", label: "여자" },
+  { value: "male", label: "남자" },
+] as const satisfies ReadonlyArray<{ value: CharacterGender; label: string }>;
 
-export const CHARACTER_PRESETS: CharacterPreset[] = [
-  {
-    id: "worship_leader_01",
-    name: "찬양인도자",
-    description: "마이크를 든 리더 캐릭터",
-    imageUrl: "/characters/worship-leader-01.webp",
-    category: "leader",
-    recommendedPart: "leader",
-  },
-  {
-    id: "vocalist_01",
-    name: "보컬",
-    description: "싱어와 보컬 팀원에게 어울리는 캐릭터",
-    imageUrl: "/characters/vocalist-01.webp",
-    category: "vocal",
-    recommendedPart: "vocal",
-  },
-  {
-    id: "keyboard_01",
-    name: "건반",
-    description: "건반 앞에 앉은 캐릭터",
-    imageUrl: "/characters/keyboard-01.webp",
-    category: "instrument",
-    recommendedPart: "keyboard",
-  },
-  {
-    id: "electric_guitar_01",
-    name: "일렉기타",
-    description: "일렉기타를 멘 캐릭터",
-    imageUrl: "/characters/electric-guitar-01.webp",
-    category: "instrument",
-    recommendedPart: "electric_guitar",
-  },
-  {
-    id: "acoustic_guitar_01",
-    name: "어쿠스틱",
-    description: "어쿠스틱 기타를 든 캐릭터",
-    imageUrl: "/characters/acoustic-guitar-01.webp",
-    category: "instrument",
-    recommendedPart: "acoustic_guitar",
-  },
-  {
-    id: "bass_01",
-    name: "베이스",
-    description: "베이스를 든 캐릭터",
-    imageUrl: "/characters/bass-01.webp",
-    category: "instrument",
-    recommendedPart: "bass",
-  },
-  {
-    id: "drummer_01",
-    name: "드럼",
-    description: "드럼 파트 캐릭터",
-    imageUrl: "/characters/drummer-01.webp",
-    category: "instrument",
-    recommendedPart: "drums",
-  },
-  {
-    id: "pastor_style_01",
-    name: "말씀 인도",
-    description: "안내와 리딩에 어울리는 차분한 캐릭터",
-    imageUrl: "/characters/pastor-style-01.webp",
-    category: "leader",
-    recommendedPart: "leader",
-  },
-  {
-    id: "casual_01",
-    name: "캐주얼 1",
-    description: "어떤 파트에도 잘 어울리는 기본 캐릭터",
-    imageUrl: "/characters/casual-01.webp",
-    category: "casual",
-  },
-  {
-    id: "casual_02",
-    name: "캐주얼 2",
-    description: "밝은 분위기의 기본 캐릭터",
-    imageUrl: "/characters/casual-02.webp",
-    category: "casual",
-  },
-];
+export const CHARACTER_INSTRUMENTS = [
+  { value: "none", label: "없음" },
+  { value: "vocal", label: "보컬/마이크" },
+  { value: "keyboard", label: "건반" },
+  { value: "electric_guitar", label: "일렉기타" },
+  { value: "acoustic_guitar", label: "어쿠스틱기타" },
+  { value: "bass", label: "베이스" },
+  { value: "drums", label: "드럼" },
+  { value: "cajon", label: "카혼" },
+  { value: "leader", label: "리더" },
+  { value: "in_ear", label: "인이어" },
+] as const satisfies ReadonlyArray<{ value: CharacterInstrument; label: string }>;
 
-export function getDefaultCharacterPreset() {
-  return getCharacterPresetById(DEFAULT_CHARACTER_PRESET_ID) ?? CHARACTER_PRESETS[0]!;
+export const DEFAULT_CHARACTER_CONFIG: CharacterConfig = {
+  version: 1,
+  gender: "female",
+  instrument: "none",
+  imageUrl: "/characters/female-none.webp",
+};
+
+export function resolveCharacterImageUrl(gender: CharacterGender, instrument: CharacterInstrument): string {
+  return `/characters/${gender}-${instrument.replaceAll("_", "-")}.webp`;
 }
 
-export function getCharacterPresetById(id: string | null | undefined) {
-  if (!id) return null;
-  return CHARACTER_PRESETS.find((preset) => preset.id === id) ?? null;
-}
-
-export function validateCharacterPresetId(id: unknown): id is string {
-  return typeof id === "string" && Boolean(getCharacterPresetById(id));
-}
-
-export function resolveCharacterPreset(id: unknown) {
-  if (!validateCharacterPresetId(id)) {
-    return getDefaultCharacterPreset();
-  }
-
-  return getCharacterPresetById(id) ?? getDefaultCharacterPreset();
-}
-
-export function resolveCharacterImageUrl(presetId: string) {
-  return (getCharacterPresetById(presetId) ?? getDefaultCharacterPreset()).imageUrl;
-}
-
-export function getCharacterCategoryLabel(category: CharacterPresetCategory | "all") {
-  const labels: Record<CharacterPresetCategory | "all", string> = {
-    all: "전체",
-    vocal: "보컬",
-    instrument: "악기",
-    leader: "리더",
-    casual: "캐주얼",
-    etc: "기타",
+export function getCharacterConfig(gender: CharacterGender, instrument: CharacterInstrument): CharacterConfig {
+  return {
+    version: 1,
+    gender,
+    instrument,
+    imageUrl: resolveCharacterImageUrl(gender, instrument),
   };
-  return labels[category];
+}
+
+export function getDefaultCharacterConfig(): CharacterConfig {
+  return DEFAULT_CHARACTER_CONFIG;
+}
+
+export function isCharacterGender(value: unknown): value is CharacterGender {
+  return typeof value === "string" && CHARACTER_GENDERS.some((item) => item.value === value);
+}
+
+export function isCharacterInstrument(value: unknown): value is CharacterInstrument {
+  return typeof value === "string" && CHARACTER_INSTRUMENTS.some((item) => item.value === value);
+}
+
+export function normalizeCharacterConfig(input: {
+  gender?: unknown;
+  instrument?: unknown;
+  imageUrl?: unknown;
+} | null | undefined): CharacterConfig {
+  const gender = isCharacterGender(input?.gender) ? input.gender : DEFAULT_CHARACTER_CONFIG.gender;
+  const instrument = isCharacterInstrument(input?.instrument) ? input.instrument : DEFAULT_CHARACTER_CONFIG.instrument;
+  return getCharacterConfig(gender, instrument);
+}
+
+export function getCharacterGenderLabel(gender: CharacterGender) {
+  return CHARACTER_GENDERS.find((item) => item.value === gender)?.label ?? "여자";
+}
+
+export function getCharacterInstrumentLabel(instrument: CharacterInstrument) {
+  return CHARACTER_INSTRUMENTS.find((item) => item.value === instrument)?.label ?? "없음";
+}
+
+export function getCharacterSummary(config: Pick<CharacterConfig, "gender" | "instrument">) {
+  return `${getCharacterGenderLabel(config.gender)} · ${getCharacterInstrumentLabel(config.instrument)}`;
 }

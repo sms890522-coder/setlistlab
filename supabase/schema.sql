@@ -65,6 +65,12 @@ alter table public.profiles
 add column if not exists character_preset_id text;
 
 alter table public.profiles
+add column if not exists character_gender text;
+
+alter table public.profiles
+add column if not exists character_instrument text;
+
+alter table public.profiles
 add column if not exists character_image_url text;
 
 alter table public.profiles
@@ -107,6 +113,8 @@ begin
     if (
       new.character_config is not null
       or new.character_preset_id is not null
+      or new.character_gender is not null
+      or new.character_instrument is not null
       or new.character_image_url is not null
       or new.character_updated_at is not null
     ) and coalesce(new.is_admin, false) is not true then
@@ -118,6 +126,8 @@ begin
   if (
     old.character_config is distinct from new.character_config
     or old.character_preset_id is distinct from new.character_preset_id
+    or old.character_gender is distinct from new.character_gender
+    or old.character_instrument is distinct from new.character_instrument
     or old.character_image_url is distinct from new.character_image_url
     or old.character_updated_at is distinct from new.character_updated_at
   ) and coalesce(old.is_admin, false) is not true then

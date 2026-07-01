@@ -1,20 +1,29 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { getCharacterPresetById, getDefaultCharacterPreset, type CharacterPreset } from "./characterPresets";
+import {
+  getCharacterSummary,
+  normalizeCharacterConfig,
+  type CharacterConfig,
+  type CharacterGender,
+  type CharacterInstrument,
+} from "./characterPresets";
 
 export type UserStageCharacter = {
   userId: string;
   displayName: string;
   role?: string;
-  presetId: string;
+  gender: CharacterGender;
+  instrument: CharacterInstrument;
   imageUrl: string;
-  preset: CharacterPreset;
+  summary: string;
+  character: CharacterConfig;
 };
 
 type ProfileCharacterRow = {
   id: string;
   display_name: string | null;
   role: string | null;
-  character_preset_id: string | null;
+  character_gender: string | null;
+  character_instrument: string | null;
   character_image_url: string | null;
 };
 
@@ -28,7 +37,7 @@ export async function getUserCharacter(userId: string): Promise<UserStageCharact
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, display_name, role, character_preset_id, character_image_url")
+    .select("id, display_name, role, character_gender, character_instrument, character_image_url")
     .eq("id", userId)
     .maybeSingle<ProfileCharacterRow>();
 
@@ -55,7 +64,7 @@ export async function getTeamMembersWithCharacters(teamId: string): Promise<User
 
   const { data: profiles, error: profileError } = await supabase
     .from("profiles")
-    .select("id, display_name, role, character_preset_id, character_image_url")
+    .select("id, display_name, role, character_gender, character_instrument, character_image_url")
     .in("id", userIds)
     .returns<ProfileCharacterRow[]>();
   if (profileError) throw new Error(profileError.message || "팀원 캐릭터 정보를 불러오지 못했습니다.");
@@ -74,14 +83,20 @@ export async function getTeamMembersWithCharacters(teamId: string): Promise<User
 }
 
 function rowToStageCharacter(row: ProfileCharacterRow): UserStageCharacter {
-  const preset = getCharacterPresetById(row.character_preset_id) ?? getDefaultCharacterPreset();
+  const character = normalizeCharacterConfig({
+    gender: row.character_gender,
+    instrument: row.character_instrument,
+    imageUrl: row.character_image_url,
+  });
   return {
     userId: row.id,
     displayName: row.display_name || "팀원",
     role: row.role ?? undefined,
-    presetId: preset.id,
-    imageUrl: row.character_image_url || preset.imageUrl,
-    preset,
+    gender: character.gender,
+    instrument: character.instrument,
+    imageUrl: row.character_image_url || character.imageUrl,
+    summary: getCharacterSummary(character),
+    character,
   };
 }
 
