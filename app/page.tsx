@@ -12,6 +12,18 @@ import { useEffect, useState } from "react";
 type AuthStatus = "loading" | "signedIn" | "signedOut";
 type SharedCountStatus = "loading" | "ready" | "unavailable";
 type WeeklySetlistStatus = "idle" | "loading" | "ready" | "error";
+type HomeFeature = {
+  icon: string;
+  title: string;
+  description: string;
+  isNew?: boolean;
+};
+type HomeFeatureGroup = {
+  eyebrow: string;
+  title: string;
+  features: HomeFeature[];
+  isNew?: boolean;
+};
 
 const applicationJsonLd = {
   "@context": "https://schema.org",
@@ -136,7 +148,7 @@ export default function HomePage() {
         ? "계정 클라우드에 콘티, 곡 보관함, 팀 정보와 알림 설정을 저장해서 다른 기기에서도 이어서 사용할 수 있습니다."
         : "로그인 전에는 이 브라우저에 임시 저장되고, 로그인하면 계정 클라우드에 콘티, 곡 보관함, 팀 정보와 알림 설정을 저장합니다.";
 
-  const featureGroups = [
+  const featureGroups: HomeFeatureGroup[] = [
     {
       eyebrow: "콘티 준비",
       title: "리더가 빠르게 정리하는 예배 흐름",
@@ -259,15 +271,18 @@ export default function HomePage() {
     {
       eyebrow: "실험실",
       title: "팀 연습을 더 깊게 돕는 테스트 기능",
+      isNew: true,
       features: [
         {
           icon: "🎛️",
           title: "팀 가이드 트랙",
+          isNew: true,
           description: "악보 이미지와 송폼을 바탕으로 코드 진행, 메트로놈, 카운트인을 정리해 팀 연습용 기준 트랙을 만듭니다.",
         },
         {
           icon: "🎙️",
           title: "팀 녹음실",
+          isNew: true,
           description: "가이드 트랙을 들으며 파트별로 녹음하고, 파형과 믹서, 이펙터로 팀 녹음을 함께 확인합니다.",
         },
       ],
@@ -475,7 +490,10 @@ export default function HomePage() {
         {featureGroups.map((group) => (
           <div key={group.title} className="rounded-3xl border border-slate-200 bg-white/70 p-4 shadow-sm sm:p-5">
             <div className="mb-4">
-              <p className="text-xs font-black text-blue-700">{group.eyebrow}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-black text-blue-700">{group.eyebrow}</p>
+                {group.isNew ? <NewBadge /> : null}
+              </div>
               <h3 className="mt-1 text-xl font-black text-slate-950">{group.title}</h3>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -489,7 +507,10 @@ export default function HomePage() {
                       {feature.icon}
                     </span>
                     <div className="min-w-0">
-                      <h4 className="font-black text-slate-950">{feature.title}</h4>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-black text-slate-950">{feature.title}</h4>
+                        {feature.isNew ? <NewBadge /> : null}
+                      </div>
                       <p className="mt-2 text-sm leading-6 text-slate-600">{feature.description}</p>
                     </div>
                   </div>
@@ -533,6 +554,14 @@ function WeeklySongPreview({
         </div>
       </div>
     </div>
+  );
+}
+
+function NewBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-rose-600">
+      NEW
+    </span>
   );
 }
 
