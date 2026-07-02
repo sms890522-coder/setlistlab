@@ -119,7 +119,7 @@ async function updateCharacterProfile(
   config: CharacterConfig,
   now: string,
 ) {
-  const legacyImageUrl = resolveCharacterImageUrl(config.gender, config.instrument);
+  const legacyImageUrl = resolveCharacterImageUrl(config.gender, config.instrument, config.presetVariant);
   const result = await context.supabase
     .from("profiles")
     .update({

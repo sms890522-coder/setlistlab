@@ -1,27 +1,33 @@
 # Character assets
 
-Profile characters are rendered from transparent WebP/PNG layers.
+Profile characters are selected from finished WebP preset images.
 
 Recommended:
 
-- WebP first, PNG also works
+- WebP first
 - Transparent background
 - 1:1 ratio
-- Every layer must use the same canvas size and anchor point
 - 512x512 or 1024x1024 source
 - Keep silhouettes readable at 64-96px
 
-Current layer paths:
+Base preset path:
 
 ```text
-layers/base/{gender}-body-01.webp
-layers/face/face-{faceShape}-01.webp
-layers/expression/{expression}-01.webp
-layers/hair/{gender}-{hairStyle}-01-{hairColor}.webp
-layers/outfit-top/top-{topStyle}-01-{topColor}.webp
-layers/outfit-bottom/bottom-basic-01-{bottomColor}.webp
-layers/instrument/{instrument}.webp
+{gender}-{instrument}.webp
 ```
+
+Additional style preset path:
+
+```text
+presets/{gender}-{instrument}-{variant}.webp
+```
+
+Supported variants:
+
+- classic: existing base image
+- soft
+- warm
+- vivid
 
 Supported instruments:
 
@@ -38,4 +44,4 @@ Supported instruments:
 - engineer
 - broadcast-room
 
-Legacy full-character files can remain in this folder for compatibility, but new profile rendering uses the `layers` directory.
+Layer assets under `layers/` are kept for future experiments, but the current profile character UI uses finished preset images.

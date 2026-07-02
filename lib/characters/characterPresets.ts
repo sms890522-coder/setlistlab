@@ -6,6 +6,7 @@ export type CharacterHairColor = "black" | "brown" | "dark_brown" | "light_brown
 export type CharacterTopStyle = "basic" | "hoodie" | "neat" | "worship";
 export type CharacterTopColor = "black" | "white" | "blue" | "indigo" | "green" | "beige";
 export type CharacterBottomColor = "black" | "navy" | "gray";
+export type CharacterPresetVariant = "classic" | "soft" | "warm" | "vivid";
 
 export type CharacterInstrument =
   | "none"
@@ -32,6 +33,7 @@ export type CharacterConfig = {
   topColor: CharacterTopColor;
   bottomColor: CharacterBottomColor;
   instrument: CharacterInstrument;
+  presetVariant: CharacterPresetVariant;
 };
 
 export type CharacterLayerKey = "body" | "bottom" | "top" | "face" | "expression" | "hair" | "instrument";
@@ -112,6 +114,13 @@ export const CHARACTER_INSTRUMENTS = [
   { value: "broadcast_room", label: "방송실" },
 ] as const satisfies ReadonlyArray<{ value: CharacterInstrument; label: string }>;
 
+export const CHARACTER_PRESET_VARIANTS = [
+  { value: "classic", label: "기본", description: "기존 캐릭터 스타일" },
+  { value: "soft", label: "소프트", description: "부드러운 파스텔 톤" },
+  { value: "warm", label: "웜", description: "따뜻한 예배팀 톤" },
+  { value: "vivid", label: "비비드", description: "조금 더 선명한 톤" },
+] as const satisfies ReadonlyArray<{ value: CharacterPresetVariant; label: string; description: string }>;
+
 export const DEFAULT_CHARACTER_CONFIG: CharacterConfig = {
   version: 1,
   gender: "female",
@@ -123,6 +132,7 @@ export const DEFAULT_CHARACTER_CONFIG: CharacterConfig = {
   topColor: "indigo",
   bottomColor: "black",
   instrument: "none",
+  presetVariant: "classic",
 };
 
 export function getDefaultCharacterConfig(): CharacterConfig {
@@ -165,6 +175,10 @@ export function isCharacterInstrument(value: unknown): value is CharacterInstrum
   return isOneOf(value, CHARACTER_INSTRUMENTS);
 }
 
+export function isCharacterPresetVariant(value: unknown): value is CharacterPresetVariant {
+  return isOneOf(value, CHARACTER_PRESET_VARIANTS);
+}
+
 export function normalizeCharacterConfig(input: unknown): CharacterConfig {
   const record = input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
   return {
@@ -178,15 +192,30 @@ export function normalizeCharacterConfig(input: unknown): CharacterConfig {
     topColor: isCharacterTopColor(record.topColor) ? record.topColor : DEFAULT_CHARACTER_CONFIG.topColor,
     bottomColor: isCharacterBottomColor(record.bottomColor) ? record.bottomColor : DEFAULT_CHARACTER_CONFIG.bottomColor,
     instrument: isCharacterInstrument(record.instrument) ? record.instrument : DEFAULT_CHARACTER_CONFIG.instrument,
+    presetVariant: isCharacterPresetVariant(record.presetVariant) ? record.presetVariant : DEFAULT_CHARACTER_CONFIG.presetVariant,
   };
 }
 
-export function getCharacterConfig(gender: CharacterGender, instrument: CharacterInstrument): CharacterConfig {
-  return normalizeCharacterConfig({ ...DEFAULT_CHARACTER_CONFIG, gender, instrument });
+export function getCharacterConfig(
+  gender: CharacterGender,
+  instrument: CharacterInstrument,
+  presetVariant: CharacterPresetVariant = DEFAULT_CHARACTER_CONFIG.presetVariant,
+): CharacterConfig {
+  return normalizeCharacterConfig({ ...DEFAULT_CHARACTER_CONFIG, gender, instrument, presetVariant });
 }
 
-export function resolveCharacterImageUrl(gender: CharacterGender, instrument: CharacterInstrument): string {
-  return `/characters/${gender}-${instrument.replaceAll("_", "-")}.webp`;
+export function resolveCharacterImageUrl(gender: CharacterGender, instrument: CharacterInstrument, presetVariant: CharacterPresetVariant = "classic"): string {
+  const instrumentPath = instrument.replaceAll("_", "-");
+  if (presetVariant === "classic") return `/characters/${gender}-${instrumentPath}.webp`;
+  return `/characters/presets/${gender}-${instrumentPath}-${presetVariant}.webp`;
+}
+
+export function getCharacterPresetOptions(configInput: unknown) {
+  const config = normalizeCharacterConfig(configInput);
+  return CHARACTER_PRESET_VARIANTS.map((variant) => ({
+    ...variant,
+    imageUrl: resolveCharacterImageUrl(config.gender, config.instrument, variant.value),
+  }));
 }
 
 export function getCharacterLayers(configInput: unknown): CharacterLayer[] {
@@ -239,9 +268,13 @@ export function getCharacterInstrumentLabel(instrument: CharacterInstrument) {
   return CHARACTER_INSTRUMENTS.find((item) => item.value === instrument)?.label ?? "없음";
 }
 
+export function getCharacterPresetVariantLabel(presetVariant: CharacterPresetVariant) {
+  return CHARACTER_PRESET_VARIANTS.find((item) => item.value === presetVariant)?.label ?? "기본";
+}
+
 export function getCharacterSummary(configInput: unknown) {
   const config = normalizeCharacterConfig(configInput);
-  return `${getCharacterGenderLabel(config.gender)} · ${getCharacterHairStyleLabel(config.hairStyle)} · ${getCharacterExpressionLabel(config.expression)} · ${getCharacterInstrumentLabel(config.instrument)}`;
+  return `${getCharacterGenderLabel(config.gender)} · ${getCharacterInstrumentLabel(config.instrument)} · ${getCharacterPresetVariantLabel(config.presetVariant)}`;
 }
 
 function isOneOf<T extends string>(value: unknown, list: ReadonlyArray<{ value: T }>): value is T {

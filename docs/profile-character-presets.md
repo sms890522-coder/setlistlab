@@ -1,33 +1,38 @@
 # 프로필 캐릭터 에셋 규칙
 
-SetlistLab의 프로필 캐릭터는 완성형 1장 선택이 아니라, PNG/WebP 투명 배경 파츠를 겹쳐 만드는 방식입니다.
+SetlistLab의 프로필 캐릭터는 완성형 WebP 프리셋을 선택하는 방식입니다.
 
-## 왜 모달 방식인가
+## 왜 프리셋 방식인가
 
-프로필 화면에서 모든 파츠나 조합 이미지를 한 번에 보여주면 에셋이 늘어날수록 트래픽이 커집니다.
+고품질 캐릭터를 유지하려면 완성형 일러스트 위에 임의 레이어를 얹지 않아야 합니다.
 
 현재 구조:
 
-- 프로필 화면은 저장된 캐릭터에 필요한 파츠만 로드
-- `캐릭터 만들기/변경` 모달을 열었을 때만 옵션 UI 표시
-- 옵션 버튼에는 큰 이미지 썸네일을 쓰지 않음
-- 미리보기는 현재 선택 조합의 레이어만 로드
+- 프로필 화면은 저장된 캐릭터 이미지 1개만 로드
+- 모달에서 성별과 악기/역할 선택
+- 선택한 조합에 대해 `기본`, `소프트`, `웜`, `비비드` 4개 스타일 표시
+- 준비된 완성형 이미지 중 하나를 선택
 
 ## 에셋 경로
 
-파츠 이미지는 `public/characters/layers`에 둡니다.
+기본 스타일:
 
 ```text
-base/{gender}-body-01.webp
-face/face-{faceShape}-01.webp
-expression/{expression}-01.webp
-hair/{gender}-{hairStyle}-01-{hairColor}.webp
-outfit-top/top-{topStyle}-01-{topColor}.webp
-outfit-bottom/bottom-basic-01-{bottomColor}.webp
-instrument/{instrument}.webp
+public/characters/{gender}-{instrument}.webp
 ```
 
-파일명에서는 타입 값의 `_`를 `-`로 바꿉니다.
+추가 스타일:
+
+```text
+public/characters/presets/{gender}-{instrument}-{variant}.webp
+```
+
+예:
+
+- `female-vocal.webp`
+- `presets/female-vocal-soft.webp`
+- `presets/female-vocal-warm.webp`
+- `presets/female-vocal-vivid.webp`
 
 ## 지원 값
 
@@ -35,27 +40,6 @@ instrument/{instrument}.webp
 
 - `female`
 - `male`
-
-얼굴형:
-
-- `round`
-- `oval`
-- `soft_square`
-
-표정:
-
-- `smile`
-- `calm`
-- `joy`
-- `focus`
-
-헤어:
-
-- `short`
-- `medium`
-- `long`
-- `wave`
-- `ponytail`
 
 악기/역할:
 
@@ -72,15 +56,25 @@ instrument/{instrument}.webp
 - `engineer`
 - `broadcast_room`
 
+스타일:
+
+- `classic`
+- `soft`
+- `warm`
+- `vivid`
+
+파일명에서는 `_`를 `-`로 바꿉니다.
+
 ## DB 저장
 
 `profiles` 테이블:
 
 - `character_config jsonb`
+- `character_image_url text`
 - `character_thumbnail_url text`
 - `character_updated_at timestamptz`
 
-기존 호환용으로 남아 있는 `character_gender`, `character_instrument`, `character_image_url`, `character_preset_id`는 새 저장 흐름의 보조값입니다.
+`character_config.presetVariant`가 선택한 스타일을 나타냅니다.
 
 ## Feature flag
 
@@ -99,7 +93,6 @@ instrument/{instrument}.webp
 - WebP 우선
 - 투명 배경
 - 1:1 비율
-- 모든 파츠는 같은 캔버스 크기와 기준점 사용
 - 512x512 또는 1024x1024 이상 원본
 - 무대배치도에서 64-96px로 줄여도 실루엣이 잘 보이는 캐릭터
 
@@ -110,4 +103,4 @@ instrument/{instrument}.webp
 - `getUserCharacter(userId)`
 - `getTeamMembersWithCharacters(teamId)`
 
-무대배치도에서는 `character_config`를 `CharacterPreview` 레이어로 렌더링할 예정입니다.
+무대배치도에서는 `character_config` 또는 `character_image_url`을 사용해 팀원 캐릭터를 렌더링할 예정입니다.

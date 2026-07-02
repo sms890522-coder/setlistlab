@@ -22,7 +22,8 @@ const SIZE_CLASSES = {
 
 export function CharacterImage({ character, alt, size = "lg", className = "" }: CharacterImageProps) {
   const selectedCharacter = character ?? DEFAULT_CHARACTER_CONFIG;
-  const imageUrl = resolveCharacterImageUrl(selectedCharacter.gender, selectedCharacter.instrument);
+  const imageUrl = resolveCharacterImageUrl(selectedCharacter.gender, selectedCharacter.instrument, selectedCharacter.presetVariant);
+  const fallbackComboUrl = resolveCharacterImageUrl(selectedCharacter.gender, selectedCharacter.instrument, "classic");
   const defaultImageUrl = resolveCharacterImageUrl(DEFAULT_CHARACTER_CONFIG.gender, DEFAULT_CHARACTER_CONFIG.instrument);
   const [currentSrc, setCurrentSrc] = useState(imageUrl);
   const [failedDefault, setFailedDefault] = useState(false);
@@ -47,6 +48,10 @@ export function CharacterImage({ character, alt, size = "lg", className = "" }: 
             draggable={false}
             loading="lazy"
             onError={() => {
+              if (currentSrc !== fallbackComboUrl) {
+                setCurrentSrc(fallbackComboUrl);
+                return;
+              }
               if (currentSrc !== defaultImageUrl) {
                 setCurrentSrc(defaultImageUrl);
                 return;
