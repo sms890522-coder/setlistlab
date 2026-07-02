@@ -5,15 +5,37 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
+  CHARACTER_BOTTOM_COLORS,
+  CHARACTER_EXPRESSIONS,
+  CHARACTER_FACE_SHAPES,
   CHARACTER_GENDERS,
+  CHARACTER_HAIR_COLORS,
+  CHARACTER_HAIR_STYLES,
   CHARACTER_INSTRUMENTS,
+  CHARACTER_TOP_COLORS,
+  CHARACTER_TOP_STYLES,
   DEFAULT_CHARACTER_CONFIG,
-  getCharacterConfig,
+  getCharacterBottomColorLabel,
+  getCharacterExpressionLabel,
+  getCharacterFaceShapeLabel,
+  getCharacterGenderLabel,
+  getCharacterHairColorLabel,
+  getCharacterHairStyleLabel,
+  getCharacterInstrumentLabel,
   getCharacterSummary,
+  getCharacterTopColorLabel,
+  getCharacterTopStyleLabel,
   normalizeCharacterConfig,
+  type CharacterBottomColor,
   type CharacterConfig,
+  type CharacterExpression,
+  type CharacterFaceShape,
   type CharacterGender,
+  type CharacterHairColor,
+  type CharacterHairStyle,
   type CharacterInstrument,
+  type CharacterTopColor,
+  type CharacterTopStyle,
 } from "@/lib/characters/characterPresets";
 import { CharacterImage } from "./CharacterImage";
 
@@ -22,6 +44,15 @@ type CharacterBuilderProps = {
 };
 
 type SaveStatus = "idle" | "loading" | "saving" | "saved" | "error";
+type BuilderTab = "basic" | "face" | "hair" | "outfit" | "role";
+
+const BUILDER_TABS: Array<{ value: BuilderTab; label: string }> = [
+  { value: "basic", label: "기본" },
+  { value: "face", label: "얼굴" },
+  { value: "hair", label: "머리" },
+  { value: "outfit", label: "옷" },
+  { value: "role", label: "역할" },
+];
 
 export function CharacterBuilder({ enabled }: CharacterBuilderProps) {
   const [character, setCharacter] = useState<CharacterConfig>(DEFAULT_CHARACTER_CONFIG);
@@ -82,7 +113,7 @@ export function CharacterBuilder({ enabled }: CharacterBuilderProps) {
               </span>
             </div>
             <p className="mt-2 text-sm leading-6 text-violet-900">
-              무대배치도에서 사용할 내 캐릭터를 설정합니다. 프로필에서는 선택된 캐릭터 1개만 불러오고, 변경할 때만 모달을 엽니다.
+              무대배치도에서 사용할 내 캐릭터를 꾸며보세요. 이전 캐릭터 이미지를 베이스로 쓰고, 변경할 때만 커스터마이징 모달을 엽니다.
             </p>
           </div>
           <button type="button" onClick={() => setModalOpen(true)} className="btn-primary min-h-10 px-4">
@@ -100,7 +131,7 @@ export function CharacterBuilder({ enabled }: CharacterBuilderProps) {
           <p className="mt-1 text-xl font-black text-slate-950">{hasCharacter ? getCharacterSummary(character) : "기본 캐릭터"}</p>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {hasCharacter
-              ? "이전 완성형 캐릭터 에셋을 사용합니다. 나중에 무대배치도에서 팀원 캐릭터로 사용할 수 있습니다."
+              ? "이전 완성형 캐릭터 에셋을 베이스로 얼굴, 머리, 옷, 악기/역할 설정을 적용합니다."
               : "무대배치도에서 사용할 내 캐릭터를 만들어보세요."}
           </p>
           {status === "loading" ? <p className="mt-3 text-sm font-semibold text-slate-500">캐릭터를 불러오는 중입니다.</p> : null}
@@ -123,12 +154,12 @@ function CharacterBuilderModal({
   onClose: () => void;
   onSaved: (character: CharacterConfig) => void;
 }) {
-  const [gender, setGender] = useState<CharacterGender>(initialCharacter.gender);
-  const [instrument, setInstrument] = useState<CharacterInstrument>(initialCharacter.instrument);
+  const [draft, setDraft] = useState<CharacterConfig>(() => normalizeCharacterConfig(initialCharacter));
+  const [tab, setTab] = useState<BuilderTab>("basic");
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
-  const previewCharacter = useMemo(() => getCharacterConfig(gender, instrument), [gender, instrument]);
+  const previewSummary = useMemo(() => getCharacterSummary(draft), [draft]);
 
   useEffect(() => {
     setMounted(true);
@@ -139,7 +170,7 @@ function CharacterBuilderModal({
     setError("");
 
     try {
-      const response = await fetchCharacter("POST", { config: previewCharacter });
+      const response = await fetchCharacter("POST", { config: draft });
       onSaved(normalizeCharacterConfig(response.config));
     } catch (saveError) {
       setStatus("error");
@@ -148,22 +179,28 @@ function CharacterBuilderModal({
   }
 
   function handleReset() {
-    setGender(DEFAULT_CHARACTER_CONFIG.gender);
-    setInstrument(DEFAULT_CHARACTER_CONFIG.instrument);
+    setDraft(DEFAULT_CHARACTER_CONFIG);
+    setTab("basic");
+    setError("");
+    setStatus("idle");
+  }
+
+  function updateDraft(next: Partial<CharacterConfig>) {
+    setDraft((current) => normalizeCharacterConfig({ ...current, ...next }));
     setError("");
     setStatus("idle");
   }
 
   const modal = (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="character-builder-title">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-[2rem] bg-white shadow-2xl sm:max-w-4xl sm:rounded-[2rem]">
+      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-[2rem] bg-white shadow-2xl sm:max-w-5xl sm:rounded-[2rem]">
         <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 id="character-builder-title" className="text-xl font-black text-slate-950">
                 내 캐릭터 만들기
               </h3>
-              <p className="mt-1 text-sm leading-6 text-slate-500">무대배치도에서 사용할 내 캐릭터를 선택해보세요.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-500">무대배치도에서 사용할 내 캐릭터를 꾸며보세요.</p>
             </div>
             <button type="button" onClick={onClose} className="btn-secondary min-h-10 px-3" aria-label="캐릭터 만들기 닫기">
               닫기
@@ -171,32 +208,117 @@ function CharacterBuilderModal({
           </div>
         </div>
 
-        <div className="grid gap-6 p-5 sm:grid-cols-[280px_1fr] sm:p-6">
+        <div className="grid gap-6 p-5 sm:grid-cols-[300px_1fr] sm:p-6">
           <aside className="flex flex-col items-center gap-4 rounded-3xl border border-slate-100 bg-slate-50 p-5">
             <p className="text-sm font-black text-slate-700">현재 미리보기</p>
-            <CharacterImage character={previewCharacter} alt={`${getCharacterSummary(previewCharacter)} 캐릭터 미리보기`} size="lg" />
+            <CharacterImage character={draft} alt={`${previewSummary} 캐릭터 미리보기`} size="lg" />
             <div className="w-full rounded-2xl bg-white p-4 text-center">
-              <p className="font-black text-slate-950">{getCharacterSummary(previewCharacter)}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">이전 완성형 캐릭터 이미지 1개만 불러옵니다.</p>
+              <p className="font-black text-slate-950">{previewSummary}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">이전 캐릭터 이미지를 베이스로 설정을 적용합니다.</p>
             </div>
           </aside>
 
-          <div className="space-y-6">
-            <OptionGroup title="성별">
-              {CHARACTER_GENDERS.map((item) => (
-                <CharacterOptionButton key={item.value} selected={gender === item.value} onClick={() => setGender(item.value)}>
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-2 rounded-2xl bg-slate-100 p-1">
+              {BUILDER_TABS.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setTab(item.value)}
+                  className={`min-h-10 rounded-xl px-4 text-sm font-black transition ${
+                    tab === item.value ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:bg-white/70"
+                  }`}
+                >
                   {item.label}
-                </CharacterOptionButton>
+                </button>
               ))}
-            </OptionGroup>
+            </div>
 
-            <OptionGroup title="악기/역할">
-              {CHARACTER_INSTRUMENTS.map((item) => (
-                <CharacterOptionButton key={item.value} selected={instrument === item.value} onClick={() => setInstrument(item.value)}>
-                  {item.label}
-                </CharacterOptionButton>
-              ))}
-            </OptionGroup>
+            {tab === "basic" ? (
+              <OptionGroup title="성별">
+                {CHARACTER_GENDERS.map((item) => (
+                  <CharacterOptionButton key={item.value} selected={draft.gender === item.value} onClick={() => updateDraft({ gender: item.value })}>
+                    {item.label}
+                  </CharacterOptionButton>
+                ))}
+              </OptionGroup>
+            ) : null}
+
+            {tab === "face" ? (
+              <>
+                <OptionGroup title="얼굴형">
+                  {CHARACTER_FACE_SHAPES.map((item) => (
+                    <CharacterOptionButton key={item.value} selected={draft.faceShape === item.value} onClick={() => updateDraft({ faceShape: item.value })}>
+                      {item.label}
+                    </CharacterOptionButton>
+                  ))}
+                </OptionGroup>
+                <OptionGroup title="표정">
+                  {CHARACTER_EXPRESSIONS.map((item) => (
+                    <CharacterOptionButton key={item.value} selected={draft.expression === item.value} onClick={() => updateDraft({ expression: item.value })}>
+                      {item.label}
+                    </CharacterOptionButton>
+                  ))}
+                </OptionGroup>
+              </>
+            ) : null}
+
+            {tab === "hair" ? (
+              <>
+                <OptionGroup title="헤어스타일">
+                  {CHARACTER_HAIR_STYLES.map((item) => (
+                    <CharacterOptionButton key={item.value} selected={draft.hairStyle === item.value} onClick={() => updateDraft({ hairStyle: item.value })}>
+                      {item.label}
+                    </CharacterOptionButton>
+                  ))}
+                </OptionGroup>
+                <OptionGroup title="머리색">
+                  {CHARACTER_HAIR_COLORS.map((item) => (
+                    <ColorOptionButton key={item.value} selected={draft.hairColor === item.value} color={item.color} label={item.label} onClick={() => updateDraft({ hairColor: item.value })} />
+                  ))}
+                </OptionGroup>
+              </>
+            ) : null}
+
+            {tab === "outfit" ? (
+              <>
+                <OptionGroup title="상의 스타일">
+                  {CHARACTER_TOP_STYLES.map((item) => (
+                    <CharacterOptionButton key={item.value} selected={draft.topStyle === item.value} onClick={() => updateDraft({ topStyle: item.value })}>
+                      {item.label}
+                    </CharacterOptionButton>
+                  ))}
+                </OptionGroup>
+                <OptionGroup title="상의 색상">
+                  {CHARACTER_TOP_COLORS.map((item) => (
+                    <ColorOptionButton key={item.value} selected={draft.topColor === item.value} color={item.color} label={item.label} onClick={() => updateDraft({ topColor: item.value })} />
+                  ))}
+                </OptionGroup>
+                <OptionGroup title="하의 색상">
+                  {CHARACTER_BOTTOM_COLORS.map((item) => (
+                    <ColorOptionButton
+                      key={item.value}
+                      selected={draft.bottomColor === item.value}
+                      color={item.color}
+                      label={item.label}
+                      onClick={() => updateDraft({ bottomColor: item.value })}
+                    />
+                  ))}
+                </OptionGroup>
+              </>
+            ) : null}
+
+            {tab === "role" ? (
+              <OptionGroup title="악기/역할">
+                {CHARACTER_INSTRUMENTS.map((item) => (
+                  <CharacterOptionButton key={item.value} selected={draft.instrument === item.value} onClick={() => updateDraft({ instrument: item.value })}>
+                    {item.label}
+                  </CharacterOptionButton>
+                ))}
+              </OptionGroup>
+            ) : null}
+
+            <CharacterSelectionSummary character={draft} />
 
             <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/70 p-4 text-sm leading-6 text-violet-900">
               이 기능은 현재 Admin 테스트 기능입니다. 안정화 후 실험실 기능으로 제공될 예정입니다.
@@ -224,6 +346,22 @@ function CharacterBuilderModal({
   return mounted ? createPortal(modal, document.body) : null;
 }
 
+function CharacterSelectionSummary({ character }: { character: CharacterConfig }) {
+  return (
+    <div className="grid gap-2 rounded-2xl bg-slate-50 p-4 text-xs font-bold text-slate-600 sm:grid-cols-2">
+      <p>성별: {getCharacterGenderLabel(character.gender as CharacterGender)}</p>
+      <p>얼굴: {getCharacterFaceShapeLabel(character.faceShape as CharacterFaceShape)}</p>
+      <p>표정: {getCharacterExpressionLabel(character.expression as CharacterExpression)}</p>
+      <p>머리: {getCharacterHairStyleLabel(character.hairStyle as CharacterHairStyle)}</p>
+      <p>머리색: {getCharacterHairColorLabel(character.hairColor as CharacterHairColor)}</p>
+      <p>상의: {getCharacterTopStyleLabel(character.topStyle as CharacterTopStyle)}</p>
+      <p>상의색: {getCharacterTopColorLabel(character.topColor as CharacterTopColor)}</p>
+      <p>하의색: {getCharacterBottomColorLabel(character.bottomColor as CharacterBottomColor)}</p>
+      <p className="sm:col-span-2">역할: {getCharacterInstrumentLabel(character.instrument as CharacterInstrument)}</p>
+    </div>
+  );
+}
+
 function OptionGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
@@ -243,6 +381,21 @@ function CharacterOptionButton({ selected, onClick, children }: { selected: bool
       }`}
     >
       {children}
+    </button>
+  );
+}
+
+function ColorOptionButton({ selected, color, label, onClick }: { selected: boolean; color: string; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-10 items-center gap-2 rounded-full border px-3 py-2 text-sm font-bold transition ${
+        selected ? "border-blue-500 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
+      }`}
+    >
+      <span className="size-4 rounded-full border border-slate-200" style={{ backgroundColor: color }} aria-hidden="true" />
+      {label}
     </button>
   );
 }
