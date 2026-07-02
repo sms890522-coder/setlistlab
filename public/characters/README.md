@@ -33,5 +33,7 @@ Supported instruments:
 - cajon
 - leader
 - in-ear
+- engineer
+- broadcast-room
 
 If a file is missing, SetlistLab shows an in-app fallback placeholder instead of a broken image.

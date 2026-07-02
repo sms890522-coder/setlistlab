@@ -46,6 +46,8 @@ public/characters/{gender}-{instrument}.webp
 - `cajon`
 - `leader`
 - `in_ear`
+- `engineer`
+- `broadcast_room`
 
 파일명에서는 `_`를 `-`로 바꿉니다.
 

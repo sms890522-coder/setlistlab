@@ -10,7 +10,9 @@ export type CharacterInstrument =
   | "drums"
   | "cajon"
   | "leader"
-  | "in_ear";
+  | "in_ear"
+  | "engineer"
+  | "broadcast_room";
 
 export type CharacterConfig = {
   version: 1;
@@ -35,6 +37,8 @@ export const CHARACTER_INSTRUMENTS = [
   { value: "cajon", label: "카혼" },
   { value: "leader", label: "리더" },
   { value: "in_ear", label: "인이어" },
+  { value: "engineer", label: "엔지니어" },
+  { value: "broadcast_room", label: "방송실" },
 ] as const satisfies ReadonlyArray<{ value: CharacterInstrument; label: string }>;
 
 export const DEFAULT_CHARACTER_CONFIG: CharacterConfig = {
