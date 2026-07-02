@@ -131,7 +131,7 @@ export function CharacterBuilder({ enabled }: CharacterBuilderProps) {
           <p className="mt-1 text-xl font-black text-slate-950">{hasCharacter ? getCharacterSummary(character) : "기본 캐릭터"}</p>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {hasCharacter
-              ? "이전 완성형 캐릭터 에셋을 베이스로 얼굴, 머리, 옷, 악기/역할 설정을 적용합니다."
+              ? "이전 완성형 캐릭터 에셋을 사용하고, 얼굴/머리/옷 설정은 무대배치도 확장을 위해 함께 저장합니다."
               : "무대배치도에서 사용할 내 캐릭터를 만들어보세요."}
           </p>
           {status === "loading" ? <p className="mt-3 text-sm font-semibold text-slate-500">캐릭터를 불러오는 중입니다.</p> : null}
@@ -214,7 +214,7 @@ function CharacterBuilderModal({
             <CharacterImage character={draft} alt={`${previewSummary} 캐릭터 미리보기`} size="lg" />
             <div className="w-full rounded-2xl bg-white p-4 text-center">
               <p className="font-black text-slate-950">{previewSummary}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">이전 캐릭터 이미지를 베이스로 설정을 적용합니다.</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">완성형 캐릭터 이미지를 그대로 보여주고, 세부 설정은 저장됩니다.</p>
             </div>
           </aside>
 
@@ -321,7 +321,7 @@ function CharacterBuilderModal({
             <CharacterSelectionSummary character={draft} />
 
             <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/70 p-4 text-sm leading-6 text-violet-900">
-              이 기능은 현재 Admin 테스트 기능입니다. 안정화 후 실험실 기능으로 제공될 예정입니다.
+              이 기능은 현재 Admin 테스트 기능입니다. 얼굴/머리/옷 설정은 저장되며, 고품질 변형 에셋이 준비되면 미리보기에도 자연스럽게 연결할 예정입니다.
             </div>
 
             {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
