@@ -4,8 +4,8 @@ import {
   isCharacterGender,
   isCharacterInstrument,
   normalizeCharacterConfig,
-  type CharacterGender,
-  type CharacterInstrument,
+  resolveCharacterImageUrl,
+  type CharacterConfig,
 } from "@/lib/characters/characterPresets";
 import { canUseFeature } from "@/lib/features";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -15,15 +15,15 @@ type ProfileCharacterRow = {
   lab_enabled: boolean | null;
   is_admin: boolean | null;
   character_config?: unknown;
-  character_gender: string | null;
-  character_instrument: string | null;
-  character_image_url: string | null;
-  character_updated_at: string | null;
+  character_gender?: string | null;
+  character_instrument?: string | null;
+  character_image_url?: string | null;
+  character_thumbnail_url?: string | null;
+  character_updated_at?: string | null;
 };
 
 type CharacterRequestBody = {
-  gender?: unknown;
-  instrument?: unknown;
+  config?: unknown;
 };
 
 export async function GET(request: Request) {
@@ -33,16 +33,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "캐릭터 선택 권한이 없습니다." }, { status: 403 });
     }
 
-    const legacyCharacter = getLegacyCharacterConfig(context.profile);
-    const character = normalizeCharacterConfig({
-      gender: context.profile?.character_gender ?? legacyCharacter?.gender,
-      instrument: context.profile?.character_instrument ?? legacyCharacter?.instrument,
-      imageUrl: context.profile?.character_image_url,
-    });
+    const config = getProfileCharacterConfig(context.profile);
     return NextResponse.json({
-      ...character,
+      config,
       updatedAt: context.profile?.character_updated_at ?? null,
-      hasCharacter: Boolean((context.profile?.character_gender && context.profile?.character_instrument) || legacyCharacter),
+      hasCharacter: hasSavedCharacter(context.profile),
     });
   } catch (error) {
     return NextResponse.json(
@@ -60,17 +55,13 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as CharacterRequestBody;
-    if (!isCharacterGender(body.gender) || !isCharacterInstrument(body.instrument)) {
-      return NextResponse.json({ error: "지원하지 않는 캐릭터 설정입니다." }, { status: 400 });
-    }
-
-    const character = getCharacterConfig(body.gender, body.instrument);
+    const config = normalizeCharacterConfig(body.config);
     const now = new Date().toISOString();
-    const data = await updateCharacterProfile(context, character, now);
-    const savedCharacter = normalizeCharacterConfig(data);
+    const data = await updateCharacterProfile(context, config, now);
+    const savedConfig = normalizeCharacterConfig(data.character_config);
     return NextResponse.json({
-      ...savedCharacter,
-      updatedAt: data.updatedAt,
+      config: savedConfig,
+      updatedAt: data.character_updated_at ?? now,
       hasCharacter: true,
     });
   } catch (error) {
@@ -94,7 +85,7 @@ async function getCharacterAccessContext(request: Request) {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("lab_enabled, is_admin, character_config, character_gender, character_instrument, character_image_url, character_updated_at")
+    .select("lab_enabled, is_admin, character_config, character_gender, character_instrument, character_image_url, character_thumbnail_url, character_updated_at")
     .eq("id", user.id)
     .maybeSingle<ProfileCharacterRow>();
   let resolvedProfile = profile;
@@ -125,37 +116,34 @@ async function getCharacterAccessContext(request: Request) {
 
 async function updateCharacterProfile(
   context: Awaited<ReturnType<typeof getCharacterAccessContext>>,
-  character: ReturnType<typeof getCharacterConfig>,
+  config: CharacterConfig,
   now: string,
 ) {
+  const legacyImageUrl = resolveCharacterImageUrl(config.gender, config.instrument);
   const result = await context.supabase
     .from("profiles")
     .update({
-      character_config: character,
-      character_gender: character.gender,
-      character_instrument: character.instrument,
-      character_image_url: character.imageUrl,
+      character_config: config,
+      character_gender: config.gender,
+      character_instrument: config.instrument,
+      character_image_url: legacyImageUrl,
+      character_thumbnail_url: null,
       character_updated_at: now,
     })
     .eq("id", context.user.id)
-    .select("character_config, character_gender, character_instrument, character_image_url, character_updated_at")
+    .select("character_config, character_gender, character_instrument, character_image_url, character_thumbnail_url, character_updated_at")
     .single<ProfileCharacterRow>();
 
   if (!isMissingCharacterColumnError(result.error)) {
     if (result.error || !result.data) throw new CharacterApiError(result.error?.message || "캐릭터를 저장하지 못했습니다.", 500);
-    return {
-      gender: result.data.character_gender ?? getLegacyCharacterConfig(result.data)?.gender,
-      instrument: result.data.character_instrument ?? getLegacyCharacterConfig(result.data)?.instrument,
-      imageUrl: result.data.character_image_url,
-      updatedAt: result.data.character_updated_at,
-    };
+    return result.data;
   }
 
   const fallback = await context.supabase
     .from("profiles")
     .update({
-      character_config: character,
-      character_image_url: character.imageUrl,
+      character_config: config,
+      character_image_url: legacyImageUrl,
       character_updated_at: now,
     })
     .eq("id", context.user.id)
@@ -163,27 +151,35 @@ async function updateCharacterProfile(
     .single<ProfileCharacterRow>();
 
   if (fallback.error || !fallback.data) throw new CharacterApiError(fallback.error?.message || "캐릭터를 저장하지 못했습니다.", 500);
-  const legacyCharacter = getLegacyCharacterConfig(fallback.data);
-  return {
-    gender: legacyCharacter?.gender,
-    instrument: legacyCharacter?.instrument,
-    imageUrl: fallback.data.character_image_url,
-    updatedAt: fallback.data.character_updated_at,
-  };
+  return fallback.data;
 }
 
-function getLegacyCharacterConfig(profile: Pick<ProfileCharacterRow, "character_config"> | null | undefined) {
-  const value = profile?.character_config;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  if (!isCharacterGender(record.gender) || !isCharacterInstrument(record.instrument)) return null;
-  return getCharacterConfig(record.gender, record.instrument);
+function getProfileCharacterConfig(profile: ProfileCharacterRow | null | undefined) {
+  if (profile?.character_config) return normalizeCharacterConfig(profile.character_config);
+  if (isCharacterGender(profile?.character_gender) && isCharacterInstrument(profile?.character_instrument)) {
+    return getCharacterConfig(profile.character_gender, profile.character_instrument);
+  }
+  return normalizeCharacterConfig(null);
+}
+
+function hasSavedCharacter(profile: ProfileCharacterRow | null | undefined) {
+  return Boolean(
+    profile?.character_config ||
+      (isCharacterGender(profile?.character_gender) && isCharacterInstrument(profile?.character_instrument)) ||
+      profile?.character_image_url,
+  );
 }
 
 function isMissingCharacterColumnError(error: { message?: string; code?: string } | null) {
   if (!error) return false;
   const message = error.message?.toLowerCase() ?? "";
-  return error.code === "42703" || message.includes("character_gender") || message.includes("character_instrument");
+  return (
+    error.code === "42703" ||
+    message.includes("character_config") ||
+    message.includes("character_gender") ||
+    message.includes("character_instrument") ||
+    message.includes("character_thumbnail_url")
+  );
 }
 
 class CharacterApiError extends Error {

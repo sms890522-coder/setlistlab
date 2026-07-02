@@ -1,25 +1,27 @@
 # Character assets
 
-Place profile character images here.
+Profile characters are rendered from transparent WebP/PNG layers.
 
 Recommended:
 
 - WebP first, PNG also works
 - Transparent background
 - 1:1 ratio
+- Every layer must use the same canvas size and anchor point
 - 512x512 or 1024x1024 source
 - Keep silhouettes readable at 64-96px
 
-Current filename rule:
+Current layer paths:
 
 ```text
-{gender}-{instrument}.webp
+layers/base/{gender}-body-01.webp
+layers/face/face-{faceShape}-01.webp
+layers/expression/{expression}-01.webp
+layers/hair/{gender}-{hairStyle}-01-{hairColor}.webp
+layers/outfit-top/top-{topStyle}-01-{topColor}.webp
+layers/outfit-bottom/bottom-basic-01-{bottomColor}.webp
+layers/instrument/{instrument}.webp
 ```
-
-Supported genders:
-
-- female
-- male
 
 Supported instruments:
 
@@ -36,4 +38,4 @@ Supported instruments:
 - engineer
 - broadcast-room
 
-If a file is missing, SetlistLab shows an in-app fallback placeholder instead of a broken image.
+Legacy full-character files can remain in this folder for compatibility, but new profile rendering uses the `layers` directory.

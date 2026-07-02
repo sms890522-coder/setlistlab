@@ -1,6 +1,8 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   getCharacterSummary,
+  isCharacterGender,
+  isCharacterInstrument,
   normalizeCharacterConfig,
   type CharacterConfig,
   type CharacterGender,
@@ -13,7 +15,6 @@ export type UserStageCharacter = {
   role?: string;
   gender: CharacterGender;
   instrument: CharacterInstrument;
-  imageUrl: string;
   summary: string;
   character: CharacterConfig;
 };
@@ -22,6 +23,7 @@ type ProfileCharacterRow = {
   id: string;
   display_name: string | null;
   role: string | null;
+  character_config: unknown;
   character_gender: string | null;
   character_instrument: string | null;
   character_image_url: string | null;
@@ -37,7 +39,7 @@ export async function getUserCharacter(userId: string): Promise<UserStageCharact
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, display_name, role, character_gender, character_instrument, character_image_url")
+    .select("id, display_name, role, character_config, character_gender, character_instrument, character_image_url")
     .eq("id", userId)
     .maybeSingle<ProfileCharacterRow>();
 
@@ -64,7 +66,7 @@ export async function getTeamMembersWithCharacters(teamId: string): Promise<User
 
   const { data: profiles, error: profileError } = await supabase
     .from("profiles")
-    .select("id, display_name, role, character_gender, character_instrument, character_image_url")
+    .select("id, display_name, role, character_config, character_gender, character_instrument, character_image_url")
     .in("id", userIds)
     .returns<ProfileCharacterRow[]>();
   if (profileError) throw new Error(profileError.message || "팀원 캐릭터 정보를 불러오지 못했습니다.");
@@ -83,21 +85,21 @@ export async function getTeamMembersWithCharacters(teamId: string): Promise<User
 }
 
 function rowToStageCharacter(row: ProfileCharacterRow): UserStageCharacter {
-  const character = normalizeCharacterConfig({
-    gender: row.character_gender,
-    instrument: row.character_instrument,
-    imageUrl: row.character_image_url,
-  });
+  const character =
+    row.character_config ||
+    (isCharacterGender(row.character_gender) && isCharacterInstrument(row.character_instrument)
+      ? { gender: row.character_gender, instrument: row.character_instrument }
+      : null);
+  const normalizedCharacter = normalizeCharacterConfig(character);
   return {
     userId: row.id,
     displayName: row.display_name || "팀원",
     role: row.role ?? undefined,
-    gender: character.gender,
-    instrument: character.instrument,
-    imageUrl: row.character_image_url || character.imageUrl,
-    summary: getCharacterSummary(character),
-    character,
+    gender: normalizedCharacter.gender,
+    instrument: normalizedCharacter.instrument,
+    summary: getCharacterSummary(normalizedCharacter),
+    character: normalizedCharacter,
   };
 }
 
-// TODO: 무대배치도에서 imageUrl을 StageCharacterNode 이미지로 렌더링하고, 드래그 배치 및 파트별 자동 추천을 연결한다.
+// TODO: 무대배치도에서 character_config를 StageCharacterNode 레이어로 렌더링하고, 드래그 배치 및 파트별 자동 추천을 연결한다.

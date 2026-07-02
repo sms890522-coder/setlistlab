@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_CHARACTER_CONFIG } from "@/lib/characters/characterPresets";
+import { DEFAULT_CHARACTER_CONFIG, getCharacterLayers, type CharacterConfig } from "@/lib/characters/characterPresets";
 
 type CharacterImageProps = {
-  src: string;
+  character?: CharacterConfig | null;
   alt: string;
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -16,14 +16,16 @@ const SIZE_CLASSES = {
   lg: "size-56 rounded-[2rem]",
 };
 
-export function CharacterImage({ src, alt, size = "lg", className = "" }: CharacterImageProps) {
-  const [currentSrc, setCurrentSrc] = useState(src || DEFAULT_CHARACTER_CONFIG.imageUrl);
-  const [failedDefault, setFailedDefault] = useState(false);
+export function CharacterImage({ character, alt, size = "lg", className = "" }: CharacterImageProps) {
+  const selectedCharacter = character ?? DEFAULT_CHARACTER_CONFIG;
+  const [failedLayers, setFailedLayers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    setCurrentSrc(src || DEFAULT_CHARACTER_CONFIG.imageUrl);
-    setFailedDefault(false);
-  }, [src]);
+    setFailedLayers(new Set());
+  }, [selectedCharacter]);
+
+  const layers = getCharacterLayers(selectedCharacter);
+  const hasFailedRequiredLayer = layers.some((layer) => layer.required && failedLayers.has(layer.key));
 
   return (
     <div
@@ -31,21 +33,28 @@ export function CharacterImage({ src, alt, size = "lg", className = "" }: Charac
       role="img"
       aria-label={alt}
     >
-      {!failedDefault ? (
-        <img
-          src={currentSrc}
-          alt=""
-          className="h-full w-full object-contain p-3"
-          draggable={false}
-          loading="lazy"
-          onError={() => {
-            if (currentSrc !== DEFAULT_CHARACTER_CONFIG.imageUrl) {
-              setCurrentSrc(DEFAULT_CHARACTER_CONFIG.imageUrl);
-              return;
-            }
-            setFailedDefault(true);
-          }}
-        />
+      {!hasFailedRequiredLayer ? (
+        <div className="relative aspect-square h-full w-full">
+          {layers.map((layer) =>
+            failedLayers.has(layer.key) ? null : (
+              <img
+                key={layer.key}
+                src={layer.src}
+                alt=""
+                className="absolute inset-0 h-full w-full object-contain p-2"
+                draggable={false}
+                loading="lazy"
+                onError={() => {
+                  setFailedLayers((previous) => {
+                    const next = new Set(previous);
+                    next.add(layer.key);
+                    return next;
+                  });
+                }}
+              />
+            ),
+          )}
+        </div>
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-indigo-50 to-blue-50 p-4 text-center">
           <span className={size === "sm" ? "text-2xl" : size === "md" ? "text-5xl" : "text-7xl"} aria-hidden="true">

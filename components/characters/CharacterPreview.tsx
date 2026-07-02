@@ -13,7 +13,7 @@ export function CharacterPreview({ character, size = "lg", className = "" }: Cha
   const selectedCharacter = character ?? DEFAULT_CHARACTER_CONFIG;
   return (
     <CharacterImage
-      src={selectedCharacter.imageUrl}
+      character={selectedCharacter}
       alt={`${getCharacterSummary(selectedCharacter)} 캐릭터 미리보기`}
       size={size}
       className={className}
