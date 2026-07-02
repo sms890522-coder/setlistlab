@@ -116,9 +116,9 @@ export const CHARACTER_INSTRUMENTS = [
 
 export const CHARACTER_PRESET_VARIANTS = [
   { value: "classic", label: "기본", description: "기존 캐릭터 스타일" },
-  { value: "soft", label: "민트", description: "부드러운 의상과 악기 변형" },
-  { value: "warm", label: "웜", description: "따뜻한 의상과 다른 실루엣" },
-  { value: "vivid", label: "스테이지", description: "선명한 무대 스타일 변형" },
+  { value: "soft", label: "프리셋 A", description: "다른 헤어와 의상, 역할 아이템" },
+  { value: "warm", label: "프리셋 B", description: "다른 실루엣과 역할 아이템" },
+  { value: "vivid", label: "프리셋 C", description: "다른 무대 스타일과 역할 아이템" },
 ] as const satisfies ReadonlyArray<{ value: CharacterPresetVariant; label: string; description: string }>;
 
 export const DEFAULT_CHARACTER_CONFIG: CharacterConfig = {
