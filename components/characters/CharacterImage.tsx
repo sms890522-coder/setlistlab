@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_CHARACTER_CONFIG, getCharacterLayers, type CharacterConfig } from "@/lib/characters/characterPresets";
+import { DEFAULT_CHARACTER_CONFIG, resolveCharacterImageUrl, type CharacterConfig } from "@/lib/characters/characterPresets";
 
 type CharacterImageProps = {
   character?: CharacterConfig | null;
@@ -18,14 +18,15 @@ const SIZE_CLASSES = {
 
 export function CharacterImage({ character, alt, size = "lg", className = "" }: CharacterImageProps) {
   const selectedCharacter = character ?? DEFAULT_CHARACTER_CONFIG;
-  const [failedLayers, setFailedLayers] = useState<Set<string>>(new Set());
+  const imageUrl = resolveCharacterImageUrl(selectedCharacter.gender, selectedCharacter.instrument);
+  const defaultImageUrl = resolveCharacterImageUrl(DEFAULT_CHARACTER_CONFIG.gender, DEFAULT_CHARACTER_CONFIG.instrument);
+  const [currentSrc, setCurrentSrc] = useState(imageUrl);
+  const [failedDefault, setFailedDefault] = useState(false);
 
   useEffect(() => {
-    setFailedLayers(new Set());
-  }, [selectedCharacter]);
-
-  const layers = getCharacterLayers(selectedCharacter);
-  const hasFailedRequiredLayer = layers.some((layer) => layer.required && failedLayers.has(layer.key));
+    setCurrentSrc(imageUrl);
+    setFailedDefault(false);
+  }, [imageUrl]);
 
   return (
     <div
@@ -33,28 +34,21 @@ export function CharacterImage({ character, alt, size = "lg", className = "" }: 
       role="img"
       aria-label={alt}
     >
-      {!hasFailedRequiredLayer ? (
-        <div className="relative aspect-square h-full w-full">
-          {layers.map((layer) =>
-            failedLayers.has(layer.key) ? null : (
-              <img
-                key={layer.key}
-                src={layer.src}
-                alt=""
-                className="absolute inset-0 h-full w-full object-contain p-2"
-                draggable={false}
-                loading="lazy"
-                onError={() => {
-                  setFailedLayers((previous) => {
-                    const next = new Set(previous);
-                    next.add(layer.key);
-                    return next;
-                  });
-                }}
-              />
-            ),
-          )}
-        </div>
+      {!failedDefault ? (
+        <img
+          src={currentSrc}
+          alt=""
+          className="h-full w-full object-contain p-3"
+          draggable={false}
+          loading="lazy"
+          onError={() => {
+            if (currentSrc !== defaultImageUrl) {
+              setCurrentSrc(defaultImageUrl);
+              return;
+            }
+            setFailedDefault(true);
+          }}
+        />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-indigo-50 to-blue-50 p-4 text-center">
           <span className={size === "sm" ? "text-2xl" : size === "md" ? "text-5xl" : "text-7xl"} aria-hidden="true">

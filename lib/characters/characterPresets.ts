@@ -241,7 +241,7 @@ export function getCharacterInstrumentLabel(instrument: CharacterInstrument) {
 
 export function getCharacterSummary(configInput: unknown) {
   const config = normalizeCharacterConfig(configInput);
-  return `${getCharacterGenderLabel(config.gender)} · ${getCharacterHairStyleLabel(config.hairStyle)} · ${getCharacterExpressionLabel(config.expression)} · ${getCharacterInstrumentLabel(config.instrument)}`;
+  return `${getCharacterGenderLabel(config.gender)} · ${getCharacterInstrumentLabel(config.instrument)}`;
 }
 
 function isOneOf<T extends string>(value: unknown, list: ReadonlyArray<{ value: T }>): value is T {
