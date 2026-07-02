@@ -8,9 +8,9 @@ import "./globals.css";
 const siteUrl = "https://setlistlab.vercel.app";
 const siteTitle = "콘티연습실 | 찬양팀 콘티 작성 · 연습 · 팀 공유 도구";
 const siteDescription =
-  "콘티연습실은 찬양팀을 위한 콘티 작성, 악보 이미지 관리, 유튜브 연습 링크, 팀 채팅, 공지사항, 캘린더, PDF 공유, 튜너와 메트로놈을 한 곳에서 사용할 수 있는 예배 준비 도구입니다.";
+  "찬양팀을 위한 콘티 작성, 유튜브 연습, PDF 저장, 팀 공유 도구입니다. 예배 콘티 준비와 찬양팀 연습을 콘티연습실에서 더 쉽게 관리해보세요.";
 const socialDescription =
-  "콘티 작성부터 팀 채팅, 공지사항, 캘린더, 악보 검색, PDF 공유, 튜너와 메트로놈까지 찬양팀 예배 준비를 한 곳에서 관리하세요.";
+  "찬양팀 콘티 작성부터 팀 공유, 유튜브 연습, PDF 저장까지 한곳에서 관리하세요.";
 const ogImageUrl = "/og-image.png?v=20260630";
 
 export const metadata: Metadata = {
@@ -21,6 +21,7 @@ export const metadata: Metadata = {
   },
   description: siteDescription,
   keywords: [
+    "콘티연습실",
     "찬양팀",
     "콘티",
     "콘티 작성",
@@ -33,6 +34,7 @@ export const metadata: Metadata = {
     "팀 캘린더",
     "PDF 공유",
     "찬양팀 연습",
+    "SetlistLab",
     "튜너",
     "메트로놈",
     "CCM",
@@ -42,7 +44,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: siteTitle,
     description: socialDescription,
-    url: "/",
+    url: siteUrl,
     siteName: "콘티연습실",
     type: "website",
     locale: "ko_KR",
@@ -111,7 +113,7 @@ export default function RootLayout({
         <header className="sticky top-0 z-30 border-b border-white/70 bg-white/80 backdrop-blur">
           <TopAnnouncementBar />
           <nav className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-            <Link href="/" className="inline-flex items-center gap-2 text-lg font-black tracking-tight text-slate-950">
+            <Link href="/" aria-label="콘티연습실 홈" className="inline-flex items-center gap-2 text-lg font-black tracking-tight text-slate-950">
               <img
                 src="/conti-logo.jpg"
                 alt=""
@@ -151,6 +153,10 @@ export default function RootLayout({
             </div>
           ) : null}
           <div className="leading-6">
+            <Link href="/" className="font-semibold text-slate-500 transition hover:text-blue-600">
+              콘티연습실
+            </Link>{" "}
+            ·{" "}
             made by{" "}
             <a
               href="https://missionlab.work/"

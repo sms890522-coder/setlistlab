@@ -21,10 +21,30 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
 
   // TODO: 공개 공유 콘티만 서버에서 조회해 /s/[shareSlug] 항목을 추가한다.
-  return publicRoutes.map((route) => ({
-    url: `${siteUrl}${route}`,
-    lastModified: now,
-    changeFrequency: route === "" ? "weekly" : "monthly",
-    priority: route === "" ? 1 : 0.7,
-  }));
+  return publicRoutes.map((route) => {
+    if (route === "") {
+      return {
+        url: `${siteUrl}${route}`,
+        lastModified: now,
+        changeFrequency: "weekly",
+        priority: 1,
+      };
+    }
+
+    if (route === "/guide") {
+      return {
+        url: `${siteUrl}${route}`,
+        lastModified: now,
+        changeFrequency: "monthly",
+        priority: 0.5,
+      };
+    }
+
+    return {
+      url: `${siteUrl}${route}`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    };
+  });
 }

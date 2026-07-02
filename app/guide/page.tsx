@@ -2,10 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+const siteUrl = "https://setlistlab.vercel.app";
+
 export const metadata: Metadata = {
-  title: "콘티연습실 사용설명서 | 콘티 만들기와 연습 기능 가이드",
-  description:
-    "콘티연습실 사용법을 안내합니다. 콘티 만들기, 콘티 보는 방법, 송폼 작성, 유튜브 연습 영상, 구간 반복, 재생속도 조절, 악보 이미지, PDF 만들기, 팀 채팅, 공지사항, 캘린더, 실험실과 팀 가이드 트랙, 팀 녹음실 사용법을 확인하세요.",
+  title: "사용설명서 | 콘티연습실",
+  description: "콘티연습실의 콘티 작성, 팀 공유, 유튜브 연습, PDF 저장 기능을 사용하는 방법을 안내합니다.",
+  alternates: {
+    canonical: `${siteUrl}/guide`,
+  },
+  openGraph: {
+    title: "사용설명서 | 콘티연습실",
+    description: "콘티연습실 기능 사용 방법과 팀 콘티 관리 방법을 확인해보세요.",
+    url: `${siteUrl}/guide`,
+    siteName: "콘티연습실",
+    type: "article",
+  },
 };
 
 const guideImages = {
@@ -380,20 +391,48 @@ const faqJsonLd = {
   })),
 };
 
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "콘티연습실 홈",
+      item: `${siteUrl}/`,
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "사용설명서",
+      item: `${siteUrl}/guide`,
+    },
+  ],
+};
+
 export default function GuidePage() {
   return (
     <div className="page-shell space-y-8 pb-20">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
 
       <section className="card overflow-hidden">
         <div className="bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5 sm:p-8">
+          <nav aria-label="Breadcrumb" className="mb-5 text-sm font-bold text-slate-500">
+            <Link href="/" className="text-blue-700 transition hover:text-blue-800">
+              콘티연습실 홈
+            </Link>
+            <span className="mx-2 text-slate-300">/</span>
+            <span>사용설명서</span>
+          </nav>
           <p className="text-sm font-black text-blue-700">사용설명서</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">콘티연습실 사용설명서</h1>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">사용설명서</h1>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base sm:leading-8">
-            찬양팀 콘티 작성부터 팀 공유, 채팅, 공지사항, 일정 확인, PDF 만들기, 연습도구 사용까지 한눈에
-            확인하세요.
+            콘티연습실을 처음 사용하는 분들을 위한 사용 가이드입니다. 콘티 작성부터 팀 공유, 채팅, 공지사항,
+            일정 확인, PDF 만들기, 연습도구 사용까지 한눈에 확인하세요.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
+            <Link href="/" className="btn-primary">콘티연습실 홈으로</Link>
             <Link href="/setlists/new" className="btn-primary">새 콘티 만들기</Link>
             <Link href="/teams" className="btn-secondary">내 팀</Link>
             <Link href="/tools/tuner" className="btn-secondary">연습도구</Link>
@@ -863,6 +902,18 @@ export default function GuidePage() {
           ))}
         </div>
       </GuideSection>
+
+      <section className="card bg-gradient-to-r from-blue-50 via-white to-violet-50 p-5 text-center sm:p-7">
+        <h2 className="text-2xl font-black tracking-tight text-slate-950">콘티연습실을 바로 사용해보세요</h2>
+        <p className="mx-auto mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+          홈에서 주요 기능을 확인하고, 찬양팀 콘티 작성과 연습 준비를 시작할 수 있습니다.
+        </p>
+        <div className="mt-5 flex justify-center">
+          <Link href="/" className="btn-primary">
+            콘티연습실 홈으로
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
